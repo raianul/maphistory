@@ -1,9 +1,8 @@
 import type { NextConfig } from "next";
 
+// Fully static site: every place page is built ahead of time from
+// content/ (see scripts/build-content.ts), so Cache Components is off.
 const nextConfig: NextConfig = {
-  /* config options here */
-  cacheComponents: true,
-  partialPrefetching: true,
   turbopack: {
     rules: {
       "*.css": {

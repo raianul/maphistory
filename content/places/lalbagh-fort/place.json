@@ -1,0 +1,58 @@
+{
+  "slug": "lalbagh-fort",
+  "name": {
+    "bn": "লালবাগ কেল্লা",
+    "en": "Lalbagh Fort"
+  },
+  "summary": {
+    "bn": "মুঘল আমলের একটি অসমাপ্ত দুর্গ। ১৬৭৮ সালে কাজ শুরু হলেও শায়েস্তা খানের কন্যা পরী বিবির মৃত্যুর পর তা আর শেষ হয়নি।",
+    "en": "An unfinished Mughal fort. Work began in 1678 but stopped after the death of Shaista Khan's daughter, Pari Bibi."
+  },
+  "location": {
+    "lat": 23.719,
+    "lng": 90.3882
+  },
+  "city": {
+    "bn": "ঢাকা",
+    "en": "Dhaka"
+  },
+  "country": "BD",
+  "era": "mughal",
+  "built": {
+    "start": 1678,
+    "end": null,
+    "note": {
+      "bn": "অসমাপ্ত",
+      "en": "Never finished"
+    }
+  },
+  "tier": "featured",
+  "status": "review",
+  "hero": {
+    "image": "lalbagh-fort-1.jpg",
+    "alt": {
+      "bn": "লালবাগ কেল্লা",
+      "en": "Lalbagh Fort"
+    }
+  },
+  "keyNumbers": [
+    {
+      "value": {
+        "bn": "১৬৭৮"
+      },
+      "label": {
+        "bn": "নির্মাণ শুরু",
+        "en": "Construction began"
+      }
+    },
+    {
+      "value": {
+        "bn": "৩"
+      },
+      "label": {
+        "bn": "প্রধান স্থাপনা",
+        "en": "Main buildings"
+      }
+    }
+  ]
+}

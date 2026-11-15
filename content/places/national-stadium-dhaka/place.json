@@ -1,0 +1,54 @@
+{
+  "slug": "national-stadium-dhaka",
+  "name": {
+    "bn": "জাতীয় স্টেডিয়াম, ঢাকা",
+    "en": "National Stadium, Dhaka"
+  },
+  "summary": {
+    "bn": "ঢাকার মতিঝিলে অবস্থিত জাতীয় স্টেডিয়াম বাংলাদেশের প্রধান ক্রীড়াঙ্গন এবং জাতীয় ফুটবল দলের হোম ভেন্যু। এটি বিশ্বের একমাত্র ভেন্যু যা দুটি ভিন্ন দেশের প্রথম হোম টেস্ট ম্যাচ আয়োজন করেছে।",
+    "en": "Located in Motijheel, Dhaka, the National Stadium is Bangladesh's primary sports venue and the home ground for the national football team. It holds the unique record of hosting inaugural home Test matches for two different nations."
+  },
+  "location": {
+    "lat": 23.72801,
+    "lng": 90.41353
+  },
+  "city": {
+    "bn": "ঢাকা",
+    "en": "Dhaka"
+  },
+  "country": "BD",
+  "era": "british",
+  "built": {
+    "start": 1954,
+    "end": 1954
+  },
+  "tier": "standard",
+  "status": "published",
+  "hero": {
+    "image": "national-stadium-dhaka-1.jpg",
+    "alt": {
+      "bn": "জাতীয় স্টেডিয়াম, ঢাকা",
+      "en": "National Stadium, Dhaka"
+    }
+  },
+  "keyNumbers": [
+    {
+      "value": {
+        "bn": "৩৬,০০০"
+      },
+      "label": {
+        "bn": "ধারণক্ষমতা",
+        "en": "Seating capacity"
+      }
+    },
+    {
+      "value": {
+        "bn": "১৯৫৪"
+      },
+      "label": {
+        "bn": "প্রতিষ্ঠাবছর",
+        "en": "Year built"
+      }
+    }
+  ]
+}

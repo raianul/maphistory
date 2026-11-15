@@ -1,26 +1,90 @@
 @import "tailwindcss";
 
+/*
+ * Modern, minimal, light only: off-white ground, white surfaces, charcoal
+ * text, hairline borders. One accent for actions; era and period colors only
+ * for pins and tags.
+ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  color-scheme: light;
+  --paper: #fafaf9;
+  --card: #ffffff;
+  --ink: #1f2328;
+  --muted: #6b7078;
+  --line: #ececec;
+  --accent: #2f5bd3;
+
+  --era-ancient: #a0522d;
+  --era-sultanate: #2e7d6b;
+  --era-mughal: #a8741a;
+  --era-british: #6b5b95;
+  --era-pakistan: #3f6f8a;
+  --era-bangladesh: #b8324b;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-paper: var(--paper);
+  --color-card: var(--card);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-accent: var(--accent);
+  --font-sans: var(--font-hind), system-ui, sans-serif;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  /* Bangla needs more line height than Latin text for its vowel signs. */
+  line-height: 1.7;
+}
+
+/* Map zoom buttons sit below the search bar and era filters. */
+.maplibregl-map .maplibregl-ctrl-top-right {
+  top: 7.5rem;
+}
+
+/* Sections of a streaming AI story fade in as they arrive. */
+@keyframes fadein {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* First-visit tip: a pulsing ring around a real map label. */
+.tip-ring {
+  width: 44px;
+  height: 44px;
+  border-radius: 9999px;
+  border: 3px solid var(--accent);
+  animation: tip-pulse 1.6s ease-out infinite;
+  pointer-events: none;
+}
+@keyframes tip-pulse {
+  from {
+    transform: scale(0.6);
+    opacity: 1;
+  }
+  to {
+    transform: scale(1.4);
+    opacity: 0;
+  }
+}
+
+/* The place panel slides in: up from the bottom on phones, in from the right on wide screens. */
+@keyframes sheetin {
+  from {
+    transform: translateY(24px);
+    opacity: 0;
+  }
+}
+@keyframes panelin {
+  from {
+    transform: translateX(24px);
+    opacity: 0;
+  }
 }

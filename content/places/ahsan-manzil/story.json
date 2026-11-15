@@ -1,0 +1,42 @@
+[
+  {
+    "kind": "event",
+    "year": 1859,
+    "title": { "bn": "নির্মাণ শুরু", "en": "Construction begins" },
+    "body": {
+      "bn": "নবাব খাজা আবদুল গনি প্রাসাদের কাজ শুরু করেন।",
+      "en": "Nawab Khwaja Abdul Ghani begins building the palace."
+    },
+    "sources": ["wikipedia-en"]
+  },
+  {
+    "kind": "event",
+    "year": 1872,
+    "title": { "bn": "নাম হলো আহসান মঞ্জিল", "en": "Named Ahsan Manzil" },
+    "body": {
+      "bn": "কাজ শেষ হলে ছেলে খাজা আহসানউল্লাহর নামে প্রাসাদের নাম রাখা হয়।",
+      "en": "Completed and named after his son, Khwaja Ahsanullah."
+    },
+    "sources": ["wikipedia-en"]
+  },
+  {
+    "kind": "event",
+    "year": 1888,
+    "title": { "bn": "টর্নেডোর আঘাত", "en": "Tornado damage" },
+    "body": {
+      "bn": "প্রবল টর্নেডোয় প্রাসাদ ব্যাপক ক্ষতিগ্রস্ত হয় এবং পরে নতুন করে গড়া হয়।",
+      "en": "A severe tornado badly damages the palace, which is then rebuilt."
+    },
+    "sources": ["wikipedia-en"]
+  },
+  {
+    "kind": "event",
+    "year": 1992,
+    "title": { "bn": "জাদুঘর হিসেবে খুলে দেওয়া", "en": "Opens as a museum" },
+    "body": {
+      "bn": "সংস্কারের পর বাংলাদেশ জাতীয় জাদুঘরের শাখা হিসেবে দর্শকদের জন্য খুলে দেওয়া হয়।",
+      "en": "After restoration it opens as a branch of the Bangladesh National Museum."
+    },
+    "sources": ["wikipedia-en"]
+  }
+]

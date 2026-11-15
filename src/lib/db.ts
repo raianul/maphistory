@@ -1,0 +1,299 @@
+/**
+ * Saved stories in Supabase. Server-side only: uses the secret key, which
+ * bypasses the database's access rules, so it must never reach the browser.
+ */
+import { createHash } from "node:crypto";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import type { AiPlace } from "./ai/types";
+import type { StoryTarget } from "./ai/place-story";
+import type { PlaceVideo, VideoProvider } from "./video";
+
+let client: SupabaseClient | undefined;
+
+export function db(): SupabaseClient {
+  if (!client) {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!url || !key) throw new Error("Supabase is not configured (.env.local).");
+    client = createClient(url, key, { auth: { persistSession: false } });
+  }
+  return client;
+}
+
+export type StoredStory = AiPlace & { id: string; status: "ai" | "verified" | "hidden"; views: number };
+
+type Row = {
+  id: string;
+  status: StoredStory["status"];
+  story: AiPlace["story"];
+  image: AiPlace["image"] | null;
+  model: string | null;
+  views: number;
+};
+
+const toStored = (r: Row): StoredStory => ({
+  id: r.id,
+  status: r.status,
+  story: r.story,
+  image: r.image ?? undefined,
+  model: r.model ?? "",
+  views: r.views,
+});
+
+/**
+ * How far apart two clicks on "the same place" can be, in degrees. A road or
+ * river is long (its label can be clicked anywhere along it); a building is a point.
+ */
+function matchRadius(kind = ""): number {
+  if (/city|town|district|state/i.test(kind)) return 0.05; // ~5 km
+  if (/road|street|river|canal|lake|water/i.test(kind)) return 0.02; // ~2 km
+  if (/suburb|village|neighbou?rhood|quarter|hamlet/i.test(kind)) return 0.01; // ~1 km
+  return 0.003; // ~300 m
+}
+
+const norm = (s: string) => s.normalize("NFC").trim().toLowerCase();
+
+/** The saved story for this place, if any: same map name, close enough to the click. */
+export async function findStory(t: StoryTarget): Promise<StoredStory | undefined> {
+  const r = matchRadius(t.kind);
+  const { data, error } = await db()
+    .from("stories")
+    .select("id,status,story,image,model,views,lat,lng")
+    .eq("name_bn", norm(t.name))
+    .gte("lat", t.lat - r)
+    .lte("lat", t.lat + r)
+    .gte("lng", t.lng - r)
+    .lte("lng", t.lng + r)
+    .limit(5);
+  if (error) throw new Error(`Database: ${error.message}`);
+  const nearest = (data ?? []).sort(
+    (a, b) => Math.hypot(a.lat - t.lat, a.lng - t.lng) - Math.hypot(b.lat - t.lat, b.lng - t.lng),
+  )[0];
+  return nearest ? toStored(nearest as Row) : undefined;
+}
+
+export async function saveStory(t: StoryTarget, place: AiPlace): Promise<StoredStory> {
+  // A unique key stops two visitors generating the same place at once from saving twice.
+  const grid = (v: number) => (Math.round(v / matchRadius(t.kind)) * matchRadius(t.kind)).toFixed(4);
+  const row = {
+    place_key: `near:${norm(t.name)}@${grid(t.lat)},${grid(t.lng)}`,
+    name_bn: norm(t.name),
+    name_en: place.story.name_en,
+    lat: t.lat,
+    lng: t.lng,
+    kind: t.kind ?? null,
+    country: place.story.country ?? null,
+    story: place.story,
+    image: place.image ?? null,
+    model: place.model,
+    views: 1,
+  };
+  const insert = (r: typeof row) =>
+    db().from("stories").upsert(r, { onConflict: "place_key", ignoreDuplicates: true }).select("id,status,story,image,model,views").maybeSingle();
+  let { data, error } = await insert(row);
+  // A database that hasn't run the "global countries" migration yet only accepts BD/IN/PK
+  // (check constraint, code 23514): save the story anyway, without the country column.
+  if (error?.code === "23514" && row.country) ({ data, error } = await insert({ ...row, country: null }));
+  if (error) throw new Error(`Database: ${error.message}`);
+  if (data) return toStored(data as Row);
+  // Someone saved it a moment earlier: return theirs.
+  const existing = await findStory(t);
+  if (!existing) throw new Error("Story could not be saved.");
+  return existing;
+}
+
+export async function countView(id: string): Promise<void> {
+  await db().rpc("bump_story_views", { p_id: id });
+}
+
+export async function reportStory(id: string, message: string): Promise<void> {
+  const { error } = await db().rpc("add_story_report", { p_id: id, p_message: message.slice(0, 1000) });
+  if (error) throw new Error(`Database: ${error.message}`);
+}
+
+// ── Limits on new AI stories ───────────────────────────────────────────────────────────────
+
+/** A visitor's IP, hashed with a secret so the raw address is never stored. */
+export function visitorId(req: Request): string {
+  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.headers.get("x-real-ip") || "local";
+  const salt = process.env.VISITOR_SALT || process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+  return createHash("sha256").update(salt + ip).digest("hex").slice(0, 32);
+}
+
+const PER_HOUR = Number(process.env.AI_LIMIT_PER_HOUR || 10);
+const PER_DAY = Number(process.env.AI_LIMIT_PER_DAY || 300);
+
+/** A Bangla message when a new story may not be generated now, otherwise undefined. */
+export async function checkLimits(visitor: string): Promise<string | undefined> {
+  const hourAgo = new Date(Date.now() - 3600_000).toISOString();
+  const dayAgo = new Date(Date.now() - 86_400_000).toISOString();
+  const [mine, all] = await Promise.all([
+    db().from("generation_log").select("id", { count: "exact", head: true }).eq("visitor", visitor).gte("created_at", hourAgo),
+    db().from("generation_log").select("id", { count: "exact", head: true }).gte("created_at", dayAgo),
+  ]);
+  if ((mine.count ?? 0) >= PER_HOUR) return "এক ঘণ্টায় অনেকগুলো নতুন গল্প খোলা হয়েছে। একটু পরে আবার চেষ্টা করুন, বা আগে খোলা গল্পগুলো দেখুন।";
+  if ((all.count ?? 0) >= PER_DAY) return "আজকের নতুন গল্পের সীমা শেষ। আগে লেখা গল্পগুলো খোলা যাবে; নতুন গল্প কাল আবার।";
+  return undefined;
+}
+
+export async function logGeneration(visitor: string, placeKey: string): Promise<void> {
+  await db().from("generation_log").insert({ visitor, place_key: placeKey });
+}
+
+// ── Admin ────────────────────────────────────────────────────────────────────────────────
+
+export async function isAdmin(userId: string): Promise<boolean> {
+  const { data } = await db().from("admins").select("user_id").eq("user_id", userId).maybeSingle();
+  return !!data;
+}
+
+/** Every saved story, for the admin map (hidden ones too). */
+export async function listStories() {
+  const { data, error } = await db()
+    .from("stories")
+    .select("id,name_bn,name_en,lat,lng,kind,status,views,reports,updated_at")
+    .order("views", { ascending: false })
+    .limit(5000);
+  if (error) throw new Error(`Database: ${error.message}`);
+  return data ?? [];
+}
+
+export async function getStoryForAdmin(id: string) {
+  const [story, reports] = await Promise.all([
+    db().from("stories").select("*").eq("id", id).maybeSingle(),
+    db().from("story_reports").select("id,message,created_at").eq("story_id", id).order("created_at", { ascending: false }),
+  ]);
+  if (story.error) throw new Error(`Database: ${story.error.message}`);
+  if (!story.data) return undefined;
+  return { ...story.data, report_list: reports.data ?? [], videos: await listVideos(id) };
+}
+
+export async function updateStory(id: string, patch: Record<string, unknown>) {
+  const update = (p: Record<string, unknown>) => db().from("stories").update(p).eq("id", id).select("*").maybeSingle();
+  let { data, error } = await update(patch);
+  // Before the "global countries" migration only BD/IN/PK fit the country column (see saveStory).
+  if (error?.code === "23514" && patch.country) ({ data, error } = await update({ ...patch, country: null }));
+  if (error) throw new Error(`Database: ${error.message}`);
+  return data;
+}
+
+/** A unique, readable URL name for a verified story: "lalbagh-fort", "lalbagh-fort-2", … */
+export async function uniqueSlug(base: string, id: string): Promise<string> {
+  const root =
+    base
+      .normalize("NFKD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "") || "place";
+  for (let n = 1; n < 50; n++) {
+    const slug = n === 1 ? root : `${root}-${n}`;
+    const { data } = await db().from("stories").select("id").eq("slug", slug).neq("id", id).maybeSingle();
+    if (!data) return slug;
+  }
+  return `${root}-${id.slice(0, 8)}`;
+}
+
+export async function clearReports(id: string) {
+  await db().from("story_reports").delete().eq("story_id", id);
+  await db().from("stories").update({ reports: 0 }).eq("id", id);
+}
+
+// ── Videos (place_videos) ─────────────────────────────────────────────────────────────────
+
+type VideoRow = {
+  id: string;
+  video_provider: VideoProvider;
+  provider_video_id: string;
+  video_url: string;
+  video_title: string;
+  language: string;
+  duration_seconds: number | null;
+  thumbnail_url: string | null;
+  published_at: string | null;
+};
+
+const VIDEO_COLUMNS =
+  "id,video_provider,provider_video_id,video_url,video_title,language,duration_seconds,thumbnail_url,published_at";
+
+const toVideo = (r: VideoRow): PlaceVideo => ({
+  id: r.id,
+  provider: r.video_provider,
+  providerVideoId: r.provider_video_id,
+  url: r.video_url,
+  title: r.video_title,
+  language: r.language,
+  durationSeconds: r.duration_seconds ?? undefined,
+  thumbnailUrl: r.thumbnail_url ?? undefined,
+  publishedAt: r.published_at ?? undefined,
+});
+
+/** The table doesn't exist until the place_videos migration has been run. */
+const missingTable = (code?: string) => code === "42P01" || code === "PGRST205";
+
+/** A place's videos, main one first. Empty (never an error) if the videos table isn't there yet. */
+export async function listVideos(storyId: string): Promise<PlaceVideo[]> {
+  const { data, error } = await db()
+    .from("place_videos")
+    .select(VIDEO_COLUMNS)
+    .eq("story_id", storyId)
+    .order("sort_order")
+    .order("created_at");
+  if (error) {
+    if (!missingTable(error.code)) console.error(`Database: ${error.message}`);
+    return [];
+  }
+  return (data as VideoRow[]).map(toVideo);
+}
+
+export type NewVideo = {
+  provider: VideoProvider;
+  providerVideoId: string;
+  url: string;
+  title: string;
+  language: string;
+  durationSeconds?: number;
+  thumbnailUrl?: string;
+  publishedAt?: string;
+};
+
+export async function addVideo(storyId: string, v: NewVideo): Promise<PlaceVideo> {
+  const existing = await listVideos(storyId);
+  const { data, error } = await db()
+    .from("place_videos")
+    .insert({
+      story_id: storyId,
+      video_provider: v.provider,
+      provider_video_id: v.providerVideoId,
+      video_url: v.url,
+      video_title: v.title,
+      language: v.language,
+      duration_seconds: v.durationSeconds ?? null,
+      thumbnail_url: v.thumbnailUrl ?? null,
+      published_at: v.publishedAt ?? null,
+      sort_order: existing.length,
+    })
+    .select(VIDEO_COLUMNS)
+    .single();
+  if (error) {
+    if (missingTable(error.code)) throw new Error("ভিডিওর টেবিল এখনো তৈরি হয়নি: place_videos মাইগ্রেশনটি Supabase-এ চালান।");
+    if (error.code === "23505") throw new Error("এই ভিডিওটি এই জায়গায় আগেই যোগ করা আছে।");
+    throw new Error(`Database: ${error.message}`);
+  }
+  return toVideo(data as VideoRow);
+}
+
+export async function deleteVideo(storyId: string, videoId: string): Promise<void> {
+  const { error } = await db().from("place_videos").delete().eq("id", videoId).eq("story_id", storyId);
+  if (error) throw new Error(`Database: ${error.message}`);
+}
+
+/** Makes a video the main one (first), keeping the others in their order. */
+export async function makeMainVideo(storyId: string, videoId: string): Promise<void> {
+  const videos = await listVideos(storyId);
+  const order = [videoId, ...videos.map((v) => v.id).filter((id) => id !== videoId)];
+  for (const [i, id] of order.entries()) {
+    const { error } = await db().from("place_videos").update({ sort_order: i }).eq("id", id).eq("story_id", storyId);
+    if (error) throw new Error(`Database: ${error.message}`);
+  }
+}

@@ -1,0 +1,91 @@
+[
+  {
+    "kind": "event",
+    "year": 1678,
+    "title": {
+      "bn": "নির্মাণ শুরু",
+      "en": "Construction begins"
+    },
+    "body": {
+      "bn": "সম্রাট আওরঙ্গজেবের পুত্র শাহজাদা মুহাম্মদ আজম, তখন বাংলার সুবাদার, দুর্গের কাজ শুরু করেন।",
+      "en": "Prince Muhammad Azam, son of Emperor Aurangzeb and then governor of Bengal, starts work on the fort."
+    },
+    "sources": [
+      "wikipedia-en",
+      "wikipedia-bn"
+    ]
+  },
+  {
+    "kind": "event",
+    "year": 1679,
+    "title": {
+      "bn": "শায়েস্তা খানের হাতে দায়িত্ব",
+      "en": "Shaista Khan takes over"
+    },
+    "body": {
+      "bn": "শাহজাদা আজমকে বাংলা ছেড়ে যেতে হয়। পরে সুবাদার শায়েস্তা খান কাজ চালিয়ে যান।",
+      "en": "Prince Azam is called away from Bengal, and governor Shaista Khan later continues the work."
+    },
+    "sources": [
+      "wikipedia-en"
+    ]
+  },
+  {
+    "kind": "event",
+    "year": 1684,
+    "title": {
+      "bn": "পরী বিবির মৃত্যু",
+      "en": "Death of Pari Bibi"
+    },
+    "body": {
+      "bn": "শায়েস্তা খানের কন্যা পরী বিবি মারা যান। দুর্গটিকে অশুভ মনে করে শায়েস্তা খান নির্মাণ বন্ধ করে দেন।",
+      "en": "Shaista Khan's daughter Pari Bibi dies. Believing the fort unlucky, he stops construction."
+    },
+    "sources": [
+      "wikipedia-en",
+      "wikipedia-bn"
+    ]
+  },
+  {
+    "kind": "fact",
+    "title": {
+      "bn": "তিনটি প্রধান স্থাপনা",
+      "en": "Three main buildings"
+    },
+    "body": {
+      "bn": "দিওয়ান-ই-আম ও হাম্মামখানা, পরী বিবির সমাধি এবং তিন গম্বুজ মসজিদ।",
+      "en": "The Diwan-i-Aam with its bath house, the Tomb of Pari Bibi, and a three-domed mosque."
+    },
+    "sources": [
+      "wikipedia-en"
+    ]
+  },
+  {
+    "kind": "person",
+    "title": {
+      "bn": "শায়েস্তা খান",
+      "en": "Shaista Khan"
+    },
+    "body": {
+      "bn": "আওরঙ্গজেবের আমলে বাংলার সুবাদার। কেল্লার কাজ তিনিই এগিয়ে নেন, আবার তিনিই থামিয়ে দেন।",
+      "en": "Governor of Bengal under Aurangzeb, who carried the fort forward and then stopped it."
+    },
+    "sources": [
+      "wikipedia-en"
+    ]
+  },
+  {
+    "kind": "person",
+    "title": {
+      "bn": "পরী বিবি",
+      "en": "Pari Bibi"
+    },
+    "body": {
+      "bn": "শায়েস্তা খানের কন্যা। তাঁর সমাধি কেল্লার ঠিক মাঝখানে।",
+      "en": "Shaista Khan's daughter, buried at the centre of the fort."
+    },
+    "sources": [
+      "wikipedia-en"
+    ]
+  }
+]

@@ -1,17 +1,27 @@
 {
-  "name": "web",
+  "name": "jaygar-golpo",
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "content": "tsx scripts/build-content.ts",
+    "predev": "cp node_modules/maplibre-gl/dist/maplibre-gl-worker.mjs public/ && tsx scripts/build-content.ts --drafts",
     "dev": "next dev",
+    "prebuild": "cp node_modules/maplibre-gl/dist/maplibre-gl-worker.mjs public/ && tsx scripts/build-content.ts",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "og": "tsx scripts/og.ts",
+    "lint": "eslint",
+    "make-admin": "tsx --env-file=.env.local scripts/make-admin.ts",
+    "test": "vitest run"
   },
   "dependencies": {
+    "@google/genai": "^3.3.0",
+    "@supabase/supabase-js": "^2.119.0",
+    "maplibre-gl": "^6.18.0",
     "next": "16.4.6",
     "react": "19.3.0",
-    "react-dom": "19.3.0"
+    "react-dom": "19.3.0",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@tailwindcss/turbopack": "4.3.3",
@@ -20,8 +30,12 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.4.6",
+    "image-size": "^2.1.0",
+    "playwright-core": "^1.65.0",
     "tailwindcss": "4.3.3",
-    "typescript": "^5"
+    "tsx": "^4.23.15",
+    "typescript": "^5",
+    "vitest": "^5.1.0"
   },
   "packageManager": "pnpm@10.33.0"
 }

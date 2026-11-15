@@ -1,0 +1,15 @@
+{
+  "slug": "ahsan-manzil",
+  "name": { "bn": "আহসান মঞ্জিল", "en": "Ahsan Manzil" },
+  "summary": {
+    "bn": "বুড়িগঙ্গার তীরে ঢাকার নবাবদের গোলাপি প্রাসাদ। ১৮৮৮ সালের টর্নেডোয় ভেঙে পড়ার পর নতুন করে গড়া হয়; এখন জাদুঘর।",
+    "en": "The pink palace of the Nawabs of Dhaka on the Buriganga, rebuilt after the 1888 tornado and now a museum."
+  },
+  "location": { "lat": 23.7086, "lng": 90.4061 },
+  "city": { "bn": "ঢাকা", "en": "Dhaka" },
+  "country": "BD",
+  "era": "british",
+  "built": { "start": 1859, "end": 1872 },
+  "tier": "featured",
+  "status": "review"
+}
