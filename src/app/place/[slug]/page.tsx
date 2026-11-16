@@ -44,7 +44,7 @@ export default async function PlacePage({ params }: PageProps<"/place/[slug]">) 
   if (!place) notFound();
   return (
     <div className="mx-auto max-w-3xl px-4">
-      <Link href="/" className="mt-4 inline-block text-sm font-semibold text-accent">
+      <Link href="/" className="mt-4 inline-block text-sm font-semibold text-accent hover:text-accent-hover">
         ← মানচিত্রে দেখুন
       </Link>
       <PlaceStory place={place} />

@@ -2,6 +2,7 @@
 
 import type { GeoJSONSource, Map as MLMap, MapLayerMouseEvent } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AiStoryDataT } from "@/lib/ai/types";
 import { bnYear } from "@/lib/format";
@@ -13,6 +14,7 @@ import { SidePanel } from "../SidePanel";
 import { StoryEditor } from "./StoryEditor";
 import { VideoManager } from "./VideoManager";
 import type { PlaceVideo } from "@/lib/video";
+import { THEME } from "@/lib/theme";
 
 type Status = "ai" | "verified" | "hidden";
 
@@ -27,6 +29,8 @@ type Row = {
   views: number;
   reports: number;
   updated_at: string;
+  /** Has a pin on the public map (undefined before the show_on_map migration). */
+  show_on_map?: boolean;
 };
 
 type Detail = Row & {
@@ -46,7 +50,7 @@ const STATUS: Record<Status, { bn: string; color: string }> = {
 };
 const REPORTED = "#c0392b";
 
-type Filter = "all" | Status | "reported";
+type Filter = "all" | Status | "reported" | "on_map";
 
 /** The admin map: every saved story as a pin; click to check, edit, regenerate, verify or hide. */
 export function AdminMap({ email }: { email?: string }) {
@@ -79,6 +83,7 @@ export function AdminMap({ email }: { email?: string }) {
       verified: rows.filter((r) => r.status === "verified").length,
       hidden: rows.filter((r) => r.status === "hidden").length,
       reported: rows.filter((r) => r.reports > 0).length,
+      on_map: rows.filter((r) => r.show_on_map).length,
     }),
     [rows],
   );
@@ -86,7 +91,9 @@ export function AdminMap({ email }: { email?: string }) {
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
     return rows
-      .filter((r) => (filter === "all" ? true : filter === "reported" ? r.reports > 0 : r.status === filter))
+      .filter((r) =>
+        filter === "all" ? true : filter === "reported" ? r.reports > 0 : filter === "on_map" ? !!r.show_on_map : r.status === filter,
+      )
       .filter((r) => !q || r.name_bn.includes(q) || r.name_en?.toLowerCase().includes(q))
       .sort((a, b) =>
         sort === "views" ? b.views - a.views : sort === "reports" ? b.reports - a.reports : b.updated_at.localeCompare(a.updated_at),
@@ -120,7 +127,7 @@ export function AdminMap({ email }: { email?: string }) {
             "circle-color": ["match", ["get", "status"], "verified", STATUS.verified.color, "hidden", STATUS.hidden.color, STATUS.ai.color],
             // Bigger = opened more often.
             "circle-radius": ["interpolate", ["linear"], ["sqrt", ["get", "views"]], 0, 6, 5, 11, 15, 18],
-            "circle-stroke-color": ["case", [">", ["get", "reports"], 0], REPORTED, "#ffffff"],
+            "circle-stroke-color": ["case", [">", ["get", "reports"], 0], REPORTED, THEME.white],
             "circle-stroke-width": ["case", [">", ["get", "reports"], 0], 3.5, 2],
             "circle-opacity": ["case", ["==", ["get", "status"], "hidden"], 0.6, 1],
           },
@@ -130,7 +137,7 @@ export function AdminMap({ email }: { email?: string }) {
           type: "circle",
           source: "stories",
           filter: ["==", ["get", "id"], ""],
-          paint: { "circle-radius": 22, "circle-color": "rgba(0,0,0,0)", "circle-stroke-color": "#2f5bd3", "circle-stroke-width": 3 },
+          paint: { "circle-radius": 22, "circle-color": "rgba(0,0,0,0)", "circle-stroke-color": THEME.accent, "circle-stroke-width": 3 },
         });
         map.addLayer({
           id: "story-labels",
@@ -144,7 +151,7 @@ export function AdminMap({ email }: { email?: string }) {
             "text-anchor": "top",
             "text-optional": true,
           },
-          paint: { "text-color": "#1f2328", "text-halo-color": "#ffffff", "text-halo-width": 1.5 },
+          paint: { "text-color": THEME.ink, "text-halo-color": THEME.white, "text-halo-width": 1.5 },
         });
         map.on("click", "story-pins", (e: MapLayerMouseEvent) => {
           const id = e.features?.[0]?.properties?.id as string | undefined;
@@ -186,12 +193,17 @@ export function AdminMap({ email }: { email?: string }) {
   }
 
   return (
-    <div className="flex h-[calc(100dvh-57px)]">
+    <div className="flex h-[calc(100dvh-var(--header-h))]">
       {/* List */}
       <aside className="hidden w-80 shrink-0 flex-col border-e border-line bg-paper md:flex">
         <div className="border-b border-line p-3">
           <div className="flex items-center justify-between text-sm">
-            <span className="font-bold">অ্যাডমিন</span>
+            <span className="flex items-center gap-3">
+              <span className="font-bold">অ্যাডমিন</span>
+              <Link href="/admin/events" className="font-semibold text-accent hover:underline">
+                ঐতিহাসিক ঘটনা →
+              </Link>
+            </span>
             <button type="button" onClick={() => browserSupabase().auth.signOut()} className="text-muted underline" title={email}>
               লগআউট
             </button>
@@ -208,6 +220,7 @@ export function AdminMap({ email }: { email?: string }) {
                 ["all", "সব"],
                 ["ai", "AI"],
                 ["verified", "যাচাই করা"],
+                ["on_map", "ম্যাপে"],
                 ["reported", "রিপোর্ট"],
                 ["hidden", "লুকানো"],
               ] as [Filter, string][]
@@ -277,7 +290,7 @@ export function AdminMap({ email }: { email?: string }) {
       {/* Map */}
       <div className="relative flex-1">
         <div className="absolute inset-0">
-          <div ref={container} className="h-full w-full bg-[#f4f4f3]" aria-label="সংরক্ষিত গল্পের মানচিত্র" />
+          <div ref={container} className="h-full w-full bg-[var(--map-ground)]" aria-label="সংরক্ষিত গল্পের মানচিত্র" />
         </div>
       </div>
 
@@ -365,6 +378,24 @@ function StoryPanel({ id, onClose, onChanged }: { id: string; onClose: () => voi
                   যাচাই তুলে নিন
                 </button>
               )}
+              {/* A pin on the public map: a simple on/off switch. */}
+              <button
+                type="button"
+                role="switch"
+                aria-checked={!!detail.show_on_map}
+                disabled={!!busy || detail.status === "hidden"}
+                title={detail.status === "hidden" ? "লুকানো গল্প ম্যাপে দেখানো যায় না" : undefined}
+                onClick={() => act(detail.show_on_map ? "hide_from_map" : "show_on_map", "map")}
+                className={`${button} flex items-center gap-2 ${detail.show_on_map ? "border-accent bg-accent-soft text-accent" : ""}`}
+              >
+                <span
+                  className={`relative inline-block h-4 w-7 rounded-full transition-colors ${detail.show_on_map ? "bg-accent" : "bg-line-strong"}`}
+                  aria-hidden
+                >
+                  <span className={`absolute top-0.5 size-3 rounded-full bg-white transition-all ${detail.show_on_map ? "start-3.5" : "start-0.5"}`} />
+                </span>
+                {busy === "map" ? "…" : "ম্যাপে পিন"}
+              </button>
               <button type="button" disabled={!!busy} onClick={() => setEditing((e) => !e)} className={button}>
                 {editing ? "সম্পাদনা বন্ধ" : "সম্পাদনা"}
               </button>

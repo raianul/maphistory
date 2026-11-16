@@ -1,7 +1,9 @@
 /**
- * Finds any place, road or river in the world by name, using Photon
- * (free OpenStreetMap search, https://photon.komoot.io). Runs in the browser.
+ * Finds any place, road or river by name, using Photon (free OpenStreetMap
+ * search, https://photon.komoot.io): in Bangladesh only, or the whole world
+ * (see lib/region.ts). Runs in the browser.
  */
+import { BANGLADESH_ONLY, BD_BOUNDS, inRegion } from "./region";
 
 export type GeoResult = {
   name: string;
@@ -64,6 +66,8 @@ export async function searchPlaces(
 ): Promise<GeoResult[]> {
   const ask = async (lang: string) => {
     const params = new URLSearchParams({ q: query, limit: "12", lang });
+    // Bangladesh only: ask only about Bangladesh, so all 12 results can be useful ones.
+    if (BANGLADESH_ONLY) params.set("bbox", BD_BOUNDS.flat().join(","));
     if (near) {
       params.set("lat", String(near.lat));
       params.set("lon", String(near.lng));
@@ -110,6 +114,8 @@ export async function searchPlaces(
     if (seen.has(key)) continue;
     seen.add(key);
     const [lng, lat] = f.geometry.coordinates;
+    // The box around Bangladesh also takes in bits of India and Myanmar: keep what is really inside.
+    if (!inRegion(lat, lng)) continue;
     out.push({ name: p.name, lat, lng, context, ...d });
   }
   // A road often carries the name of the landmark it leads to ("Colosseum" is also a footpath in

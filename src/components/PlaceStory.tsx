@@ -21,34 +21,46 @@ export function PlaceStory({ place }: { place: Place }) {
   return (
     <article className="@container pb-16">
       {place.status !== "published" && (
-        <p className="mt-4 rounded-lg bg-amber-100 px-3 py-2 text-sm text-amber-900">
+        <p className="mt-4 rounded-control bg-warning-soft px-3.5 py-2 text-meta text-warning">
           খসড়া · status: {place.status}. এই পাতা এখনো যাচাই হয়নি, প্রকাশিত সাইটে দেখা যাবে না।
         </p>
       )}
 
-      <header className="pt-6">
-        <EraTag era={place.era} />
-        <h1 className="mt-3 text-4xl font-bold leading-tight">{place.name.bn}</h1>
-        {place.name.en && <p className="text-muted">{place.name.en}</p>}
-        <p className="mt-1 text-sm text-muted">
-          {place.city.bn} · {builtLabel(place)}
+      <header className="pt-1">
+        <div className="flex items-start gap-3">
+          <div className="min-w-0 flex-1">
+            <h1 className="text-display font-bold tracking-tight text-balance @2xl:text-4xl">{place.name.bn}</h1>
+            {place.name.en && <p className="mt-1 text-meta text-muted">{place.name.en}</p>}
+          </div>
+          <ActionRow compact title={place.name.bn} url={`/place/${place.slug}`} lat={place.location.lat} lng={place.location.lng} />
+        </div>
+        <p className="mt-2.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-meta text-ink-2">
+          <EraTag era={place.era} />
+          <span className="size-[3px] rounded-full bg-subtle" aria-hidden />
+          {place.city.bn}
+          <span className="size-[3px] rounded-full bg-subtle" aria-hidden />
+          {builtLabel(place)}
         </p>
+        {place.status === "published" && (
+          <p className="mt-3 text-meta">
+            <span className="font-semibold text-success">✓ যাচাই করা</span>
+            <span className="text-muted"> · উৎস মিলিয়ে লেখা</span>
+          </p>
+        )}
       </header>
+
+      <p className="mt-4 text-lead">{place.summary.bn}</p>
 
       {place.hero && (
         <Figure image={place.images[place.hero.image]} alt={place.hero.alt} priority className="mt-6" />
       )}
 
-      <ActionRow title={place.name.bn} url={`/place/${place.slug}`} lat={place.location.lat} lng={place.location.lng} />
-
-      <p className="mt-6 text-lg">{place.summary.bn}</p>
-
       {place.keyNumbers && (
-        <dl className="mt-6 grid grid-cols-2 gap-3 @lg:grid-cols-4">
+        <dl className="mt-6 grid grid-cols-2 gap-x-6 gap-y-4 @lg:grid-cols-4">
           {place.keyNumbers.map((k) => (
-            <div key={k.label.bn} className="rounded-xl border border-line bg-card p-3">
-              <dd className="text-2xl font-bold">{k.value.bn}</dd>
-              <dt className="text-sm text-muted">{k.label.bn}</dt>
+            <div key={k.label.bn} className="flex flex-col-reverse">
+              <dt className="text-meta text-muted">{k.label.bn}</dt>
+              <dd className="text-xl leading-tight font-bold">{k.value.bn}</dd>
             </div>
           ))}
         </dl>
@@ -59,13 +71,13 @@ export function PlaceStory({ place }: { place: Place }) {
           <ol className="grid gap-6">
             {stages.map((s, i) => (
               <li key={i}>
-                <p className="text-sm text-muted">
+                <p className="text-meta text-muted">
                   ধাপ {bnYear(i + 1)}
                   {s.year !== undefined && ` · ${bnYear(s.year)}`}
                 </p>
                 <h3 className="font-semibold">{s.title.bn}</h3>
                 {s.image && <Figure image={place.images[s.image.image]} alt={s.image.alt} className="mt-2" />}
-                {s.body && <p className="mt-1">{s.body.bn}</p>}
+                {s.body && <p className="mt-1 text-body text-ink-2">{s.body.bn}</p>}
               </li>
             ))}
           </ol>
@@ -74,16 +86,13 @@ export function PlaceStory({ place }: { place: Place }) {
 
       {events.length > 0 && (
         <Section title="সময়রেখা">
-          <ol className="relative border-s-2 border-line ps-6">
+          <ol className="relative border-s border-line ps-5">
             {events.map((e, i) => (
-              <li key={i} className="relative pb-6 last:pb-0">
-                <span
-                  className="absolute -start-[33px] top-1.5 size-4 rounded-full border-2 border-paper bg-accent"
-                  aria-hidden
-                />
-                <p className="text-sm font-semibold text-accent">{bnYear(e.year)}</p>
-                <h3 className="font-semibold">{e.title.bn}</h3>
-                {e.body && <p className="mt-1">{e.body.bn}</p>}
+              <li key={i} className="relative pb-5 last:pb-0">
+                <span className="absolute -start-[25px] top-2 size-2 rounded-full border-2 border-paper bg-accent" aria-hidden />
+                <p className="text-meta font-semibold text-accent">{bnYear(e.year)}</p>
+                <h3 className="leading-snug font-medium">{e.title.bn}</h3>
+                {e.body && <p className="mt-0.5 text-body text-ink-2">{e.body.bn}</p>}
               </li>
             ))}
           </ol>
@@ -103,11 +112,16 @@ export function PlaceStory({ place }: { place: Place }) {
 
       {people.length > 0 && (
         <Section title="যাঁদের গল্প">
-          <ul className="grid gap-3 @lg:grid-cols-2">
+          <ul className="grid gap-4 @lg:grid-cols-2">
             {people.map((p, i) => (
-              <li key={i} className="rounded-xl border border-line bg-card p-4">
-                <h3 className="font-semibold">{p.title.bn}</h3>
-                {p.body && <p className="mt-1 text-sm">{p.body.bn}</p>}
+              <li key={i} className="flex gap-3">
+                <span className="grid size-9 shrink-0 place-items-center rounded-full bg-accent-soft text-meta font-semibold text-accent" aria-hidden>
+                  {[...p.title.bn][0]}
+                </span>
+                <div>
+                  <h3 className="font-medium">{p.title.bn}</h3>
+                  {p.body && <p className="mt-0.5 text-body text-ink-2">{p.body.bn}</p>}
+                </div>
               </li>
             ))}
           </ul>
@@ -118,9 +132,9 @@ export function PlaceStory({ place }: { place: Place }) {
         <Section title="জানা দরকার">
           <ul className="grid gap-3">
             {facts.map((f, i) => (
-              <li key={i}>
-                <h3 className="font-semibold">{f.title.bn}</h3>
-                {f.body && <p>{f.body.bn}</p>}
+              <li key={i} className="border-s-2 border-accent-soft-hover ps-3">
+                <h3 className="font-medium">{f.title.bn}</h3>
+                {f.body && <p className="mt-0.5 text-body text-ink-2">{f.body.bn}</p>}
               </li>
             ))}
           </ul>
@@ -134,8 +148,8 @@ export function PlaceStory({ place }: { place: Place }) {
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="mt-12">
-      <h2 className="mb-4 text-2xl font-bold">{title}</h2>
+    <section className="mt-8 border-t border-line pt-4">
+      <h2 className="mb-4 text-[1.0625rem] font-semibold">{title}</h2>
       {children}
     </section>
   );
@@ -165,15 +179,19 @@ function Figure({
           alt={alt.bn}
           priority={priority}
           sizes="(min-width: 768px) 720px, 100vw"
-          className="h-auto w-full rounded-xl"
+          className="h-auto max-h-[70vh] w-full rounded-media object-cover"
         />
         {label ? (
-          <span className="absolute start-2 top-2 rounded bg-ink/80 px-2 text-sm text-paper">{label}</span>
+          <span className="absolute start-2 top-2 rounded-md bg-card/90 px-2 text-meta font-semibold">{label}</span>
         ) : null}
       </div>
       {image.credit && (
-        <figcaption className="mt-1 text-xs text-muted">
-          ছবি: <a href={image.credit.sourceUrl} className="underline">{image.credit.author}</a>,{" "}
+        <figcaption className="mt-1.5 truncate text-micro text-muted">
+          ছবি:{" "}
+          <a href={image.credit.sourceUrl} className="hover:text-ink hover:underline">
+            {image.credit.author}
+          </a>
+          {" · "}
           {image.credit.license}
         </figcaption>
       )}
@@ -183,12 +201,12 @@ function Figure({
 
 function Sources({ place }: { place: Place }) {
   return (
-    <section className="mt-12 border-t border-line pt-6 text-sm">
+    <section className="mt-10 border-t border-line pt-4 text-meta">
       <h2 className="mb-2 font-semibold">সূত্র</h2>
-      <ol className="list-decimal ps-5 text-muted">
+      <ol className="grid list-decimal gap-0.5 ps-5 text-muted">
         {place.sources.map((s) => (
           <li key={s.id}>
-            <a href={s.url} className="underline">
+            <a href={s.url} className="hover:text-ink hover:underline">
               {s.title}
             </a>
           </li>
@@ -197,7 +215,7 @@ function Sources({ place }: { place: Place }) {
       {SITE.reportFormUrl && (
         <p className="mt-4">
           ভুল দেখেছেন?{" "}
-          <a href={`${SITE.reportFormUrl}${encodeURIComponent(place.slug)}`} className="font-semibold text-accent underline">
+          <a href={`${SITE.reportFormUrl}${encodeURIComponent(place.slug)}`} className="font-semibold text-accent hover:text-accent-hover hover:underline">
             আমাদের জানান
           </a>
         </p>

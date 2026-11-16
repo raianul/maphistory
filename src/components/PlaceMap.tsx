@@ -1,80 +1,189 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { GeoJSONSource, Map as MLMap, MapLayerMouseEvent, MapMouseEvent, Marker } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { bnDistance, ERA_META, haversine } from "@/lib/format";
+import { pinTarget, type MapPin } from "@/lib/map-pin";
+import { BANGLADESH_ONLY, bangladeshShape, BD_MIN_ZOOM, inRegion, MAX_BOUNDS, outsideMask } from "@/lib/region";
+import { PIN_MIN_ZOOM, tileKey, tilesInView, type Tile } from "@/lib/tiles";
+import { bnDistance, haversine } from "@/lib/format";
 import { loadStyle, MIN_ZOOM } from "@/lib/map-style";
 import { searchPlaces, type GeoResult } from "@/lib/geo-search";
 import { AiPanel, aiShareUrl, type AiTarget } from "./AiPanel";
+import { OnThisDayPanel } from "./OnThisDayPanel";
+import { SHEET_EVENT, SHEET_REQUEST } from "./SidePanel";
 import { SearchBox } from "./SearchBox";
-import { ERAS, type Era } from "@/lib/schema";
-
-/** The small slice of a place the map needs (keeps the page's JS light). */
-export type PinPlace = {
-  slug: string;
-  name: string;
-  nameEn?: string;
-  era: Era;
-  tier: "standard" | "featured";
-  summary: string;
-  meta: string;
-  lat: number;
-  lng: number;
-};
+import { THEME } from "@/lib/theme";
+import { addEventLayers, drawSteps, EVENT_LAYERS, stepBounds } from "@/lib/events/draw";
+import type { PublicEvent } from "@/lib/events/public";
+import type { TimelineStep } from "@/lib/events/schema";
 
 const OLD_DHAKA: [number, number] = [90.399, 23.716];
 const TIP_KEY = "jg-tip-seen";
 
 type GeoData = Parameters<GeoJSONSource["setData"]>[0];
 
-function toGeoJSON(places: PinPlace[]): GeoData {
+function toGeoJSON(pins: MapPin[]): GeoData {
   return {
     type: "FeatureCollection",
-    features: places.map((p) => ({
+    // Each feature carries what opening it needs (MapLibre keeps properties as plain values).
+    features: pins.map((p) => ({
       type: "Feature",
       geometry: { type: "Point", coordinates: [p.lng, p.lat] },
-      properties: { slug: p.slug, name: p.name, era: p.era, featured: p.tier === "featured" },
+      properties: { label: p.label, verified: p.verified, name: p.name, kind: p.kind ?? "" },
     })),
   };
 }
 
-export function PlaceMap({ places }: { places: PinPlace[] }) {
+/** One square's pins from the server (cached there and by the browser). */
+async function fetchTile(t: Tile, signal: AbortSignal): Promise<MapPin[]> {
+  const res = await fetch(`/api/pins/${tileKey(t)}`, { signal });
+  if (!res.ok) throw new Error(`pins ${tileKey(t)}: HTTP ${res.status}`);
+  return ((await res.json()) as { pins: MapPin[] }).pins;
+}
+
+/**
+ * The public map. Pins are saved stories the admin switched on ("ম্যাপে পিন"), loaded square by
+ * square (see lib/tiles.ts): only the squares on screen, only from city zoom in, each once. Any
+ * other named place on the base map can still be clicked for its story.
+ */
+export function PlaceMap() {
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MLMap | null>(null);
   const userMarker = useRef<Marker | null>(null);
   const [ready, setReady] = useState(false);
-  const [eras, setEras] = useState<Set<Era>>(new Set(ERAS));
   const [me, setMe] = useState<{ lat: number; lng: number } | null>(null);
   const [locating, setLocating] = useState(false);
   const [locError, setLocError] = useState<string | null>(null);
   // EXPERIMENT: a base-map place clicked for a live AI story.
   const [aiTarget, setAiTarget] = useState<AiTarget | null>(null);
+  /** "On this day": closed, its list, or one event (by slug). One panel at a time with stories. */
+  const [otd, setOtd] = useState<{ slug: string | null } | null>(null);
+  /** Where the open event happened, for the ring on the map. */
+  const [otdPlace, setOtdPlace] = useState<{ lat: number; lng: number } | null>(null);
+  /** The open event's timeline, as shown: the event and the current step (−1 = story only, no timeline). */
+  const [timeline, setTimeline] = useState<{ event: PublicEvent; step: number } | null>(null);
   // First-visit tip: shown until the visitor opens their first story.
   const [showTip, setShowTip] = useState(false);
   const tipMarker = useRef<Marker | null>(null);
   const tooltip = useRef<HTMLDivElement>(null);
+  /** The floating search, so the map knows where its visible area begins. */
+  const overlayRef = useRef<HTMLDivElement>(null);
 
-  const visible = useMemo(() => places.filter((p) => eras.has(p.era)), [places, eras]);
+  // ── Pins, square by square ──────────────────────────────────────────────────────────────
+  /** Squares already loaded (key "z/x/y" → its pins), or in flight. Kept for the visit: panning back is free. */
+  const tiles = useRef(new Map<string, MapPin[] | "loading">());
+  /** Every pin loaded so far: drawn on the map and used by "near me". */
+  const [pins, setPins] = useState<MapPin[]>([]);
+  const tileAbort = useRef<AbortController | null>(null);
+
+  /** Fetches the squares on screen that aren't loaded yet (only from city zoom in, where pins show). */
+  function loadPins() {
+    const map = mapRef.current;
+    if (!map || map.getZoom() < PIN_MIN_ZOOM) return;
+    const b = map.getBounds();
+    const wanted = tilesInView({ south: b.getSouth(), west: b.getWest(), north: b.getNorth(), east: b.getEast() });
+    const missing = wanted.filter((t) => !tiles.current.has(tileKey(t)));
+    if (!missing.length) return;
+    tileAbort.current ??= new AbortController();
+    const signal = tileAbort.current.signal;
+    for (const t of missing) {
+      const key = tileKey(t);
+      tiles.current.set(key, "loading");
+      fetchTile(t, signal)
+        .then((found) => {
+          tiles.current.set(key, found);
+          if (found.length) setPins([...tiles.current.values()].flatMap((v) => (v === "loading" ? [] : v)));
+        })
+        // A square that failed (offline, server busy) is tried again on the next move.
+        .catch(() => tiles.current.delete(key));
+    }
+  }
+  const loadPinsRef = useRef(loadPins);
+  useEffect(() => {
+    loadPinsRef.current = loadPins;
+  });
+  // Leaving the page: stop squares still loading.
+  useEffect(() => () => tileAbort.current?.abort(), []);
+
+  // Draw the pins loaded so far.
+  useEffect(() => {
+    if (ready) (mapRef.current?.getSource("pins") as GeoJSONSource | undefined)?.setData(toGeoJSON(pins));
+  }, [ready, pins]);
 
   // The open place comes from the URL: /place/<slug> shows its story in the side panel.
   const router = useRouter();
   const pathname = usePathname();
   const selected = pathname.match(/^\/place\/([^/]+)/)?.[1] ?? null;
 
-  /** Moves the map so a point stays visible beside the panel (right on desktop, bottom sheet on phones). */
+  /** Whether the open story's history entry was pushed here (so closing = Back to the map). */
+  const openedHere = useRef(false);
+  /** How much of the screen the phone sheet covers right now (px), as told by SidePanel. */
+  const sheetPx = useRef(0);
+  /** The place the panel is about, so the map can keep it in view when the sheet moves. */
+  const focusPoint = useRef<{ lng: number; lat: number } | null>(null);
+
+  /**
+   * Moves the map so a point sits in the middle of the map that is still
+   * visible: left of the panel on desktop; on phones, between the search bar
+   * and the bottom sheet (whatever height it has).
+   */
   function focus(lng: number, lat: number, zoom?: number) {
     const map = mapRef.current;
     if (!map) return;
+    focusPoint.current = { lng, lat };
     const wide = window.matchMedia("(min-width: 768px)").matches;
+    // Half the panel's width (a CSS token), so the point sits in the middle of the visible map.
+    const panel = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--panel-w")) || 440;
+    // Phones: the sheet opens at half height before it has reported in.
+    const sheet = sheetPx.current || Math.round(window.innerHeight * 0.56);
+    const top = overlayRef.current?.getBoundingClientRect().bottom ?? 0;
+    const mapTop = container.current?.getBoundingClientRect().top ?? 0;
+    const mapH = container.current?.clientHeight ?? window.innerHeight;
+    // Visible band in map coordinates: from below the search to above the sheet.
+    const bandTop = Math.max(0, top - mapTop);
+    const bandBottom = Math.max(bandTop + 40, mapH - sheet);
+    const dy = Math.round((bandTop + bandBottom) / 2 - mapH / 2);
     map.easeTo({
       center: [lng, lat],
       zoom: zoom ?? map.getZoom(),
-      offset: wide ? [-240, 0] : [0, -Math.round(window.innerHeight * 0.26)],
+      offset: wide ? [-Math.round(panel / 2), 0] : [0, dy],
       duration: zoom ? 1200 : 600,
     });
   }
+
+  /** The map's free area (what the panel and search leave visible), as fitBounds padding. */
+  function freePadding() {
+    const wide = window.matchMedia("(min-width: 768px)").matches;
+    const panel = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--panel-w")) || 440;
+    const top = Math.max(0, (overlayRef.current?.getBoundingClientRect().bottom ?? 0) - (container.current?.getBoundingClientRect().top ?? 0));
+    const sheet = sheetPx.current || Math.round(window.innerHeight * 0.56);
+    return wide ? { top: top + 40, bottom: 60, left: 60, right: panel + 60 } : { top: top + 24, bottom: sheet + 24, left: 32, right: 32 };
+  }
+
+  /** Frames a timeline step in the free area. Unknown places (no bounds) never move the map. */
+  const eventFrame = useRef<[[number, number], [number, number]] | null>(null);
+  function frameStep(b: [[number, number], [number, number]] | undefined) {
+    const map = mapRef.current;
+    if (!map || !b) return;
+    eventFrame.current = b;
+    focusPoint.current = null;
+    map.fitBounds(b, { padding: freePadding(), maxZoom: 15, duration: 900 });
+  }
+
+  // The sheet moved (peek, half, full): keep the place in the visible part of the map.
+  useEffect(() => {
+    const onSheet = (e: Event) => {
+      const px = (e as CustomEvent<number>).detail;
+      const changed = Math.abs(px - sheetPx.current) > 8;
+      sheetPx.current = px;
+      if (changed && px > 0 && focusPoint.current) focus(focusPoint.current.lng, focusPoint.current.lat);
+      else if (changed && px > 0 && eventFrame.current) frameStep(eventFrame.current);
+    };
+    window.addEventListener(SHEET_EVENT, onSheet);
+    return () => window.removeEventListener(SHEET_EVENT, onSheet);
+  });
 
   function dismissTip() {
     setShowTip(false);
@@ -87,31 +196,91 @@ export function PlaceMap({ places }: { places: PinPlace[] }) {
     }
   }
 
-  /** Opens a curated place's story in the panel (its own URL). */
-  function openPlace(p: PinPlace, zoomIn = false) {
-    setAiTarget(null);
-    dismissTip();
-    const href = `/place/${p.slug}`;
-    // Switching between places replaces history, so closing the panel returns to the map.
-    if (selected) router.replace(href, { scroll: false });
-    else router.push(href, { scroll: false });
-    focus(p.lng, p.lat, zoomIn ? Math.max(mapRef.current?.getZoom() ?? 15, 15) : undefined);
-  }
-
   /** EXPERIMENT: opens a live AI story for any named place on the base map. */
   function openAi(target: AiTarget, zoom?: number) {
     if (selected) router.replace("/", { scroll: false });
     dismissTip();
+    // The address bar carries the story, so it can be shared and reopened. Opening one from the
+    // map adds a history entry, so the phone's Back button closes it; switching stories replaces it.
+    const url = aiShareUrl(target);
+    if (aiTarget || selected || new URLSearchParams(window.location.search).has("place")) {
+      window.history.replaceState(window.history.state, "", url);
+    } else {
+      window.history.pushState(window.history.state, "", url);
+      openedHere.current = true;
+    }
+    setOtd(null);
+    setOtdPlace(null);
+    setTimeline(null);
     setAiTarget(target);
-    // The address bar carries the story, so it can be shared and reopened.
-    window.history.replaceState(null, "", aiShareUrl(target));
     focus(target.lng, target.lat, zoom);
+  }
+
+  // ── "On this day" ───────────────────────────────────────────────────────────────────────
+  const otdUrl = (slug: string | null) => (slug ? `/?event=${encodeURIComponent(slug)}` : "/?day=today");
+  /** Opens the list (from the button) or an event (from the list or a shared link). */
+  function openOtd(slug: string | null, place?: { lat: number; lng: number } | null) {
+    if (selected) router.replace("/", { scroll: false });
+    dismissTip();
+    const url = otdUrl(slug);
+    const p = new URLSearchParams(window.location.search);
+    // From the plain map: a new history entry (Back closes it). Inside the panel or a story: replace.
+    if (otd || aiTarget || p.has("event") || p.has("day") || p.has("place")) {
+      window.history.replaceState(window.history.state, "", url);
+    } else {
+      window.history.pushState(window.history.state, "", url);
+      openedHere.current = true;
+    }
+    setAiTarget(null);
+    setOtd({ slug });
+    setOtdPlace(place ?? null);
+    if (place) focus(place.lng, place.lat, Math.max(mapRef.current?.getZoom() ?? 13, 13));
+  }
+  function closeOtd() {
+    setOtd(null);
+    setOtdPlace(null);
+    setTimeline(null);
+    focusPoint.current = null;
+    if (openedHere.current) window.history.back();
+    else window.history.replaceState(window.history.state, "", "/");
+    openedHere.current = false;
   }
 
   function closeAi() {
     setAiTarget(null);
-    window.history.replaceState(null, "", "/");
+    focusPoint.current = null;
+    // Opened from the map: step back to the map's own entry. Opened from a shared link: just clear the URL.
+    if (openedHere.current) window.history.back();
+    else window.history.replaceState(window.history.state, "", "/");
+    openedHere.current = false;
   }
+
+  // Back/forward: the story follows the address bar (Back from a story returns to the plain map).
+  useEffect(() => {
+    const onPop = () => {
+      const params = new URLSearchParams(window.location.search);
+      const at = params.get("at")?.split(",").map(Number);
+      const name = params.get("place");
+      if (name && at?.length === 2 && at.every(Number.isFinite)) {
+        setOtd(null);
+        setTimeline(null);
+        setAiTarget({ name, lat: at[0], lng: at[1], kind: params.get("kind") ?? undefined });
+      } else if (params.has("event") || params.has("day")) {
+        setAiTarget(null);
+        setOtd({ slug: params.get("event") });
+        if (!params.has("event")) setOtdPlace(null);
+      } else {
+        setAiTarget(null);
+        setOtd(null);
+        setOtdPlace(null);
+        setTimeline(null);
+        focusPoint.current = null;
+        openedHere.current = false;
+      }
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
 
   /** A search result: fly there and tell its story. */
   function openGeo(r: GeoResult) {
@@ -127,11 +296,9 @@ export function PlaceMap({ places }: { places: PinPlace[] }) {
     else if (near) openAi({ name, lat: near.lat, lng: near.lng, nearby: aiTarget ? [aiTarget.name] : undefined });
   }
 
-  // The map's click handler is registered once; this ref always points at the latest openPlace.
-  const openRef = useRef(openPlace);
+  // The map's click handlers are registered once; this ref always points at the latest openAi.
   const aiRef = useRef(openAi);
   useEffect(() => {
-    openRef.current = openPlace;
     aiRef.current = openAi;
   });
 
@@ -148,65 +315,96 @@ export function PlaceMap({ places }: { places: PinPlace[] }) {
         style,
         center: OLD_DHAKA,
         zoom: 13.5,
-        minZoom: MIN_ZOOM,
+        // Bangladesh only (lib/region.ts): the map stays over Bangladesh and can't zoom out past it.
+        minZoom: BANGLADESH_ONLY ? BD_MIN_ZOOM : MIN_ZOOM,
+        maxBounds: BANGLADESH_ONLY ? MAX_BOUNDS : undefined,
+        renderWorldCopies: !BANGLADESH_ONLY,
         attributionControl: { compact: true },
       });
-      map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
+      // Bottom right, out of the way of search; hidden on touch screens (see globals.css).
+      map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
       mapRef.current = map;
       // Handy for debugging and browser tests in development.
       if (process.env.NODE_ENV === "development") (window as unknown as { __map: MLMap }).__map = map;
 
       map.on("load", () => {
-        map.addSource("places", { type: "geojson", data: toGeoJSON(places) });
-        const eraColor = [
-          "match",
-          ["get", "era"],
-          ...ERAS.flatMap((e) => [e, ERA_META[e].hex]),
-          "#888",
-        ] as unknown as string;
+        // Bangladesh only: everything outside the border is covered with the map's own blank ground
+        // colour, with a hairline along the border. The cover goes under the base map's labels, so
+        // names near the border are drawn whole; place names outside Bangladesh are filtered out.
+        if (BANGLADESH_ONLY) {
+          const style = map.getStyle();
+          const firstLabel = style.layers.find((l) => l.type === "symbol")?.id;
+          map.addSource("outside", { type: "geojson", data: outsideMask() });
+          map.addLayer({ id: "outside", type: "fill", source: "outside", paint: { "fill-color": THEME.mapGround, "fill-antialias": false } }, firstLabel);
+          map.addLayer(
+            {
+              id: "outside-border",
+              type: "line",
+              source: "outside",
+              paint: { "line-color": THEME.borderLine, "line-width": ["interpolate", ["linear"], ["zoom"], 5, 0.8, 12, 1.5] },
+            },
+            firstLabel,
+          );
+          // Point labels (towns, areas, places): only those inside Bangladesh. Road and river names
+          // are lines; outside ones would be hidden as well, but a line crossing the border would
+          // vanish too, so those stay (their roads are under the cover anyway).
+          const inside = ["within", bangladeshShape()];
+          for (const l of style.layers) {
+            if (l.type !== "symbol" || /highway|transportation|water_name|waterway|shield/.test(l.id)) continue;
+            const current = map.getFilter(l.id);
+            map.setFilter(l.id, (current ? ["all", current, inside] : inside) as Parameters<MLMap["setFilter"]>[1]);
+          }
+        }
+        map.addSource("pins", { type: "geojson", data: toGeoJSON([]) });
+        // Pins are local places: shown from city zoom in (they fade in), never stacked on top of a
+        // country when the map shows a continent or the world.
+        const fadeIn = (from: number) => ["interpolate", ["linear"], ["zoom"], from, 0, from + 1, 1] as unknown as number;
         map.addLayer({
           id: "pins",
           type: "circle",
-          source: "places",
+          source: "pins",
+          minzoom: PIN_MIN_ZOOM,
           paint: {
-            "circle-color": eraColor,
-            "circle-radius": ["case", ["get", "featured"], 10, 7],
-            "circle-stroke-color": "#ffffff",
+            // Verified by an editor: solid accent. Still AI-only: a white pin with an accent ring.
+            "circle-color": ["case", ["get", "verified"], THEME.accent, THEME.white],
+            "circle-radius": ["interpolate", ["linear"], ["zoom"], PIN_MIN_ZOOM, 6, 15, 8],
+            "circle-stroke-color": ["case", ["get", "verified"], THEME.white, THEME.accent],
             "circle-stroke-width": 2.5,
-          },
-        });
-        // Ring around the place whose story is open.
-        map.addLayer({
-          id: "pin-selected",
-          type: "circle",
-          source: "places",
-          filter: ["==", ["get", "slug"], ""],
-          paint: {
-            "circle-radius": ["case", ["get", "featured"], 16, 13],
-            "circle-color": "rgba(0,0,0,0)",
-            "circle-stroke-color": "#2f5bd3",
-            "circle-stroke-width": 3,
+            "circle-opacity": fadeIn(PIN_MIN_ZOOM),
+            "circle-stroke-opacity": fadeIn(PIN_MIN_ZOOM),
           },
         });
         map.addLayer({
           id: "pin-labels",
           type: "symbol",
-          source: "places",
+          source: "pins",
+          // Names a step later than the dots, once there is room for them.
+          minzoom: PIN_MIN_ZOOM + 1,
           layout: {
-            "text-field": ["get", "name"],
+            "text-field": ["get", "label"],
             "text-font": ["Noto Sans Bold"],
             "text-size": 14,
             "text-offset": [0, 1.3],
             "text-anchor": "top",
             "text-optional": true,
           },
-          paint: { "text-color": "#1f2328", "text-halo-color": "#ffffff", "text-halo-width": 1.5 },
+          paint: {
+            "text-color": THEME.ink,
+            "text-halo-color": THEME.white,
+            "text-halo-width": 1.5,
+            "text-opacity": fadeIn(PIN_MIN_ZOOM + 1),
+          },
         });
         map.on("click", "pins", (e: MapLayerMouseEvent) => {
-          const slug = e.features?.[0]?.properties?.slug as string | undefined;
-          const place = places.find((p) => p.slug === slug);
-          if (place) openRef.current(place);
+          const f = e.features?.[0];
+          if (!f || f.geometry.type !== "Point") return;
+          const [lng, lat] = f.geometry.coordinates as [number, number];
+          const { name, kind, label, verified } = f.properties as { name: string; kind: string; label: string; verified: boolean };
+          aiRef.current(pinTarget({ name, lat, lng, kind: kind || undefined, label, verified }));
         });
+        // Squares of pins: fetched for what is on screen, after every move (and once now).
+        map.on("moveend", () => loadPinsRef.current());
+        loadPinsRef.current();
         const labelOf = (props: Record<string, unknown> | undefined) =>
           (props?.["name:bn"] ?? props?.name) as string | undefined;
         // EXPERIMENT: any named place on the base map opens a live AI story:
@@ -230,6 +428,8 @@ export function PlaceMap({ places }: { places: PinPlace[] }) {
           if (!f || !name) return;
           // Roads and rivers are lines: the clicked spot is the location.
           const [lng, lat] = f.geometry.type === "Point" ? (f.geometry.coordinates as [number, number]) : [e.lngLat.lng, e.lngLat.lat];
+          // Bangladesh only: places under the blank-out (other countries) are not clickable.
+          if (!inRegion(lat, lng) || !inRegion(e.lngLat.lat, e.lngLat.lng)) return;
           // Category and surrounding labels tell the AI which place of this name it is.
           const cls = (f.properties?.class ?? f.properties?.subclass) as string | undefined;
           const kind =
@@ -254,12 +454,17 @@ export function PlaceMap({ places }: { places: PinPlace[] }) {
           ].slice(0, 6);
           aiRef.current({ name, lat, lng, kind, nearby });
         });
-        map.on("mouseenter", labelLayers, () => (map.getCanvas().style.cursor = "pointer"));
-        // Hover hint: the label's name and "গল্প পড়ুন", following the pointer.
+        // Hover hint: the label's name and "গল্প পড়ুন", following the pointer (not over the blank-out).
         map.on("mousemove", labelLayers, (e: MapLayerMouseEvent) => {
           const tip = tooltip.current;
           const name = labelOf(e.features?.[0]?.properties);
-          if (!tip || !name) return;
+          if (!tip) return;
+          if (!name || !inRegion(e.lngLat.lat, e.lngLat.lng)) {
+            tip.hidden = true;
+            map.getCanvas().style.cursor = "";
+            return;
+          }
+          map.getCanvas().style.cursor = "pointer";
           tip.querySelector("span")!.textContent = name;
           tip.style.transform = `translate(${e.point.x + 14}px, ${e.point.y + 14}px)`;
           tip.hidden = false;
@@ -269,26 +474,38 @@ export function PlaceMap({ places }: { places: PinPlace[] }) {
           if (tooltip.current) tooltip.current.hidden = true;
         });
         map.addSource("ai-target", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+        // Drawn under the reviewed pins: on a pin it reads as one ring around it, elsewhere as its own marker.
         map.addLayer({
           id: "ai-target",
           type: "circle",
           source: "ai-target",
-          paint: { "circle-radius": 14, "circle-color": "rgba(47,91,211,0.12)", "circle-stroke-color": "#2f5bd3", "circle-stroke-width": 2 },
-        });
+          paint: { "circle-radius": 13, "circle-color": THEME.accentHalo, "circle-stroke-color": THEME.accent, "circle-stroke-width": 2 },
+        }, "pins");
+        // A solid centre dot, so the exact spot is clear at any zoom.
+        map.addLayer({
+          id: "ai-target-dot",
+          type: "circle",
+          source: "ai-target",
+          paint: { "circle-radius": 4, "circle-color": THEME.accent, "circle-stroke-color": THEME.white, "circle-stroke-width": 1.5 },
+        }, "pins");
         map.on("mouseenter", "pins", () => (map.getCanvas().style.cursor = "pointer"));
         map.on("mouseleave", "pins", () => (map.getCanvas().style.cursor = ""));
-        if (places.length > 1) {
-          const bounds = new maplibregl.LngLatBounds();
-          for (const p of places) bounds.extend([p.lng, p.lat]);
-          map.fitBounds(bounds, { padding: { top: 140, bottom: 80, left: 50, right: 50 }, maxZoom: 15, duration: 0 });
-        }
+        // Event timelines (On this day): drawn under the pins, over the base map.
+        addEventLayers(map, THEME.white, THEME.ink);
+        for (const id of EVENT_LAYERS) if (map.getLayer(id)) map.moveLayer(id, "ai-target");
         setReady(true);
 
         // A shared AI story link (/?place=…&at=lat,lng) reopens that story.
         const params = new URLSearchParams(window.location.search);
         const at = params.get("at")?.split(",").map(Number);
         const shared = params.get("place");
-        if (shared && at?.length === 2 && at.every(Number.isFinite)) {
+        // (Bangladesh only: a link to a place elsewhere just opens the map.)
+        // A shared "On this day" link (/?event=slug or /?day=…) reopens that panel.
+        if (params.has("event") || params.has("day")) {
+          setOtd({ slug: params.get("event") });
+          return;
+        }
+        if (shared && at?.length === 2 && at.every(Number.isFinite) && inRegion(at[0], at[1])) {
           aiRef.current({ name: shared, lat: at[0], lng: at[1], kind: params.get("kind") ?? undefined }, 15);
           return;
         }
@@ -311,7 +528,11 @@ export function PlaceMap({ places }: { places: PinPlace[] }) {
               ],
               { layers: labelLayers.filter((id) => /^(label_|poi)/.test(id)) },
             )
-            .find((f) => f.geometry.type === "Point" && labelOf(f.properties));
+            .find((f) => {
+              if (f.geometry.type !== "Point" || !labelOf(f.properties)) return false;
+              const [lng, lat] = f.geometry.coordinates as [number, number];
+              return inRegion(lat, lng);
+            });
           if (target && !tipMarker.current) {
             // MapLibre positions the marker with `transform`, so the animated ring sits inside it.
             const holder = document.createElement("div");
@@ -329,40 +550,54 @@ export function PlaceMap({ places }: { places: PinPlace[] }) {
       mapRef.current?.remove();
       mapRef.current = null;
     };
-  }, [places]);
+  }, []);
 
-  // Filters and search narrow the pins on the map.
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!ready || !map) return;
-    (map.getSource("places") as GeoJSONSource).setData(toGeoJSON(visible));
-  }, [ready, visible]);
-
-  useEffect(() => {
-    if (ready) mapRef.current?.setFilter("pin-selected", ["==", ["get", "slug"], selected ?? ""]);
-  }, [ready, selected]);
 
   // Ring around the place the AI is writing about.
   useEffect(() => {
     if (!ready) return;
     (mapRef.current?.getSource("ai-target") as GeoJSONSource | undefined)?.setData({
       type: "FeatureCollection",
-      features: aiTarget
-        ? [{ type: "Feature", properties: {}, geometry: { type: "Point", coordinates: [aiTarget.lng, aiTarget.lat] } }]
+      features: (aiTarget ?? (timeline && timeline.step >= 0 ? null : otdPlace))
+        ? [{ type: "Feature", properties: {}, geometry: { type: "Point", coordinates: [(aiTarget ?? otdPlace)!.lng, (aiTarget ?? otdPlace)!.lat] } }]
         : [],
     });
-  }, [ready, aiTarget]);
+  }, [ready, aiTarget, otdPlace, timeline]);
 
-  const panelOpen = Boolean(selected || aiTarget);
+  // Draw the open event's timeline up to its current step, and frame that step. With no timeline
+  // (or after the event closes) the layers are emptied and the base map comes back to full strength.
+  const shownStep = timeline && timeline.step >= 0 ? timeline.event.steps[timeline.step] : undefined;
+  /** The base map's own label/pin opacities, saved before dimming them for a timeline. */
+  const baseOpacity = useRef(new Map<string, unknown>());
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!ready || !map) return;
+    const steps = (timeline?.event.steps ?? []) as unknown as TimelineStep[];
+    drawSteps(map, steps, timeline?.event.phases ?? [], timeline && timeline.step >= 0 ? timeline.step : -1);
+    // While a timeline plays, the rest of the map steps back (still clickable). Each layer's own
+    // opacity is remembered once and put back exactly when the timeline ends.
+    const dim = !!timeline && timeline.step >= 0;
+    const targets = map
+      .getStyle()
+      .layers.filter((l) => !EVENT_LAYERS.includes(l.id) && (/^(poi|label_|highway-name|water_name|waterway)/.test(l.id) || l.id === "pins" || l.id === "pin-labels"))
+      .map((l) => ({ id: l.id, prop: (l.type === "circle" ? "circle-opacity" : "text-opacity") as "circle-opacity" | "text-opacity" }))
+      .filter(({ id }) => map.getLayer(id)?.type === "circle" || map.getLayer(id)?.type === "symbol");
+    for (const { id, prop } of targets) {
+      const key = `${id}|${prop}`;
+      if (!baseOpacity.current.has(key)) baseOpacity.current.set(key, map.getPaintProperty(id, prop) ?? 1);
+      map.setPaintProperty(id, prop, (dim ? 0.4 : baseOpacity.current.get(key)) as number);
+    }
+    if (!timeline) eventFrame.current = null;
+  }, [ready, timeline]);
+  // Each new step: frame it (unknown places never move the map; the ring follows the step's place).
+  useEffect(() => {
+    if (!ready || !shownStep) return;
+    frameStep(stepBounds(shownStep as unknown as TimelineStep));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reframe only when the step changes
+  }, [ready, shownStep]);
 
-  function toggleEra(era: Era) {
-    setEras((prev) => {
-      const next = new Set(prev);
-      if (next.has(era) && next.size > 1) next.delete(era);
-      else next.add(era);
-      return next;
-    });
-  }
+  const panelOpen = Boolean(selected || aiTarget || otd);
+
 
   async function nearMe() {
     if (!navigator.geolocation) return setLocError("এই ব্রাউজারে লোকেশন পাওয়া যায় না।");
@@ -390,117 +625,147 @@ export function PlaceMap({ places }: { places: PinPlace[] }) {
     );
   }
 
+  // "Near me": the closest pinned stories loaded so far (the map flies there first), within 50 km.
   const nearest = me
-    ? visible
+    ? pins
         .map((p) => ({ p, d: haversine(me, p) }))
+        .filter(({ d }) => d < 50_000)
         .sort((a, b) => a.d - b.d)
         .slice(0, 3)
     : [];
 
   return (
-    <div className="relative h-[calc(100dvh-57px)] min-h-[420px] w-full">
+    <div className="relative h-[calc(100dvh-var(--header-h)-env(safe-area-inset-top))] min-h-[420px] w-full overflow-hidden">
       {/* MapLibre's CSS forces position: relative on the map element, so a wrapper does the positioning. */}
       <div className="absolute inset-0">
-        <div ref={container} className="h-full w-full bg-[#f4f4f3]" aria-label="ঐতিহাসিক স্থানের মানচিত্র" />
+        <div ref={container} className="h-full w-full bg-[var(--map-ground)]" aria-label="ঐতিহাসিক স্থানের মানচিত্র" />
       </div>
 
-      {/* Search, era filters and near me */}
-      <div className={`pointer-events-none absolute inset-x-0 top-0 p-3 ${panelOpen ? "md:pe-[492px]" : ""}`}>
-        <div className="pointer-events-auto mx-auto max-w-xl">
+      {/* Search and near me: top left on wide screens, full width on phones. */}
+      <div
+        ref={overlayRef}
+        className={`pointer-events-none absolute inset-x-0 top-0 z-30 p-3 md:z-auto md:p-4 ${panelOpen ? "md:pe-[calc(var(--panel-w)+1rem)]" : ""}`}
+      >
+        <div className="pointer-events-auto w-full md:max-w-[400px]">
           <SearchBox
-            places={places}
-            onPickPlace={(p) => openPlace(p, true)}
             onPickGeo={openGeo}
+            // Phones: an open story sheet steps down to its peek height, so results have room.
+            onOpen={() => panelOpen && window.dispatchEvent(new CustomEvent(SHEET_REQUEST, { detail: "peek" }))}
             trailing={
               <button
                 type="button"
                 onClick={nearMe}
                 disabled={locating}
-                className="absolute end-1.5 top-1.5 rounded-full bg-accent px-3 py-1 text-sm font-semibold text-white disabled:opacity-60"
+                aria-label="আমার কাছে কী আছে"
+                title="আমার কাছে"
+                className="grid size-11 shrink-0 place-items-center rounded-full text-muted transition-colors hover:bg-accent-soft hover:text-accent active:bg-accent-soft-hover disabled:opacity-60 md:size-10"
               >
-                {locating ? "খুঁজছি…" : "আমার কাছে"}
+                {locating ? (
+                  <span className="size-4 animate-spin rounded-full border-2 border-accent-soft-hover border-t-accent" aria-hidden />
+                ) : (
+                  <svg viewBox="0 0 20 20" className="size-[18px]" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden>
+                    <circle cx="10" cy="10" r="5.5" />
+                    <circle cx="10" cy="10" r="1.6" fill="currentColor" stroke="none" />
+                    <path d="M10 1.5v3M10 15.5v3M1.5 10h3M15.5 10h3" strokeLinecap="round" />
+                  </svg>
+                )}
               </button>
             }
           />
-
-          <div className="mt-2 flex flex-wrap gap-1.5" role="group" aria-label="যুগ অনুযায়ী দেখুন">
-            {ERAS.map((era) => {
-              const on = eras.has(era);
-              const { bn, hex } = ERA_META[era];
-              return (
-                <button
-                  key={era}
-                  type="button"
-                  aria-pressed={on}
-                  onClick={() => toggleEra(era)}
-                  className="flex items-center gap-1.5 rounded-full border bg-card px-3 py-0.5 text-sm shadow-sm"
-                  style={{ borderColor: on ? hex : "var(--line)", color: on ? hex : "var(--muted)" }}
-                >
-                  <span className="size-2 rounded-full" style={{ background: on ? hex : "var(--line)" }} />
-                  {bn}
-                </button>
-              );
-            })}
-          </div>
-          {locError && <p className="mt-2 rounded-lg bg-card px-3 py-1.5 text-sm text-red-800 shadow-sm">{locError}</p>}
-
         </div>
+
+        {locError && (
+          <p role="alert" className="pointer-events-auto mt-2 w-fit max-w-full rounded-control bg-card px-3 py-2 text-meta text-danger shadow-float">
+            {locError}
+          </p>
+        )}
       </div>
 
       {/* Hover hint over clickable labels (desktop) */}
       <div
         ref={tooltip}
         hidden
-        className="pointer-events-none absolute top-0 left-0 z-10 rounded-lg bg-ink/90 px-2.5 py-1 text-xs text-paper shadow"
+        className="pointer-events-none absolute top-0 left-0 z-10 rounded-lg bg-card px-2.5 py-1 text-meta text-ink shadow-menu"
       >
-        <span /> · গল্প পড়ুন →
+        <span className="font-semibold" /> <span className="text-accent">· গল্প পড়ুন →</span>
       </div>
 
-      {/* First-visit tip: what makes this map different */}
+      {/* First-visit tip: what makes this map different (above the attribution line). */}
       {showTip && !panelOpen && (
-        <div className="pointer-events-none absolute inset-x-0 bottom-9 z-10 p-3">
-          <div className="pointer-events-auto mx-auto flex max-w-md items-start gap-3 rounded-2xl bg-ink p-4 text-paper shadow-xl">
-            <span className="mt-1 size-3 shrink-0 animate-ping rounded-full bg-accent" aria-hidden />
-            <p className="flex-1 text-sm leading-relaxed">
-              <span className="font-semibold">মানচিত্রের যেকোনো নামে ট্যাপ করুন।</span> এলাকা, রাস্তা, মসজিদ বা নদী: প্রতিটির পেছনের
-              গল্প জানুন। উপরে খুঁজেও দেখতে পারেন।
+        <div className="pointer-events-none absolute inset-x-0 bottom-8 z-10 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
+          <div className="pointer-events-auto mx-auto flex max-w-md animate-[rise_.3s_var(--ease-out)] items-center gap-3 rounded-2xl bg-card p-3 ps-4 shadow-menu">
+            <span className="relative flex size-2.5 shrink-0" aria-hidden>
+              <span className="absolute inline-flex size-full animate-ping rounded-full bg-accent/50" />
+              <span className="relative inline-flex size-2.5 rounded-full bg-accent" />
+            </span>
+            <p className="flex-1 text-meta">
+              <span className="font-semibold">মানচিত্রের যেকোনো নামে ট্যাপ করুন।</span>{" "}
+              <span className="text-muted">এলাকা, রাস্তা, মসজিদ বা নদী: প্রতিটির পেছনের গল্প জানুন।</span>
             </p>
-            <button type="button" onClick={dismissTip} className="shrink-0 rounded-full bg-paper/15 px-3 py-1 text-sm font-semibold">
+            <button
+              type="button"
+              onClick={dismissTip}
+              className="h-9 shrink-0 rounded-full px-3.5 text-meta font-semibold text-accent transition-colors hover:bg-accent-soft hover:text-accent-hover"
+            >
               বুঝেছি
             </button>
           </div>
         </div>
       )}
 
-      {/* Nearest places after "near me" (hidden while a story is open) */}
-      {/* Sits above the map attribution line. */}
-      <div className="pointer-events-none absolute inset-x-0 bottom-7 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
-        <div className="pointer-events-auto mx-auto max-w-xl">
-          {!panelOpen && nearest.length > 0 ? (
-            <div className="rounded-2xl border border-line bg-card p-3 shadow-lg">
-              <p className="px-1 text-sm text-muted">আপনার কাছাকাছি</p>
-              <ul>
-                {nearest.map(({ p, d }) => (
-                  <li key={p.slug}>
-                    <button
-                      type="button"
-                      onClick={() => openPlace(p, true)}
-                      className="flex w-full items-center justify-between gap-2 rounded-lg px-1 py-1.5 text-start hover:bg-paper"
-                    >
-                      <span className="flex items-center gap-2">
-                        <span className="size-2.5 rounded-full" style={{ background: ERA_META[p.era].hex }} />
-                        {p.name}
-                      </span>
-                      <span className="text-sm text-muted">{bnDistance(d)}</span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
+      {/* Nearest places after "near me" (hidden while a story is open), above the attribution line. */}
+      {!panelOpen && nearest.length > 0 && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-8 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
+          <div className="pointer-events-auto mx-auto max-w-md animate-[rise_.3s_var(--ease-out)] rounded-2xl bg-card p-2 shadow-menu">
+            <p className="px-2 pt-1 pb-0.5 text-micro font-semibold tracking-wide text-muted">আপনার কাছাকাছি</p>
+            <ul>
+              {nearest.map(({ p, d }) => (
+                <li key={`${p.name}@${p.lat},${p.lng}`}>
+                  <button
+                    type="button"
+                    onClick={() => openAi(pinTarget(p), Math.max(mapRef.current?.getZoom() ?? 15, 15))}
+                    className="flex min-h-11 w-full items-center justify-between gap-2 rounded-xl px-2 text-start transition-colors hover:bg-hover active:bg-pressed"
+                  >
+                    <span className="flex items-center gap-2.5">
+                      <span
+                        className={`size-2 rounded-full ${p.verified ? "bg-accent" : "border-[1.5px] border-accent bg-card"}`}
+                        aria-hidden
+                      />
+                      {p.label}
+                    </span>
+                    <span className="text-meta text-muted">{bnDistance(d)}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
-      </div>
+      )}
       {aiTarget && <AiPanel target={aiTarget} onClose={closeAi} onExplore={exploreByName} />}
+      {otd && (
+        <OnThisDayPanel
+          slug={otd.slug}
+          onPick={(e) => openOtd(e.slug, e.lat !== null && e.lng !== null ? { lat: e.lat, lng: e.lng } : null)}
+          onBack={() => openOtd(null)}
+          onTimeline={setTimeline}
+          onClose={closeOtd}
+        />
+      )}
+
+      {/* "On this day": top right, out of the way of search; hidden while a panel covers that side. */}
+      {!panelOpen && (
+        <button
+          type="button"
+          onClick={() => openOtd(null)}
+          className="absolute end-3 top-[calc(0.75rem+3rem+0.5rem)] z-20 flex h-11 items-center gap-2 rounded-full bg-card ps-3 pe-4 text-meta font-semibold text-ink shadow-float transition-colors hover:text-accent active:bg-accent-soft md:end-4 md:top-4 md:h-12"
+        >
+          <svg viewBox="0 0 20 20" className="size-[18px] text-accent" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden>
+            <rect x="3" y="4.5" width="14" height="12" rx="2" />
+            <path d="M3 8.5h14M7 2.5v4M13 2.5v4" strokeLinecap="round" />
+          </svg>
+          আজকের দিনে
+        </button>
+      )}
     </div>
   );
 }

@@ -63,11 +63,16 @@ PNGs. We don't use `next/og` because it breaks Bangla conjuncts ("কেল্�
 | --- | --- |
 | `NEXT_PUBLIC_SITE_URL` | Canonical URL, default `https://jaygargolpo.com` |
 | `NEXT_PUBLIC_REPORT_FORM_URL` | "Report a mistake" form; the place slug is appended |
+| `NEXT_PUBLIC_BANGLADESH_ONLY` | `true` (default): only Bangladesh is shown and has stories; `false`: the whole world |
 
 ## Map data
 
 - Base map: [OpenFreeMap](https://openfreemap.org) (OpenStreetMap data), no API key.
-- The whole world is shown. Labels use the Bangla name where OpenStreetMap has one, otherwise the
-  local name. Search (Photon) shows Bangla names in Bangladesh and English names elsewhere.
+- Bangladesh only by default (`NEXT_PUBLIC_BANGLADESH_ONLY`): the rest of the world is blanked
+  out, the map stays over Bangladesh, and clicks, search and the story API are limited to it. The
+  border is Natural Earth's (public domain) plus St Martin's Island, see `src/lib/region.ts`.
+  With `false`, the whole world is shown, as before.
+- Labels use the Bangla name where OpenStreetMap has one, otherwise the local name. Search
+  (Photon) shows Bangla names in Bangladesh and English names elsewhere.
 - Location context for stories (country, region, city of a clicked point) comes from Photon's
   reverse geocoder.

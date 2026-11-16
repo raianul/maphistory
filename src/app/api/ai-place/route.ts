@@ -2,6 +2,7 @@ import { friendlyError, generatePlace } from "@/lib/ai/generate";
 import type { StoryTarget } from "@/lib/ai/place-story";
 import type { AiPlace } from "@/lib/ai/types";
 import { checkLimits, countView, findStory, listVideos, logGeneration, saveStory, visitorId } from "@/lib/db";
+import { inRegion } from "@/lib/region";
 import { reverseGeocode } from "@/lib/sources/reverse-geocode";
 
 /*
@@ -20,6 +21,10 @@ export async function POST(req: Request) {
   const name = body?.name?.trim();
   if (!name || typeof body?.lat !== "number" || typeof body?.lng !== "number") {
     return Response.json({ error: "name, lat and lng are required" }, { status: 400 });
+  }
+  // Bangladesh-only mode: the API refuses other places too, not just the map (anyone can call it).
+  if (!inRegion(body.lat, body.lng)) {
+    return Response.json({ error: "এখন শুধু বাংলাদেশের জায়গার গল্প দেখানো হচ্ছে।" }, { status: 400 });
   }
   const target: StoryTarget = {
     name,

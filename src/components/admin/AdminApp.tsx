@@ -7,8 +7,11 @@ import { AdminMap } from "./AdminMap";
 
 type Access = { state: "checking" } | { state: "admin"; email?: string } | { state: "denied"; message: string; userId?: string };
 
-/** Login, then the admin map, for users listed in the `admins` table. */
-export function AdminApp() {
+/**
+ * Login, then the admin, for users listed in the `admins` table. Shows the admin map by default;
+ * other admin pages (e.g. /admin/events) pass their own content as `children`.
+ */
+export function AdminApp({ children }: { children?: (email?: string) => React.ReactNode } = {}) {
   const [session, setSession] = useState<Session | null | undefined>(undefined);
   const [access, setAccess] = useState<Access>({ state: "checking" });
 
@@ -44,7 +47,7 @@ export function AdminApp() {
       </div>
     );
   }
-  return <AdminMap email={access.email} />;
+  return children ? children(access.email) : <AdminMap email={access.email} />;
 }
 
 function LoginForm() {

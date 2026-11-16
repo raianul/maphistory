@@ -38,6 +38,31 @@ export type PeriodLike = {
   end_year?: number;
 };
 
+/**
+ * A period/era colour darkened (mixed toward the text colour) until it can be
+ * used for small text on the light panel: WCAG AA, 4.5:1 on #fafaf9. Pins and
+ * dots keep the original colour; only text uses this. "#a8741a" → "#8e6216".
+ */
+export function readableText(hex: string): string {
+  const rgb = (h: string) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+  const lum = (c: number[]) => {
+    const [r, g, b] = c.map((v) => {
+      const s = v / 255;
+      return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  const paper = lum([250, 250, 249]);
+  const ink = [31, 35, 40];
+  const base = rgb(hex);
+  if (base.some(Number.isNaN)) return hex;
+  for (let t = 0; t <= 1; t += 0.05) {
+    const mixed = base.map((v, i) => Math.round(v + (ink[i] - v) * t));
+    if ((paper + 0.05) / (lum(mixed) + 0.05) >= 4.6) return "#" + mixed.map((v) => v.toString(16).padStart(2, "0")).join("");
+  }
+  return "#1f2328";
+}
+
 /** Distinct, readable colors for periods, assigned in chronological order. */
 const PERIOD_PALETTE = ["#2e7d6b", "#a8741a", "#6b5b95", "#3f6f8a", "#b8324b", "#a0522d", "#5c7a29", "#8e4585", "#2f6f9f"];
 

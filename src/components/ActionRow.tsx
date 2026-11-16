@@ -63,11 +63,11 @@ export function ActionRow({
   );
 
   if (compact) {
-    const icon = "grid size-9 place-items-center rounded-full border border-line bg-card text-ink/80 hover:border-ink/30 hover:text-ink";
+    const icon = "grid size-11 place-items-center rounded-full md:size-10 text-ink-2 transition-colors hover:bg-accent-soft hover:text-accent active:bg-accent-soft-hover";
     return (
-      <div className="flex shrink-0 gap-1.5">
+      <div className="-me-2 flex shrink-0">
         <button type="button" onClick={share} className={icon} aria-label="শেয়ার" title={copied ? "লিংক কপি হয়েছে" : "শেয়ার"}>
-          {copied ? <span className="text-xs">✓</span> : shareIcon}
+          {copied ? <span className="text-meta font-semibold text-accent">✓</span> : shareIcon}
         </button>
         <a href={directions} target="_blank" rel="noreferrer" className={icon} aria-label="দিকনির্দেশ" title="দিকনির্দেশ">
           {pinIcon}
@@ -75,7 +75,8 @@ export function ActionRow({
       </div>
     );
   }
-  const button = "flex flex-1 items-center justify-center gap-1.5 rounded-full border border-line bg-card px-3 py-2 text-sm font-semibold hover:border-accent";
+  const button =
+    "flex h-10 items-center justify-center gap-1.5 rounded-full bg-accent-soft px-4 text-meta font-semibold text-accent transition-colors hover:bg-accent-soft-hover hover:text-accent-hover";
 
   return (
     <div className="mt-4 flex gap-2">

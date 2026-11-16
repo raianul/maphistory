@@ -6,7 +6,11 @@ import { createHash } from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { AiPlace } from "./ai/types";
 import type { StoryTarget } from "./ai/place-story";
+import type { MapPin } from "./map-pin";
+import { PINS_PER_TILE, type Bounds } from "./tiles";
 import type { PlaceVideo, VideoProvider } from "./video";
+
+export type { MapPin };
 
 let client: SupabaseClient | undefined;
 
@@ -147,15 +151,59 @@ export async function isAdmin(userId: string): Promise<boolean> {
   return !!data;
 }
 
+/** The show_on_map column doesn't exist until the show_on_map migration has been run. */
+const missingColumn = (code?: string) => code === "42703" || code === "PGRST204";
+
 /** Every saved story, for the admin map (hidden ones too). */
 export async function listStories() {
-  const { data, error } = await db()
-    .from("stories")
-    .select("id,name_bn,name_en,lat,lng,kind,status,views,reports,updated_at")
-    .order("views", { ascending: false })
-    .limit(5000);
+  const list = (columns: string) => db().from("stories").select(columns).order("views", { ascending: false }).limit(5000);
+  const base = "id,name_bn,name_en,lat,lng,kind,status,views,reports,updated_at";
+  let { data, error } = await list(`${base},show_on_map`);
+  // Before the show_on_map migration: list them anyway, all off the map.
+  if (missingColumn(error?.code)) ({ data, error } = await list(base));
   if (error) throw new Error(`Database: ${error.message}`);
   return data ?? [];
+}
+
+
+/**
+ * The pins in one square of the map: stories the admin chose to show (never hidden ones), most
+ * important first: checked by an editor, then the most opened, at most `limit` in all. Range
+ * queries on lat/lng, served by the stories_lat_lng index. Empty before the show_on_map migration.
+ */
+export async function listMapPins(b: Bounds, limit = PINS_PER_TILE): Promise<MapPin[]> {
+  const query = (status: "verified" | "ai", n: number) =>
+    db()
+      .from("stories")
+      .select("name_bn,lat,lng,kind,status,label:story->>name_bn")
+      .eq("show_on_map", true)
+      .eq("status", status)
+      // Edges: south/west inclusive, north/east exclusive, so a pin on a border is in exactly one square.
+      .gte("lat", b.south)
+      .lt("lat", b.north)
+      .gte("lng", b.west)
+      .lt("lng", b.east)
+      .order("views", { ascending: false })
+      .limit(n);
+
+  const verified = await query("verified", limit);
+  if (verified.error) {
+    if (missingColumn(verified.error.code)) return [];
+    throw new Error(`Database: ${verified.error.message}`);
+  }
+  const room = limit - verified.data.length;
+  const ai = room > 0 ? await query("ai", room) : { data: [], error: null };
+  if (ai.error) throw new Error(`Database: ${ai.error.message}`);
+
+  type PinRow = { name_bn: string; lat: number; lng: number; kind: string | null; status: string; label: string | null };
+  return ([...verified.data, ...ai.data] as PinRow[]).map((r) => ({
+    label: r.label?.trim() || r.name_bn,
+    name: r.name_bn,
+    lat: r.lat,
+    lng: r.lng,
+    kind: r.kind ?? undefined,
+    verified: r.status === "verified",
+  }));
 }
 
 export async function getStoryForAdmin(id: string) {
@@ -173,6 +221,9 @@ export async function updateStory(id: string, patch: Record<string, unknown>) {
   let { data, error } = await update(patch);
   // Before the "global countries" migration only BD/IN/PK fit the country column (see saveStory).
   if (error?.code === "23514" && patch.country) ({ data, error } = await update({ ...patch, country: null }));
+  if (missingColumn(error?.code) && "show_on_map" in patch) {
+    throw new Error("ম্যাপে দেখানোর কলাম এখনো তৈরি হয়নি: show_on_map মাইগ্রেশনটি Supabase-এ চালান।");
+  }
   if (error) throw new Error(`Database: ${error.message}`);
   return data;
 }

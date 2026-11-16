@@ -135,38 +135,75 @@ export function AiPanel({
 
   return (
     <SidePanel title={target.name} onClose={onClose}>
-      {current.error && <ErrorBanner message={current.error} onRetry={retry} />}
       {current.error && !started ? (
-        <p className="pt-2 text-[1.75rem] leading-tight font-bold">{target.name}</p>
+        <FailedEmpty name={target.name} message={current.error} onRetry={retry} />
       ) : (
-        <>
-          <AiStory
-            story={current.story}
-            image={current.image}
-            model={current.model}
-            streaming={!current.done}
-            fallbackName={target.name}
-            at={target}
-            shareUrl={aiShareUrl(target)}
-            onExplore={onExplore}
-            id={current.id}
-            status={current.status}
-            videos={current.videos}
-          />
-        </>
+        <AiStory
+          story={current.story}
+          image={current.image}
+          model={current.model}
+          streaming={!current.done}
+          fallbackName={target.name}
+          at={target}
+          shareUrl={aiShareUrl(target)}
+          onExplore={onExplore}
+          id={current.id}
+          status={current.status}
+          videos={current.videos}
+          // What was already written stays; the notice sits under the header.
+          notice={current.error ? <ErrorNotice message={current.error} onRetry={retry} /> : undefined}
+        />
       )}
     </SidePanel>
   );
 }
 
-/** At the top of the panel, above anything already shown (which stays). */
-function ErrorBanner({ message, onRetry }: { message: string; onRetry: () => void }) {
+const RETRY_ICON = (
+  <svg viewBox="0 0 20 20" className="size-4" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
+    <path d="M15.5 10a5.5 5.5 0 1 1-1.6-3.9M15.5 3.5v3h-3" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
+/** A slim notice under the header when writing stopped midway; the part already shown stays. */
+function ErrorNotice({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
-    <div role="alert" className="mt-1 mb-4 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-sm text-amber-900">
+    <div role="alert" className="mt-4 flex animate-[rise_.25s_var(--ease-out)] items-center gap-3 rounded-control bg-warning-soft py-1.5 ps-3.5 pe-1.5 text-meta text-warning">
       <p className="flex-1">{message}</p>
-      <button type="button" onClick={onRetry} className="shrink-0 rounded-full bg-white px-3 py-1 font-semibold text-ink shadow-sm hover:bg-amber-100">
-        আবার চেষ্টা করুন
+      <button
+        type="button"
+        onClick={onRetry}
+        className="flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 font-semibold transition-colors hover:bg-warning-soft-hover"
+      >
+        {RETRY_ICON}
+        আবার চেষ্টা
       </button>
+    </div>
+  );
+}
+
+/** Nothing could be written at all: the place's name, what went wrong, and one clear way forward. */
+function FailedEmpty({ name, message, onRetry }: { name: string; message: string; onRetry: () => void }) {
+  return (
+    <div className="pt-1 pb-16">
+      <h1 className="text-display font-bold tracking-tight">{name}</h1>
+      <div role="alert" className="mt-10 flex animate-[rise_.3s_var(--ease-out)] flex-col items-center px-4 text-center">
+        <span className="grid size-12 place-items-center rounded-full bg-warning-soft text-warning" aria-hidden>
+          <svg viewBox="0 0 20 20" className="size-5" fill="none" stroke="currentColor" strokeWidth="1.8">
+            <path d="M10 6.5v4.5M10 14h.01" strokeLinecap="round" />
+            <circle cx="10" cy="10" r="7.5" />
+          </svg>
+        </span>
+        <p className="mt-4 font-semibold">গল্পটি এখন আনা গেল না</p>
+        <p className="mt-1 max-w-xs text-meta text-muted">{message}</p>
+        <button
+          type="button"
+          onClick={onRetry}
+          className="mt-5 flex h-11 items-center gap-2 rounded-full bg-accent px-5 text-meta font-semibold text-on-accent transition-colors hover:bg-accent-hover active:bg-accent-active"
+        >
+          {RETRY_ICON}
+          আবার চেষ্টা করুন
+        </button>
+      </div>
     </div>
   );
 }

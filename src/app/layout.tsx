@@ -20,19 +20,21 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: "#fafaf9",
+  // Edge to edge on notched phones; the layout pads itself with env(safe-area-inset-*).
+  viewportFit: "cover",
+  // The on-screen keyboard overlays the page instead of shrinking it, so the map and sheet don't jump.
+  interactiveWidget: "overlays-content",
 };
 
 export default function RootLayout({ children, panel }: LayoutProps<"/">) {
   return (
     <html lang="bn" className={`${hind.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col">
-        <header className="border-b border-line">
-          <div className="mx-auto flex h-14 max-w-3xl items-center justify-between gap-4 px-4">
-            <Link href="/" className="text-xl font-bold">
-              {SITE.name}
-            </Link>
-            <span className="text-sm text-muted">{SITE.nameEn}</span>
-          </div>
+        <header className="relative z-30 flex h-[calc(var(--header-h)+env(safe-area-inset-top))] shrink-0 items-center border-b border-line bg-paper ps-[max(1rem,env(safe-area-inset-left))] pe-[max(1rem,env(safe-area-inset-right))] pt-[env(safe-area-inset-top)] md:ps-[max(1.25rem,env(safe-area-inset-left))]">
+          <Link href="/" className="-mx-1 flex h-10 items-center gap-2 rounded-md px-1">
+            <span className="text-lg font-bold tracking-tight">{SITE.name}</span>
+            <span className="hidden text-meta text-muted sm:inline">{SITE.nameEn}</span>
+          </Link>
         </header>
         <main className="flex-1">{children}</main>
         {panel}

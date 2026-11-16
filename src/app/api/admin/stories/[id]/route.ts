@@ -11,8 +11,8 @@ export async function GET(req: Request, { params }: RouteContext<"/api/admin/sto
 }
 
 /**
- * Change a story: { action: "verify" | "unverify" | "hide" | "unhide" | "clear_reports" }
- * or { story: <edited story JSON> }.
+ * Change a story: { action: "verify" | "unverify" | "hide" | "unhide" | "clear_reports" |
+ * "show_on_map" | "hide_from_map" } or { story: <edited story JSON> }.
  */
 export async function PATCH(req: Request, { params }: RouteContext<"/api/admin/stories/[id]">) {
   const admin = await requireAdmin(req);
@@ -50,6 +50,12 @@ export async function PATCH(req: Request, { params }: RouteContext<"/api/admin/s
           break;
         case "clear_reports":
           await clearReports(id);
+          break;
+        // A pin on the public map, only when the admin says so.
+        case "show_on_map":
+        case "hide_from_map":
+          await updateStory(id, { show_on_map: body.action === "show_on_map" });
+          // The public map's square for this place refreshes within about a minute (see /api/pins).
           break;
         default:
           return Response.json({ error: "Unknown action" }, { status: 400 });

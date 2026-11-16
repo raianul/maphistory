@@ -1,19 +1,63 @@
 @import "tailwindcss";
 
 /*
- * Modern, minimal, light only: off-white ground, white surfaces, charcoal
- * text, hairline borders. One accent for actions; era and period colors only
- * for pins and tags.
+ * Design tokens. Modern, minimal, light only: off-white ground, white
+ * surfaces, charcoal text, hairline borders, one accent for actions. Era and
+ * period colors appear only on pins, dots and small tags.
  */
 :root {
   color-scheme: light;
-  --paper: #fafaf9;
-  --card: #ffffff;
-  --ink: #1f2328;
-  --muted: #6b7078;
-  --line: #ececec;
-  --accent: #2f5bd3;
 
+  /* ── Colour ───────────────────────────────────────────────────────────
+   * One brand accent (purple), one neutral scale, three status colours.
+   * Era/period colours are for pins, dots and tags only, never for actions.
+   * Contrast (WCAG) noted against --paper; all text pairs meet AA 4.5:1.
+   * Map layers can't read CSS variables: lib/theme.ts mirrors the values. */
+
+  /* Surfaces */
+  --paper: #fafaf9; /* page and panel ground */
+  --card: #ffffff; /* floating surfaces: search, menus, sheet */
+
+  /* Neutrals */
+  --ink: #1f2328; /* primary text, 15.1:1 */
+  --ink-2: #3d434b; /* secondary body text, 9.6:1 */
+  --muted: #5f6369; /* meta and captions, 5.8:1 */
+  --subtle: #9a9ea5; /* decorative only (dots, handles): never text */
+  --line: #ebebea; /* hairline borders */
+  --line-strong: #d9d9d6; /* borders that must be seen: inputs, hover */
+  --hover: rgb(31 35 40 / 0.04); /* neutral hover fill */
+  --pressed: rgb(31 35 40 / 0.08); /* neutral active / chip fill */
+
+  /* Brand accent: purple */
+  --accent: #6b5b95; /* links, icons, selected state, 5.7:1 */
+  --accent-hover: #5a4b82; /* hover on accent text and fills, 7.3:1 */
+  --accent-active: #4b3f6d; /* pressed */
+  --accent-soft: #f1eff7; /* selected / hover background (accent text on it: 5.2:1) */
+  --accent-soft-hover: #e7e3f1;
+  --accent-ring: rgb(107 91 149 / 0.28); /* focus ring around fields */
+  --on-accent: #ffffff; /* text on an accent fill, 5.9:1 */
+
+  /* Status */
+  --success: #2f6b4f; /* verified, sent; 6.0:1 */
+  --success-soft: #eef5f0;
+  --warning: #8a5a12; /* errors you can retry, drafts, disputed; 5.4:1 on its soft */
+  --warning-soft: #fbf4e6;
+  --warning-soft-hover: #f6ead2;
+  --danger: #b42318; /* failures, 6.3:1 */
+
+  /* Map */
+  --map-ground: #f4f4f3; /* behind tiles while they load (THEME.mapGround) */
+
+  /* Layout */
+  --header-h: 3.25rem;
+  --panel-w: 440px;
+
+  /* Motion */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --dur-fast: 150ms;
+  --dur: 240ms;
+
+  /* Era colours (pins and tags only) */
   --era-ancient: #a0522d;
   --era-sultanate: #2e7d6b;
   --era-mughal: #a8741a;
@@ -22,14 +66,76 @@
   --era-bangladesh: #b8324b;
 }
 
+@media (min-width: 1280px) {
+  :root {
+    --panel-w: 480px;
+  }
+}
+
+/* Reading sizes: phones one step larger (held at arm's length; Bangla vowel signs need it). */
+:root {
+  --fs-body: 1rem;
+  --fs-lead: 1.0625rem;
+  --fs-display: 1.625rem;
+}
+@media (min-width: 768px) {
+  :root {
+    --fs-body: 0.9375rem;
+    --fs-lead: 1.0625rem;
+    --fs-display: 1.75rem;
+  }
+}
+
 @theme inline {
   --color-paper: var(--paper);
   --color-card: var(--card);
   --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
   --color-muted: var(--muted);
+  --color-subtle: var(--subtle);
   --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-hover: var(--hover);
+  --color-pressed: var(--pressed);
   --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-active: var(--accent-active);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-soft-hover: var(--accent-soft-hover);
+  --color-accent-ring: var(--accent-ring);
+  --color-on-accent: var(--on-accent);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-warning-soft-hover: var(--warning-soft-hover);
+  --color-danger: var(--danger);
   --font-sans: var(--font-hind), system-ui, sans-serif;
+
+  /* Type scale for the reading panel (Bangla needs generous line height). */
+  --text-display: var(--fs-display);
+  --text-display--line-height: 1.25;
+  --text-lead: var(--fs-lead);
+  --text-lead--line-height: 1.75;
+  --text-body: var(--fs-body);
+  --text-body--line-height: 1.75;
+  --text-meta: 0.8125rem;
+  --text-meta--line-height: 1.5;
+  --text-micro: 0.75rem;
+  --text-micro--line-height: 1.45;
+
+  /* Radius */
+  --radius-control: 0.75rem;
+  --radius-media: 0.875rem;
+  --radius-sheet: 1.25rem;
+
+  /* Shadows: faint, for things that float over the map */
+  --shadow-float: 0 1px 2px rgb(16 24 40 / 0.06), 0 4px 16px rgb(16 24 40 / 0.06);
+  --shadow-menu: 0 2px 4px rgb(16 24 40 / 0.04), 0 12px 32px rgb(16 24 40 / 0.1);
+  --shadow-panel: -1px 0 0 var(--line), -12px 0 32px rgb(16 24 40 / 0.05);
+  --shadow-sheet: 0 -1px 0 var(--line), 0 -10px 32px rgb(16 24 40 / 0.08);
+
+  --ease-out: var(--ease-out);
 }
 
 body {
@@ -38,12 +144,56 @@ body {
   font-family: var(--font-sans);
   /* Bangla needs more line height than Latin text for its vowel signs. */
   line-height: 1.7;
+  -webkit-tap-highlight-color: transparent;
 }
 
-/* Map zoom buttons sit below the search bar and era filters. */
-.maplibregl-map .maplibregl-ctrl-top-right {
-  top: 7.5rem;
+::selection {
+  background: var(--accent-soft-hover);
+  color: var(--ink);
 }
+
+@layer base {
+  /* One visible focus style for keyboard users, everywhere (utilities can still override it). */
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  /* The browser's own clear (×) in search fields: we draw our own. */
+  input[type="search"]::-webkit-search-cancel-button {
+    appearance: none;
+  }
+}
+
+/* ── Map controls: quiet, rounded, matching the floating search ─────────── */
+.maplibregl-map .maplibregl-ctrl-group {
+  border-radius: var(--radius-control);
+  box-shadow: var(--shadow-float);
+  overflow: hidden;
+}
+.maplibregl-map .maplibregl-ctrl-group button {
+  width: 36px;
+  height: 36px;
+}
+.maplibregl-map .maplibregl-ctrl-group button + button {
+  border-top-color: var(--line);
+}
+.maplibregl-map .maplibregl-ctrl-attrib {
+  font-size: 10px;
+  color: var(--muted);
+  background: rgb(255 255 255 / 0.7);
+}
+.maplibregl-map .maplibregl-ctrl-attrib a {
+  color: inherit;
+}
+/* Zoom buttons are for mouse users; phones pinch. */
+@media (pointer: coarse) {
+  .maplibregl-map .maplibregl-ctrl-group {
+    display: none;
+  }
+}
+
+/* ── Motion ─────────────────────────────────────────────────────────────── */
 
 /* Sections of a streaming AI story fade in as they arrive. */
 @keyframes fadein {
@@ -52,6 +202,39 @@ body {
   }
   to {
     opacity: 1;
+  }
+}
+/* Content that arrives rises slightly as it fades in. */
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+/* The place panel slides in and out: from the bottom on phones, from the right on wide screens. */
+@keyframes sheetin {
+  from {
+    transform: translateY(32px);
+    opacity: 0;
+  }
+}
+@keyframes sheetout {
+  to {
+    transform: translateY(32px);
+    opacity: 0;
+  }
+}
+@keyframes panelin {
+  from {
+    transform: translateX(24px);
+    opacity: 0;
+  }
+}
+@keyframes panelout {
+  to {
+    transform: translateX(24px);
+    opacity: 0;
   }
 }
 
@@ -75,16 +258,27 @@ body {
   }
 }
 
-/* The place panel slides in: up from the bottom on phones, in from the right on wide screens. */
-@keyframes sheetin {
+/* Skeleton shimmer: calmer than a blink, no fake progress. */
+.skeleton {
+  background: linear-gradient(90deg, var(--hover) 25%, var(--pressed) 37%, var(--hover) 63%);
+  background-size: 400% 100%;
+  animation: shimmer 1.6s ease infinite;
+}
+@keyframes shimmer {
   from {
-    transform: translateY(24px);
-    opacity: 0;
+    background-position: 100% 50%;
+  }
+  to {
+    background-position: 0 50%;
   }
 }
-@keyframes panelin {
-  from {
-    transform: translateX(24px);
-    opacity: 0;
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
   }
 }
