@@ -18,6 +18,7 @@ import { adminFetch } from "@/lib/supabase-browser";
 import { ImagePicker } from "./ImagePicker";
 import { MapPicker } from "./MapPicker";
 import { dateBn, StatusBadge } from "./shared";
+import { ResearchPanel } from "./ResearchPanel";
 import { TimelinePanel } from "./TimelinePanel";
 
 type Loaded = { event: HistoricalEvent; sources: EventSource[]; steps: TimelineStep[]; problems: string[] };
@@ -40,7 +41,7 @@ const MOVE_BN: Partial<Record<EventStatus, string>> = {
   draft: "খসড়ায় ফেরান",
   research: "গবেষণায় পাঠান",
   review: "পর্যালোচনায় পাঠান",
-  published: "প্রকাশ করুন",
+  published: "যাচাই করে প্রকাশ করুন",
   archived: "আর্কাইভ করুন",
 };
 
@@ -62,9 +63,14 @@ export function EventEditor({ id }: { id: string }) {
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-6 md:px-6">
-      <Link href="/admin/events" className="text-meta text-muted hover:text-ink">
-        ← সব ঘটনা
-      </Link>
+      <div className="flex flex-wrap gap-3 text-meta">
+        <Link href={`/admin/events/${id}/preview`} className="font-semibold text-accent hover:underline">
+          ← প্রিভিউ ও প্রকাশ
+        </Link>
+        <Link href="/admin/events" className="text-muted hover:text-ink">
+          সব ঘটনা
+        </Link>
+      </div>
       <header className="mt-2 flex flex-wrap items-start gap-3">
         <div className="min-w-0 flex-1">
           <h1 className="text-display font-bold tracking-tight">{event.title}</h1>
@@ -81,6 +87,13 @@ export function EventEditor({ id }: { id: string }) {
       <BasicsForm key={event.id} event={event} onSaved={setData} />
       <SourcesPanel data={data} onChange={setData} />
       <TimelinePanel data={data} onChange={setData} />
+      {/* Detailed AI research (claim by claim): rarely needed now that drafts are generated. */}
+      <details className="mt-5 rounded-2xl bg-card shadow-float">
+        <summary className="cursor-pointer p-4 text-meta font-semibold text-ink-2 select-none md:px-5">উন্নত: বিস্তারিত AI গবেষণা</summary>
+        <div className="px-0 pb-1 [&>section]:mt-0 [&>section]:shadow-none">
+          <ResearchPanel data={data} onChange={setData} />
+        </div>
+      </details>
     </div>
   );
 }
@@ -116,7 +129,7 @@ function StatusPanel({ data, onChange }: { data: Loaded; onChange: (d: Loaded) =
     <section className={`${section} mt-5`} aria-label="অবস্থা">
       <h2 className="font-semibold">অবস্থা: {STATUS_BN[event.status]}</h2>
       <p className="mt-1 text-meta text-muted">
-        খসড়া → গবেষণা → পর্যালোচনা → প্রকাশিত → আর্কাইভ। শুধু প্রকাশিত ঘটনা দর্শকেরা দেখেন; অপ্রকাশ করলে সঙ্গে সঙ্গে সরে যায়।
+        শুধু প্রকাশিত ঘটনা দর্শকেরা দেখেন। প্রকাশ করা মানে আপনি দেখে নিশ্চিত করেছেন: সব সূত্র ও ধাপ যাচাই করা হিসেবে চিহ্নিত হবে। অপ্রকাশ করলে সঙ্গে সঙ্গে সরে যায়।
       </p>
 
       {event.status !== "published" && (

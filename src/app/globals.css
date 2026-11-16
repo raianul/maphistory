@@ -46,7 +46,7 @@
   --danger: #b42318; /* failures, 6.3:1 */
 
   /* Map */
-  --map-ground: #f4f4f3; /* behind tiles while they load (THEME.mapGround) */
+  --map-ground: #f8f4f0; /* behind tiles while they load (THEME.mapGround) */
 
   /* Layout */
   --header-h: 3.25rem;

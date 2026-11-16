@@ -113,6 +113,14 @@ export async function setEventStatus(current: HistoricalEvent, to: EventStatus, 
   return data as HistoricalEvent;
 }
 
+/** Marks all of an event's sources and steps verified (done when an admin publishes it). */
+export async function verifyAll(eventId: string, userId: string): Promise<void> {
+  const a = await db().from("historical_event_sources").update({ verified: true }).eq("event_id", eventId).eq("verified", false);
+  if (a.error) fail(a.error);
+  const b = await db().from("historical_event_timeline_steps").update({ verified: true, updated_by: userId }).eq("event_id", eventId).eq("verified", false);
+  if (b.error) fail(b.error);
+}
+
 export async function deleteEvent(id: string): Promise<void> {
   const { error } = await db().from("historical_events").delete().eq("id", id);
   if (error) fail(error);

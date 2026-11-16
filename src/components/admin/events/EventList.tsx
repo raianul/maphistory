@@ -59,7 +59,23 @@ export function EventList({ email }: { email?: string }) {
           </button>
         </span>
       </header>
-      <p className="mt-1 text-meta text-muted">সম্পাদকের হাতে তৈরি ও যাচাই করা ঘটনা। প্রকাশিত হলেই কেবল দর্শকেরা দেখবেন।</p>
+      <p className="mt-1 text-meta text-muted">প্রকাশিত হলেই কেবল দর্শকেরা দেখবেন।</p>
+
+      <Link
+        href="/admin/events/today"
+        className="mt-5 flex items-center gap-4 rounded-2xl bg-accent p-4 text-on-accent shadow-float transition-colors hover:bg-accent-hover md:p-5"
+      >
+        <span className="text-3xl" aria-hidden>
+          📅
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-lead font-bold">আজকের দিনে</span>
+          <span className="block text-meta opacity-90">তারিখ ও দেশ বেছে ঘটনা খুঁজুন → একটি বেছে নিন → AI খসড়া ও টাইমলাইন বানাবে → দেখে প্রকাশ করুন</span>
+        </span>
+        <span className="text-lead" aria-hidden>
+          →
+        </span>
+      </Link>
 
       <div className="mt-5 flex flex-wrap items-center gap-2">
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="শিরোনাম, স্থান বা স্লাগ খুঁজুন…" className={`${field} min-w-56 flex-1`} aria-label="খুঁজুন" />
@@ -83,9 +99,9 @@ export function EventList({ email }: { email?: string }) {
         <button
           type="button"
           onClick={() => setCreating(true)}
-          className="h-10 rounded-full bg-accent px-4 text-meta font-semibold text-on-accent transition-colors hover:bg-accent-hover"
+          className="h-10 rounded-full bg-hover px-4 text-meta font-semibold text-ink-2 transition-colors hover:bg-pressed"
         >
-          + নতুন ঘটনা
+          + নিজে লিখুন
         </button>
       </div>
 
@@ -98,7 +114,7 @@ export function EventList({ email }: { email?: string }) {
         {rows?.length === 0 && <li className="p-4 text-meta text-muted">কোনো ঘটনা পাওয়া যায়নি।</li>}
         {rows?.map((r) => (
           <li key={r.id}>
-            <Link href={`/admin/events/${r.id}`} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 transition-colors hover:bg-hover">
+            <Link href={`/admin/events/${r.id}/preview`} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 transition-colors hover:bg-hover">
               <span className="w-36 shrink-0 text-meta text-ink-2 tabular-nums">{dateBn(r)}</span>
               <span className="min-w-0 flex-1">
                 <span className="block truncate font-semibold">{r.title}</span>

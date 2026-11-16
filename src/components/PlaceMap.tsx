@@ -11,11 +11,12 @@ import { bnDistance, haversine } from "@/lib/format";
 import { loadStyle, MIN_ZOOM } from "@/lib/map-style";
 import { searchPlaces, type GeoResult } from "@/lib/geo-search";
 import { AiPanel, aiShareUrl, type AiTarget } from "./AiPanel";
-import { OnThisDayPanel } from "./OnThisDayPanel";
+import { OnThisDayPanel, STEP_REQUEST } from "./OnThisDayPanel";
+import { StepPopup } from "./StepPopup";
 import { SHEET_EVENT, SHEET_REQUEST } from "./SidePanel";
 import { SearchBox } from "./SearchBox";
 import { THEME } from "@/lib/theme";
-import { addEventLayers, drawSteps, EVENT_LAYERS, stepBounds } from "@/lib/events/draw";
+import { addEventLayers, allBounds, drawSteps, EVENT_CLICK_LAYERS, EVENT_LAYERS, stepBounds } from "@/lib/events/draw";
 import type { PublicEvent } from "@/lib/events/public";
 import type { TimelineStep } from "@/lib/events/schema";
 
@@ -53,6 +54,10 @@ export function PlaceMap() {
   const mapRef = useRef<MLMap | null>(null);
   const userMarker = useRef<Marker | null>(null);
   const [ready, setReady] = useState(false);
+  /** The map is turned or tilted (shouldn't happen any more): show the "straighten" button. */
+  const [turned, setTurned] = useState(false);
+  /** The map once loaded, for components drawn over it (refs can't be read while rendering). */
+  const [mapObj, setMapObj] = useState<MLMap | null>(null);
   const [me, setMe] = useState<{ lat: number; lng: number } | null>(null);
   const [locating, setLocating] = useState(false);
   const [locError, setLocError] = useState<string | null>(null);
@@ -151,6 +156,12 @@ export function PlaceMap() {
       offset: wide ? [-Math.round(panel / 2), 0] : [0, dy],
       duration: zoom ? 1200 : 600,
     });
+  }
+
+  /** The side panel's width on wide screens (0 on phones), from its CSS token. */
+  function panelWidth() {
+    if (typeof window === "undefined" || !window.matchMedia("(min-width: 768px)").matches) return 0;
+    return parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--panel-w")) || 440;
   }
 
   /** The map's free area (what the panel and search leave visible), as fitBounds padding. */
@@ -320,9 +331,21 @@ export function PlaceMap() {
         maxBounds: BANGLADESH_ONLY ? MAX_BOUNDS : undefined,
         renderWorldCopies: !BANGLADESH_ONLY,
         attributionControl: { compact: true },
+        // A flat, north-up map: no turning or tilting (right-drag, ctrl-drag, two-finger twist), which
+        // left visitors with a sideways map and no way back.
+        dragRotate: false,
+        pitchWithRotate: false,
+        touchPitch: false,
+        maxPitch: 0,
       });
+      map.touchZoomRotate.disableRotation();
+      map.keyboard.disableRotation();
       // Bottom right, out of the way of search; hidden on touch screens (see globals.css).
       map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
+      // Safety net: if the map is ever turned or tilted anyway, a compass appears to put it straight.
+      const straighten = () => setTurned(Math.abs(map.getBearing()) > 0.5 || map.getPitch() > 0.5);
+      map.on("rotate", straighten);
+      map.on("pitch", straighten);
       mapRef.current = map;
       // Handy for debugging and browser tests in development.
       if (process.env.NODE_ENV === "development") (window as unknown as { __map: MLMap }).__map = map;
@@ -414,7 +437,8 @@ export function PlaceMap() {
           .layers.filter((l) => l.type === "symbol" && /^(poi|label_|airport|highway-name|water_name|waterway)/.test(l.id))
           .map((l) => l.id);
         map.on("click", (e: MapMouseEvent) => {
-          if (map.queryRenderedFeatures(e.point, { layers: ["pins"] }).length) return;
+          if (e.defaultPrevented) return; // an event step's pin
+          if (map.queryRenderedFeatures(e.point, { layers: ["pins", ...EVENT_CLICK_LAYERS.filter((id) => map.getLayer(id))] }).length) return;
           const { x, y } = e.point;
           // A generous box, so small road names are easy to hit on a phone.
           const f = map.queryRenderedFeatures(
@@ -493,7 +517,19 @@ export function PlaceMap() {
         // Event timelines (On this day): drawn under the pins, over the base map.
         addEventLayers(map, THEME.white, THEME.ink);
         for (const id of EVENT_LAYERS) if (map.getLayer(id)) map.moveLayer(id, "ai-target");
+        // A step's pin opens that step (its card on the map; the panel follows).
+        for (const id of EVENT_CLICK_LAYERS) {
+          map.on("click", id, (e: MapLayerMouseEvent) => {
+            const i = e.features?.find((f) => f.properties?.step !== undefined)?.properties?.step;
+            if (i === undefined) return;
+            e.preventDefault();
+            window.dispatchEvent(new CustomEvent(STEP_REQUEST, { detail: Number(i) }));
+          });
+          map.on("mouseenter", id, () => (map.getCanvas().style.cursor = "pointer"));
+          map.on("mouseleave", id, () => (map.getCanvas().style.cursor = ""));
+        }
         setReady(true);
+        setMapObj(map);
 
         // A shared AI story link (/?place=…&at=lat,lng) reopens that story.
         const params = new URLSearchParams(window.location.search);
@@ -573,7 +609,9 @@ export function PlaceMap() {
     const map = mapRef.current;
     if (!ready || !map) return;
     const steps = (timeline?.event.steps ?? []) as unknown as TimelineStep[];
-    drawSteps(map, steps, timeline?.event.phases ?? [], timeline && timeline.step >= 0 ? timeline.step : -1);
+    // Every step at once, numbered and joined in order (the current one stands out); phones too, so
+    // the shape of the story is visible behind the sheet.
+    drawSteps(map, steps, timeline?.event.phases ?? [], timeline && timeline.step >= 0 ? timeline.step : -1, { all: true });
     // While a timeline plays, the rest of the map steps back (still clickable). Each layer's own
     // opacity is remembered once and put back exactly when the timeline ends.
     const dim = !!timeline && timeline.step >= 0;
@@ -588,13 +626,40 @@ export function PlaceMap() {
       map.setPaintProperty(id, prop, (dim ? 0.4 : baseOpacity.current.get(key)) as number);
     }
     if (!timeline) eventFrame.current = null;
+    // Pins that overlap at one zoom don't at another: re-spread them after each zoom.
+    if (!timeline || timeline.step < 0) return;
+    const redraw = () => drawSteps(map, steps, timeline.event.phases, timeline.step, { all: true });
+    map.on("zoomend", redraw);
+    return () => {
+      map.off("zoomend", redraw);
+    };
   }, [ready, timeline]);
-  // Each new step: frame it (unknown places never move the map; the ring follows the step's place).
+  // Opening an event: frame ALL its places (the whole story at a glance). Then, for each new step,
+  // move only if its place is out of the free part of the map (unknown places never move it).
+  const framedEvent = useRef<string | null>(null);
   useEffect(() => {
-    if (!ready || !shownStep) return;
-    frameStep(stepBounds(shownStep as unknown as TimelineStep));
+    const map = mapRef.current;
+    if (!ready || !map || !shownStep || !timeline) return;
+    const steps = timeline.event.steps as unknown as TimelineStep[];
+    if (framedEvent.current !== timeline.event.slug) {
+      framedEvent.current = timeline.event.slug;
+      const all = allBounds(steps);
+      if (all) return frameStep(all);
+    }
+    const b = stepBounds(shownStep as unknown as TimelineStep);
+    if (!b) return;
+    const pad = freePadding();
+    const box = map.getContainer().getBoundingClientRect();
+    const inView = [b[0], b[1]].every(([lng, lat]) => {
+      const p = map.project([lng, lat]);
+      return p.x >= pad.left && p.x <= box.width - pad.right && p.y >= pad.top && p.y <= box.height - pad.bottom;
+    });
+    if (!inView) frameStep(b);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reframe only when the step changes
   }, [ready, shownStep]);
+  useEffect(() => {
+    if (!timeline) framedEvent.current = null;
+  }, [timeline]);
 
   const panelOpen = Boolean(selected || aiTarget || otd);
 
@@ -741,6 +806,8 @@ export function PlaceMap() {
           </div>
         </div>
       )}
+      {/* Wide screens: the current step's card on the map, beside its pin. */}
+      {mapObj && timeline && timeline.step >= 0 && <StepPopup map={mapObj} event={timeline.event} step={timeline.step} rightInset={panelWidth()} />}
       {aiTarget && <AiPanel target={aiTarget} onClose={closeAi} onExplore={exploreByName} />}
       {otd && (
         <OnThisDayPanel
@@ -750,6 +817,22 @@ export function PlaceMap() {
           onTimeline={setTimeline}
           onClose={closeOtd}
         />
+      )}
+
+      {/* Turned or tilted map: one tap puts it back north-up and flat. */}
+      {turned && (
+        <button
+          type="button"
+          onClick={() => mapRef.current?.easeTo({ bearing: 0, pitch: 0, duration: 500 })}
+          aria-label="মানচিত্র সোজা করুন"
+          title="মানচিত্র সোজা করুন (উত্তর উপরে)"
+          className="absolute start-3 bottom-24 z-20 grid size-11 place-items-center rounded-full bg-card text-ink shadow-float transition-colors hover:text-accent md:start-4 md:bottom-28"
+        >
+          <svg viewBox="0 0 24 24" className="size-6" aria-hidden>
+            <path d="M12 3l4 9h-8z" fill="#c0392b" />
+            <path d="M12 21l-4-9h8z" fill="currentColor" opacity=".35" />
+          </svg>
+        </button>
       )}
 
       {/* "On this day": top right, out of the way of search; hidden while a panel covers that side. */}

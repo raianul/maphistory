@@ -33,12 +33,13 @@ export const SOURCE_TYPE_BN: Record<(typeof SOURCE_TYPES)[number], string> = {
 };
 
 /**
- * Which status changes are allowed, and what each one is called. Publishing goes through review;
- * unpublishing sends an event back to review; archived events can be restored as drafts.
+ * Which status changes are allowed. A draft can be published straight away (the admin has reviewed
+ * it on the preview; publishing verifies it); unpublishing sends an event back to review; archived
+ * events can be restored as drafts.
  */
 export const TRANSITIONS: Record<EventStatus, EventStatus[]> = {
-  draft: ["research", "review", "archived"],
-  research: ["draft", "review", "archived"],
+  draft: ["research", "review", "published", "archived"],
+  research: ["draft", "review", "published", "archived"],
   review: ["draft", "research", "published", "archived"],
   published: ["review", "archived"],
   archived: ["draft"],
@@ -321,28 +322,24 @@ export type EventSource = SourceFieldsT & {
 
 /**
  * What must be true before an event can be published. Returns the problems, in Bangla, or [] when
- * it is ready. Steps are optional (an event can be a story without a timeline), but each step that
- * exists must be complete, sourced and verified.
+ * it is ready.
+ *
+ * Publishing IS the admin's verification: clicking "publish" marks the event's sources and steps
+ * as verified by that admin (lib/events/publish.ts). So this list holds only what would make the
+ * public page broken or misleading — text, a date, a source, a place on the map, steps that can be
+ * drawn — not per-item "verified" ticks.
  */
 export function publishProblems(e: HistoricalEvent, sources: EventSource[], steps: TimelineStep[] = []): string[] {
   const problems: string[] = [];
   if (!e.summary) problems.push("সংক্ষিপ্ত বিবরণ নেই");
-  if (!e.narrative) problems.push("পূর্ণ বিবরণ নেই");
   if (!sources.length) problems.push("অন্তত একটি সূত্র লাগবে");
-  else if (!sources.some((s) => s.verified)) problems.push("অন্তত একটি সূত্র যাচাই করা চিহ্নিত করতে হবে");
-  if (sources.some((s) => s.origin === "ai_suggestion" && !s.verified)) problems.push("AI-প্রস্তাবিত সূত্র যাচাই করুন বা মুছে দিন");
   if (e.lat === null || e.lat === undefined) problems.push("মূল স্থানের স্থানাঙ্ক নেই");
   // Follows the map: in Bangladesh-only mode the event's place must be in Bangladesh.
   else if (!inRegion(e.lat, e.lng!)) problems.push("মূল স্থান বর্তমান মানচিত্রের এলাকার (বাংলাদেশ) বাইরে");
 
-  // Timeline (Phase 2).
-  const phaseIds = new Set((e.phases ?? []).map((p) => p.id));
-  if (steps.length && !phaseIds.size) problems.push("টাইমলাইনের জন্য অন্তত একটি পর্ব (রং) যোগ করুন");
+  // Timeline: optional, but every step must be drawable (a place for those that show one).
   steps.forEach((s, i) => {
     const n = `ধাপ ${bnNum(i + 1)}`;
-    if (!s.phase_id || !phaseIds.has(s.phase_id)) problems.push(`${n}: পর্ব বেছে নিন`);
-    if (!s.source_ids.length) problems.push(`${n}: অন্তত একটি সূত্র যুক্ত করুন`);
-    if (!s.verified) problems.push(`${n}: এখনো যাচাই করা হয়নি`);
     const draws = s.map_type !== "none" && s.location_precision !== "unknown";
     if (draws) {
       for (const [lat, lng, what] of [

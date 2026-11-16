@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import type { GeoJSONSource, Map as MLMap } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { circle } from "@/lib/events/draw";
-import { loadStyle } from "@/lib/map-style";
+import { loadStyle, lockFlat } from "@/lib/map-style";
 import { BANGLADESH_ONLY, BD_BOUNDS, inRegion } from "@/lib/region";
 import { adminFetch } from "@/lib/supabase-browser";
 import { THEME } from "@/lib/theme";
@@ -70,6 +70,7 @@ export function MapPicker({
       });
       if (!start && BANGLADESH_ONLY) map.fitBounds(BD_BOUNDS, { padding: 20, duration: 0 });
       map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
+      lockFlat(map);
       mapRef.current = map;
       map.getCanvas().style.cursor = "crosshair";
       map.on("load", () => {
@@ -219,7 +220,7 @@ function Chosen({ mode, to, from }: { mode: string; to: PickedPlace | null; from
       <span className="text-muted">{label}: </span>
       {p ? (
         <>
-          <span className="font-semibold">{p.name || "নামহীন স্থান"}</span>
+          <span className="font-semibold">{p.name || "মানচিত্রের বিন্দু"}</span>
           <span className="text-muted tabular-nums">
             {" "}
             ({p.lat.toFixed(5)}, {p.lng.toFixed(5)})
@@ -256,6 +257,9 @@ function ManualCoords({
         <label key={k} className="grid gap-1 text-micro text-muted">
           {label} · {k === "lat" ? "অক্ষাংশ" : "দ্রাঘিমাংশ"}
           <input
+            // Keyed by the current value: picking on the map (or searching) refreshes the field, so
+            // it never shows stale numbers next to a different pin.
+            key={`${key}-${k}-${p?.[k] ?? ""}`}
             type="number"
             step="any"
             defaultValue={p?.[k] ?? ""}

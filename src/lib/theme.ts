@@ -12,7 +12,7 @@ export const THEME = {
   paper: "#fafaf9",
   white: "#ffffff",
   /** Map background while tiles load (matches the base map's land colour); also the blank-out outside Bangladesh. */
-  mapGround: "#f4f4f3",
+  mapGround: "#f8f4f0",
   /** The thin line along Bangladesh's border (Bangladesh-only mode). */
   borderLine: "#c9c6d6",
 } as const;

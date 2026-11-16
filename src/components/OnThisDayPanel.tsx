@@ -10,6 +10,9 @@ const bn = (n: number) => n.toLocaleString("bn-BD", { useGrouping: false });
 /** "ঢাকা মেডিকেল কলেজ, ঢাকা", without repeating a city that is the place itself. */
 const where = (place?: string | null, city?: string | null) => [place, city && city !== place ? city : null].filter(Boolean).join(", ");
 
+/** The map (a pin, or the popup's ‹ ›) asks the open event to show step `detail` (index). */
+export const STEP_REQUEST = "jg:event-step";
+
 /** "02-21" → "২১ ফেব্রুয়ারি". */
 export function dayBn(md: string): string {
   const [m, d] = md.split("-").map(Number);
@@ -140,7 +143,8 @@ function EventCard({ e, onPick }: { e: PublicEventCard; onPick: () => void }) {
           {e.place_name && <span className="font-normal text-muted"> · {where(e.place_name, e.city)}</span>}
         </span>
         <span className="mt-0.5 block font-semibold leading-snug">{e.title}</span>
-        {e.summary && <span className="mt-0.5 line-clamp-2 block text-meta text-ink-2">{e.summary}</span>}
+        {/* Two lines at most: the full text is one tap away. (No `block` here: it would undo line-clamp's display.) */}
+        {e.summary && <span className="mt-0.5 line-clamp-2 text-meta text-ink-2">{e.summary}</span>}
         {e.step_count > 0 && <span className="mt-1 block text-micro text-muted">{bn(e.step_count)} ধাপের সময়রেখা</span>}
       </span>
     </button>
@@ -215,6 +219,12 @@ function EventBody({ e, onTimeline }: { e: PublicEvent; onTimeline: (t: { event:
     window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}`);
   }, [e, step, onTimeline]);
   useEffect(() => () => onTimeline(null), [onTimeline]);
+  // The map's popup (or a pin) asks for another step.
+  useEffect(() => {
+    const go = (ev: Event) => setStep((ev as CustomEvent<number>).detail);
+    window.addEventListener(STEP_REQUEST, go);
+    return () => window.removeEventListener(STEP_REQUEST, go);
+  }, []);
 
   const when = e.date_precision === "day" && e.event_month && e.event_day ? `${dayBn(`${String(e.event_month).padStart(2, "0")}-${String(e.event_day).padStart(2, "0")}`)} ${e.event_year ? bn(e.event_year) : ""}` : e.date_label;
   return (
@@ -224,7 +234,17 @@ function EventBody({ e, onTimeline }: { e: PublicEvent; onTimeline: (t: { event:
         <h1 className="mt-1 text-display font-bold tracking-tight text-balance">{e.title}</h1>
         {e.place_name && <p className="mt-1 text-meta text-muted">{where(e.place_name, e.city)}</p>}
       </header>
-      {hasTimeline && step >= 0 && <TimelineCard e={e} step={step} onStep={setStep} onStoryOnly={() => setStep(-1)} />}
+      {/* Wide screens: the card is a popup on the map (PlaceMap); here, the steps to jump between. */}
+      {/* Through STEP_REQUEST, so the map's popup also hears it (and reopens, even for the same step). */}
+      {hasTimeline && step >= 0 && (
+        <StepList e={e} step={step} onStep={(i) => window.dispatchEvent(new CustomEvent(STEP_REQUEST, { detail: i }))} onStoryOnly={() => setStep(-1)} className="hidden md:block" />
+      )}
+      {/* Phones: the card stays in the sheet (a popup would cover the small map). */}
+      {hasTimeline && step >= 0 && (
+        <div className="md:hidden">
+          <TimelineCard e={e} step={step} onStep={setStep} onStoryOnly={() => setStep(-1)} />
+        </div>
+      )}
       {hasTimeline && step < 0 && (
         <button
           type="button"
@@ -292,7 +312,6 @@ function TimelineCard({ e, step, onStep, onStoryOnly }: { e: PublicEvent; step: 
   const n = e.steps.length;
   const phase = e.phases.find((p) => p.id === s.phase_id);
   const color = PHASE_PALETTE[phase?.color ?? "purple"].hex;
-  const sources = e.sources.filter((x) => s.source_ids.includes(x.id));
   return (
     <section aria-label="সময়রেখা" className="mt-4 rounded-2xl bg-card p-4 shadow-float">
       {e.phases.length > 1 && (
@@ -305,13 +324,61 @@ function TimelineCard({ e, step, onStep, onStoryOnly }: { e: PublicEvent; step: 
           ))}
         </ul>
       )}
+      <StepContent e={e} step={step} />
+
+      <div className="mt-4 grid gap-2">
+        <input
+          type="range"
+          min={0}
+          max={n - 1}
+          value={step}
+          onChange={(ev) => onStep(Number(ev.target.value))}
+          aria-label="ধাপ"
+          aria-valuetext={`ধাপ ${bn(step + 1)} / ${bn(n)}`}
+          className="w-full accent-[var(--accent)]"
+          style={{ accentColor: color }}
+        />
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            disabled={step === 0}
+            onClick={() => onStep(step - 1)}
+            className="h-11 flex-1 rounded-full bg-hover text-meta font-semibold text-ink-2 transition-colors hover:bg-pressed disabled:opacity-40"
+          >
+            ‹ আগের
+          </button>
+          <button
+            type="button"
+            disabled={step === n - 1}
+            onClick={() => onStep(step + 1)}
+            className="h-11 flex-1 rounded-full bg-accent text-meta font-semibold text-on-accent transition-colors hover:bg-accent-hover disabled:opacity-40"
+          >
+            পরের ›
+          </button>
+        </div>
+        <button type="button" onClick={onStoryOnly} className="justify-self-center text-meta text-muted hover:text-ink hover:underline">
+          শুধু গল্প পড়ুন (সময়রেখা বন্ধ)
+        </button>
+      </div>
+    </section>
+  );
+}
+
+/** One step's text: number, phase, date, title, place, story, evidence, image and sources. */
+export function StepContent({ e, step, compact = false }: { e: PublicEvent; step: number; compact?: boolean }) {
+  const s = e.steps[step];
+  const n = e.steps.length;
+  const phase = e.phases.find((p) => p.id === s.phase_id);
+  const color = PHASE_PALETTE[phase?.color ?? "purple"].hex;
+  const sources = e.sources.filter((x) => s.source_ids.includes(x.id));
+  return (
       <div aria-live="polite">
         <p className="text-meta font-semibold" style={{ color }}>
           ধাপ {bn(step + 1)} / {bn(n)}
           {phase && ` · ${phase.label}`}
           {s.date_label && ` · ${s.date_label}`}
         </p>
-        <h2 className="mt-1 text-lead font-bold leading-snug">{s.title}</h2>
+        <h2 className={`mt-1 font-bold leading-snug ${compact ? "text-body" : "text-lead"}`}>{s.title}</h2>
         {(s.place_name || s.location_precision !== "exact") && (
           <p className="mt-1 text-meta text-muted">
             {s.location_precision === "unknown"
@@ -322,7 +389,7 @@ function TimelineCard({ e, step, onStep, onStoryOnly }: { e: PublicEvent; step: 
             {s.location_precision === "approximate" && " (আনুমানিক)"}
           </p>
         )}
-        {s.narrative && <p className="mt-2 text-body text-ink-2">{s.narrative}</p>}
+        {s.narrative && <p className={`mt-2 text-ink-2 ${compact ? "text-meta" : "text-body"}`}>{s.narrative}</p>}
         {s.evidence !== "documented" && (
           <p className="mt-2">
             <span className={`rounded px-1.5 py-0.5 text-micro ${s.evidence === "disputed" ? "bg-warning-soft text-warning" : "bg-hover text-ink-2"}`}>{EVIDENCE_BN[s.evidence]}</span>
@@ -360,40 +427,52 @@ function TimelineCard({ e, step, onStep, onStoryOnly }: { e: PublicEvent; step: 
         )}
       </div>
 
-      <div className="mt-4 grid gap-2">
-        <input
-          type="range"
-          min={0}
-          max={n - 1}
-          value={step}
-          onChange={(ev) => onStep(Number(ev.target.value))}
-          aria-label="ধাপ"
-          aria-valuetext={`ধাপ ${bn(step + 1)} / ${bn(n)}`}
-          className="w-full accent-[var(--accent)]"
-          style={{ accentColor: color }}
-        />
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            disabled={step === 0}
-            onClick={() => onStep(step - 1)}
-            className="h-11 flex-1 rounded-full bg-hover text-meta font-semibold text-ink-2 transition-colors hover:bg-pressed disabled:opacity-40"
-          >
-            ‹ আগের
-          </button>
-          <button
-            type="button"
-            disabled={step === n - 1}
-            onClick={() => onStep(step + 1)}
-            className="h-11 flex-1 rounded-full bg-accent text-meta font-semibold text-on-accent transition-colors hover:bg-accent-hover disabled:opacity-40"
-          >
-            পরের ›
-          </button>
-        </div>
-        <button type="button" onClick={onStoryOnly} className="justify-self-center text-meta text-muted hover:text-ink hover:underline">
-          শুধু গল্প পড়ুন (সময়রেখা বন্ধ)
-        </button>
-      </div>
+  );
+}
+
+/**
+ * Wide screens: the timeline's steps as a numbered list (the current one's card is a popup on the
+ * map). Steps without a place on the map say so; they open their card in the map's corner.
+ */
+function StepList({ e, step, onStep, onStoryOnly, className = "" }: { e: PublicEvent; step: number; onStep: (n: number) => void; onStoryOnly: () => void; className?: string }) {
+  return (
+    <section aria-label="সময়রেখা" className={`mt-4 rounded-2xl bg-card p-3 shadow-float ${className}`}>
+      <p className="px-1 text-micro font-semibold text-muted">সময়রেখা · মানচিত্রে চিহ্নে বা এখানে ধাপে চাপুন</p>
+      <ol className="mt-2 grid gap-0.5">
+        {e.steps.map((s, i) => {
+          const phase = e.phases.find((p) => p.id === s.phase_id);
+          const color = PHASE_PALETTE[phase?.color ?? "purple"].hex;
+          const onMap = s.map_type !== "none" && s.location_precision !== "unknown" && s.lat !== null;
+          const current = i === step;
+          return (
+            <li key={i}>
+              <button
+                type="button"
+                onClick={() => onStep(i)}
+                aria-current={current ? "step" : undefined}
+                className={`flex w-full items-start gap-2.5 rounded-xl px-2 py-1.5 text-start transition-colors ${current ? "bg-accent-soft" : "hover:bg-hover"}`}
+              >
+                <span
+                  className={`mt-0.5 grid size-6 shrink-0 place-items-center rounded-full text-micro font-bold ${onMap ? "text-white" : "border-[1.5px] bg-card"}`}
+                  style={onMap ? { background: color } : { borderColor: color, color }}
+                  aria-hidden
+                >
+                  {bn(i + 1)}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className={`block text-meta leading-snug ${current ? "font-semibold text-ink" : "text-ink-2"}`}>{s.title}</span>
+                  <span className="block truncate text-micro text-muted">
+                    {[s.date_label, onMap ? s.place_name : "মানচিত্রে নেই"].filter(Boolean).join(" · ")}
+                  </span>
+                </span>
+              </button>
+            </li>
+          );
+        })}
+      </ol>
+      <button type="button" onClick={onStoryOnly} className="mt-1 w-full text-center text-micro text-muted hover:text-ink hover:underline">
+        শুধু গল্প পড়ুন (সময়রেখা বন্ধ)
+      </button>
     </section>
   );
 }

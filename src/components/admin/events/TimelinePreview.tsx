@@ -5,7 +5,7 @@ import type { Map as MLMap } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { addEventLayers, drawSteps, drawsOnMap, stepBounds, stepColor } from "@/lib/events/draw";
 import { EVIDENCE_BN, LOCATION_PRECISION_BN, PHASE_PALETTE, type HistoricalEvent, type TimelineStep } from "@/lib/events/schema";
-import { loadStyle } from "@/lib/map-style";
+import { loadStyle, lockFlat } from "@/lib/map-style";
 import { THEME } from "@/lib/theme";
 
 const bn = (n: number) => n.toLocaleString("bn-BD");
@@ -33,6 +33,7 @@ export function TimelinePreview({ event, steps }: { event: HistoricalEvent; step
       const start = event.lat !== null && event.lat !== undefined ? ([event.lng!, event.lat] as [number, number]) : ([90.399, 23.716] as [number, number]);
       const map = new maplibregl.Map({ container: container.current, style, center: start, zoom: 12, attributionControl: { compact: true } });
       map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
+      lockFlat(map);
       mapRef.current = map;
       map.on("load", () => {
         addEventLayers(map, THEME.white, THEME.ink);

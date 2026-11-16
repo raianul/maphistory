@@ -301,6 +301,9 @@ type Draft = {
   location_precision: TimelineStep["location_precision"];
   to: PickedPlace | null;
   from: PickedPlace | null;
+  /** The names visitors see (typed by the editor; the map only fills them when empty). */
+  place_name: string;
+  from_place_name: string;
   radius_m: number;
   image: TimelineStep["image"];
   evidence: TimelineStep["evidence"];
@@ -332,6 +335,8 @@ function StepForm({
     location_precision: step?.location_precision ?? "exact",
     to: step?.lat !== null && step?.lat !== undefined ? { name: step.place_name ?? null, lat: step.lat, lng: step.lng! } : null,
     from: step?.from_lat !== null && step?.from_lat !== undefined ? { name: step.from_place_name ?? null, lat: step.from_lat, lng: step.from_lng! } : null,
+    place_name: step?.place_name ?? "",
+    from_place_name: step?.from_place_name ?? "",
     radius_m: step?.radius_m ?? 800,
     image: step?.image ?? null,
     evidence: step?.evidence ?? "documented",
@@ -355,10 +360,10 @@ function StepForm({
       phase_id: d.phase_id || null,
       map_type: d.map_type,
       location_precision: d.location_precision,
-      place_name: d.to?.name ?? "",
+      place_name: d.place_name.trim() || d.to?.name || "",
       lat: d.to?.lat ?? null,
       lng: d.to?.lng ?? null,
-      from_place_name: d.from?.name ?? "",
+      from_place_name: d.from_place_name.trim() || d.from?.name || "",
       from_lat: d.from?.lat ?? null,
       from_lng: d.from?.lng ?? null,
       radius_m: d.map_type === "area" ? d.radius_m : null,
@@ -438,6 +443,19 @@ function StepForm({
         </div>
         {d.location_precision === "unknown" && <p className="text-meta text-muted">অজানা স্থান: মানচিত্রে কোনো চিহ্ন দেখাবে না, মানচিত্রও সরবে না।</p>}
         {d.location_precision === "approximate" && <p className="text-meta text-muted">আনুমানিক স্থান: নির্দিষ্ট বিন্দুর বদলে একটি ঝাপসা বৃত্ত দেখাবে।</p>}
+        {/* The names visitors read (also for unknown places, as text): typed here, or filled from the map once. */}
+        <div className={`grid gap-3 ${d.map_type === "route" && showsMap ? "md:grid-cols-2" : ""}`}>
+          {d.map_type === "route" && showsMap && (
+            <label className={label}>
+              শুরুর স্থানের নাম
+              <input value={d.from_place_name} onChange={(e) => set("from_place_name", e.target.value)} className={field} placeholder="যেমন: চট্টগ্রাম সেনানিবাস" />
+            </label>
+          )}
+          <label className={label}>
+            {d.map_type === "route" && showsMap ? "গন্তব্যের নাম" : "স্থানের নাম"} <span className="font-normal text-muted">(দর্শকেরা যা দেখবেন)</span>
+            <input value={d.place_name} onChange={(e) => set("place_name", e.target.value)} className={field} placeholder="যেমন: প্যারেড স্কয়ার, চট্টগ্রাম" />
+          </label>
+        </div>
         {showsMap && (
           <MapPicker
             key={d.map_type}
@@ -454,6 +472,9 @@ function StepForm({
                 ...(v.to !== undefined ? { to: v.to } : {}),
                 ...(v.from !== undefined ? { from: v.from } : {}),
                 ...(v.radiusM !== undefined ? { radius_m: v.radiusM } : {}),
+                // The map's name only fills an empty box: a name the editor typed is kept.
+                ...(v.to?.name && !p.place_name.trim() ? { place_name: v.to.name } : {}),
+                ...(v.from?.name && !p.from_place_name.trim() ? { from_place_name: v.from.name } : {}),
               }))
             }
           />

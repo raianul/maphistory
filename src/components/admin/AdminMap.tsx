@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AiStoryDataT } from "@/lib/ai/types";
 import { bnYear } from "@/lib/format";
-import { loadStyle, MIN_ZOOM } from "@/lib/map-style";
+import { loadStyle, MIN_ZOOM, lockFlat } from "@/lib/map-style";
 import { adminFetch, browserSupabase } from "@/lib/supabase-browser";
 import { aiShareUrl } from "../AiPanel";
 import { AiStory } from "../AiStory";
@@ -49,6 +49,10 @@ const STATUS: Record<Status, { bn: string; color: string }> = {
   hidden: { bn: "লুকানো", color: "#cfc6b8" },
 };
 const REPORTED = "#c0392b";
+/** Shown on the public map (show_on_map): blue, whatever its status; grey/gold pins are off the public map. */
+const ON_MAP = "#2563eb";
+/** A story's pin colour: blue when it is on the public map, else its status colour. */
+const pinColor = (r: Pick<Row, "status" | "show_on_map">) => (r.show_on_map && r.status !== "hidden" ? ON_MAP : STATUS[r.status].color);
 
 type Filter = "all" | Status | "reported" | "on_map";
 
@@ -116,6 +120,7 @@ export function AdminMap({ email }: { email?: string }) {
         attributionControl: { compact: true },
       });
       map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
+      lockFlat(map);
       mapRef.current = map;
       map.on("load", () => {
         map.addSource("stories", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
@@ -124,7 +129,7 @@ export function AdminMap({ email }: { email?: string }) {
           type: "circle",
           source: "stories",
           paint: {
-            "circle-color": ["match", ["get", "status"], "verified", STATUS.verified.color, "hidden", STATUS.hidden.color, STATUS.ai.color],
+            "circle-color": ["get", "color"],
             // Bigger = opened more often.
             "circle-radius": ["interpolate", ["linear"], ["sqrt", ["get", "views"]], 0, 6, 5, 11, 15, 18],
             "circle-stroke-color": ["case", [">", ["get", "reports"], 0], REPORTED, THEME.white],
@@ -178,7 +183,7 @@ export function AdminMap({ email }: { email?: string }) {
       features: shown.map((r) => ({
         type: "Feature",
         geometry: { type: "Point", coordinates: [r.lng, r.lat] },
-        properties: { id: r.id, name: r.name_bn, status: r.status, views: r.views, reports: r.reports },
+        properties: { id: r.id, name: r.name_bn, status: r.status, views: r.views, reports: r.reports, color: pinColor(r) },
       })),
     });
   }, [ready, shown]);
@@ -244,6 +249,18 @@ export function AdminMap({ email }: { email?: string }) {
             <option value="reports">সবচেয়ে বেশি রিপোর্ট আগে</option>
             <option value="recent">সাম্প্রতিক পরিবর্তন আগে</option>
           </select>
+          {/* What the pin colours mean. */}
+          <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
+            <span className="flex items-center gap-1">
+              <span className="size-2.5 rounded-full" style={{ background: ON_MAP }} aria-hidden /> পাবলিক ম্যাপে
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="size-2.5 rounded-full" style={{ background: STATUS.ai.color }} aria-hidden /> ম্যাপে নেই
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="size-2.5 rounded-full" style={{ background: STATUS.verified.color }} aria-hidden /> যাচাই করা, ম্যাপে নেই
+            </span>
+          </p>
         </div>
         {error && <p className="p-3 text-sm text-red-800">{error}</p>}
         <ul className="flex-1 overflow-y-auto">
@@ -254,7 +271,11 @@ export function AdminMap({ email }: { email?: string }) {
                 onClick={() => select(r)}
                 className={`flex w-full items-center gap-2 border-b border-line/60 px-3 py-2 text-start hover:bg-card ${selected === r.id ? "bg-card" : ""}`}
               >
-                <span className="size-2.5 shrink-0 rounded-full" style={{ background: STATUS[r.status].color }} />
+                <span
+                  className="size-2.5 shrink-0 rounded-full"
+                  style={{ background: pinColor(r) }}
+                  title={r.show_on_map && r.status !== "hidden" ? "পাবলিক ম্যাপে দেখানো হচ্ছে" : "পাবলিক ম্যাপে নেই"}
+                />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-semibold">{r.name_bn}</span>
                   <span className="block truncate text-xs text-muted">{r.name_en}</span>

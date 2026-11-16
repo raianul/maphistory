@@ -63,9 +63,8 @@ describe("SourceFields", () => {
 });
 
 describe("status changes", () => {
-  it("publishes only from review, unpublishes back to review, restores archived as draft", () => {
-    expect(canMove("draft", "published")).toBe(false);
-    expect(canMove("research", "published")).toBe(false);
+  it("publishes from draft or review, unpublishes back to review, restores archived as draft", () => {
+    expect(canMove("draft", "published")).toBe(true);
     expect(canMove("review", "published")).toBe(true);
     expect(canMove("published", "review")).toBe(true);
     expect(canMove("published", "draft")).toBe(false);
@@ -76,20 +75,18 @@ describe("status changes", () => {
 
 describe("publishProblems", () => {
   const ev = { ...base, id: "e", summary: "s", narrative: "n", lat: 23.7279, lng: 90.3961, status: "review" } as unknown as HistoricalEvent;
-  const src = (o: Partial<EventSource>) => ({ title: "s", origin: "editor", verified: true, ...o }) as EventSource;
+  const src = (o: Partial<EventSource>) => ({ title: "s", origin: "editor", verified: false, ...o }) as EventSource;
 
-  it("passes a complete event with a verified source", () => {
-    expect(publishProblems(ev, [src({})])).toEqual([]);
+  it("passes a complete event; sources needn't be ticked (publishing verifies them)", () => {
+    expect(publishProblems(ev, [src({}), src({ origin: "ai_suggestion" })])).toEqual([]);
   });
-  it("needs a source, a verified one, and no unverified AI suggestion", () => {
+  it("needs at least one source", () => {
     expect(publishProblems(ev, [])).toContain("অন্তত একটি সূত্র লাগবে");
-    expect(publishProblems(ev, [src({ verified: false })])).toContain("অন্তত একটি সূত্র যাচাই করা চিহ্নিত করতে হবে");
-    expect(publishProblems(ev, [src({}), src({ origin: "ai_suggestion", verified: false })])).toContain("AI-প্রস্তাবিত সূত্র যাচাই করুন বা মুছে দিন");
   });
-  it("needs text and a place inside the map's region (Bangladesh)", () => {
+  it("needs a summary and a place inside the map's region (Bangladesh); the full text is optional", () => {
     const p = publishProblems({ ...ev, summary: null, narrative: null, lat: 48.85, lng: 2.35 } as HistoricalEvent, [src({})]);
     expect(p).toContain("সংক্ষিপ্ত বিবরণ নেই");
-    expect(p).toContain("পূর্ণ বিবরণ নেই");
+    expect(p).not.toContain("পূর্ণ বিবরণ নেই");
     expect(p).toContain("মূল স্থান বর্তমান মানচিত্রের এলাকার (বাংলাদেশ) বাইরে");
   });
 });
@@ -168,15 +165,15 @@ describe("StepFields", () => {
 
 describe("publishProblems with a timeline", () => {
   const ev = { ...base, id: "e", summary: "s", narrative: "n", lat: 23.7279, lng: 90.3961, status: "review", phases: [{ id: "attack", label: "হামলা", color: "crimson" }] } as unknown as HistoricalEvent;
-  const src = [{ id: SRC, title: "s", origin: "editor", verified: true }] as EventSource[];
-  const good = { id: "s1", title: "ধাপ", phase_id: "attack", map_type: "marker", location_precision: "exact", lat: 23.72, lng: 90.39, verified: true, source_ids: [SRC] } as unknown as TimelineStep;
+  const src = [{ id: SRC, title: "s", origin: "editor", verified: false }] as EventSource[];
+  const good = { id: "s1", title: "ধাপ", phase_id: "attack", map_type: "marker", location_precision: "approximate", lat: 23.72, lng: 90.39, verified: false, source_ids: [] } as unknown as TimelineStep;
 
-  it("passes complete, sourced, verified steps", () => {
-    expect(publishProblems(ev, src, [good])).toEqual([]);
+  it("passes drawable steps (unverified, unsourced, without a phase: publishing verifies)", () => {
+    expect(publishProblems(ev, src, [good, { ...good, phase_id: null } as unknown as TimelineStep])).toEqual([]);
   });
-  it("lists each step's problems by number", () => {
-    const p = publishProblems(ev, src, [good, { ...good, phase_id: null, verified: false, source_ids: [] } as unknown as TimelineStep]);
-    expect(p).toEqual(expect.arrayContaining(["ধাপ ২: পর্ব বেছে নিন", "ধাপ ২: অন্তত একটি সূত্র যুক্ত করুন", "ধাপ ২: এখনো যাচাই করা হয়নি"]));
+  it("a step that should show a place but has none blocks publishing, by number", () => {
+    const p = publishProblems(ev, src, [good, { ...good, lat: null, lng: null } as unknown as TimelineStep]);
+    expect(p).toEqual(["ধাপ ২: স্থানের স্থানাঙ্ক নেই"]);
   });
   it("a step's place (or a route's start) outside the map's region blocks publishing", () => {
     const p = publishProblems(ev, src, [{ ...good, map_type: "route", from_lat: 22.57, from_lng: 88.36 } as TimelineStep]);
@@ -184,9 +181,6 @@ describe("publishProblems with a timeline", () => {
   });
   it("a step with an unknown location doesn't need coordinates", () => {
     expect(publishProblems(ev, src, [{ ...good, location_precision: "unknown", lat: null, lng: null } as unknown as TimelineStep])).toEqual([]);
-  });
-  it("needs a phase on the event once there are steps", () => {
-    expect(publishProblems({ ...ev, phases: [] }, src, [good])).toContain("টাইমলাইনের জন্য অন্তত একটি পর্ব (রং) যোগ করুন");
   });
 });
 
