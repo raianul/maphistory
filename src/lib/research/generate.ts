@@ -259,14 +259,14 @@ async function runsToday(userId: string): Promise<number> {
  */
 export async function generateDraft(input: GenerateInput, userId: string, onProgress: (p: GenerateProgress) => void, deps: GenerateDeps = {}): Promise<void> {
   if ((await runsToday(userId)) >= RESEARCH_PER_DAY) {
-    onProgress({ type: "error", message: `আজকের সীমা (${RESEARCH_PER_DAY}টি) শেষ। কাল আবার চেষ্টা করুন।` });
+    onProgress({ type: "error", message: `Today's limit (${RESEARCH_PER_DAY}) reached. Try again tomorrow.` });
     return;
   }
   const { day, month, candidate: c } = input;
   const warnings: string[] = [];
 
   // 1. Material: the suggestion's page first (S1), then Wikipedia.
-  onProgress({ type: "stage", message: "সূত্র সংগ্রহ করা হচ্ছে…" });
+  onProgress({ type: "stage", message: "Collecting sources…" });
   const now = new Date().toISOString();
   const wikiOwn = await wikipediaFromUrl(c.source_url, deps.fetch).catch(() => null);
   const page = wikiOwn ? ({ ok: false, url: c.source_url, reason: "" } as const) : await safeFetch(c.source_url, deps);
@@ -294,16 +294,16 @@ export async function generateDraft(input: GenerateInput, userId: string, onProg
         retrieved_at: now,
       }
     : null;
-  if (!own) warnings.push(`প্রস্তাবের সূত্রের পাতা খোলা যায়নি (${page.ok ? "" : page.reason}); শুধু উইকিপিডিয়া থেকে লেখা হয়েছে`);
+  if (!own) warnings.push(`Could not open the suggestion's source page (${page.ok ? "" : page.reason}); written from Wikipedia only`);
   const wiki = await collectMaterial({ title: c.title_bn, context: `${c.year} ${c.place}` }, { fetch: deps.fetch, resolve: deps.resolve, wikidata: deps.wikidata });
   const sources = [...(own ? [own] : []), ...wiki.sources.filter((s) => s.url !== own?.url)].map((s, i) => ({ ...s, id: `S${i + 1}` }));
   if (!sources.some((s) => s.retrieval === "retrieved")) {
-    onProgress({ type: "error", message: "কোনো সূত্র থেকে লেখা আনা যায়নি, তাই খসড়া তৈরি হয়নি। অন্য ঘটনা বেছে নিন বা পরে চেষ্টা করুন।" });
+    onProgress({ type: "error", message: "Couldn't get text from any source, so no draft was created. Pick another event or try later." });
     return;
   }
 
   // 2. AI report, checked.
-  onProgress({ type: "stage", message: "AI ঘটনা ও টাইমলাইন লিখছে…" });
+  onProgress({ type: "stage", message: "AI is writing the event and timeline…" });
   const prompt = researchPrompt(
     {
       title: c.title_bn,
@@ -326,19 +326,19 @@ export async function generateDraft(input: GenerateInput, userId: string, onProg
     report = validateReport(json, sources);
   } catch (e) {
     console.error("generate analyse:", e);
-    onProgress({ type: "error", message: /RESOURCE_EXHAUSTED|429|quota/i.test(String(e)) ? "AI-এর আজকের সীমা শেষ। পরে আবার চেষ্টা করুন।" : "AI লিখতে পারেনি। আবার চেষ্টা করুন।" });
+    onProgress({ type: "error", message: /RESOURCE_EXHAUSTED|429|quota/i.test(String(e)) ? "The AI's daily limit is reached. Try again later." : "The AI couldn't write it. Please try again." });
     return;
   }
   if (!report || !report.steps.length) {
-    onProgress({ type: "error", message: "AI-এর উত্তর থেকে টাইমলাইন তৈরি করা যায়নি। আবার চেষ্টা করুন।" });
+    onProgress({ type: "error", message: "Couldn't build a timeline from the AI's answer. Please try again." });
     return;
   }
   // Real misses only (quotes not in the source, unknown sources), not rating adjustments.
-  const misses = report.validation.filter((v) => /পাওয়া যায়নি|অজানা সূত্র|সংগ্রহ করা যায়নি/.test(v)).length;
-  if (misses) warnings.push(`AI-এর ${misses}টি উদ্ধৃতি সূত্রে মেলেনি; সেসব দাবি "বিতর্কিত" হিসেবে রাখা হয়েছে — পড়ে দেখুন`);
+  const misses = report.validation.filter((v) => /quote not found|unknown source|could not be retrieved/i.test(v)).length;
+  if (misses) warnings.push(`${misses} AI quote(s) didn't match the sources; those claims were kept as "disputed" — please review`);
 
   // 3. Places.
-  onProgress({ type: "stage", message: "মানচিত্রে স্থান খোঁজা হচ্ছে…" });
+  onProgress({ type: "stage", message: "Finding places on the map…" });
   const geocode = deps.geocode ?? geocodePlace;
   const cache = new Map<string, Promise<Place | null>>();
   const find = (name: string | null) => {
@@ -350,7 +350,7 @@ export async function generateDraft(input: GenerateInput, userId: string, onProg
   const matched: string[] = [];
 
   // 4. Save: the event, then its sources, phases and steps.
-  onProgress({ type: "stage", message: "খসড়া সংরক্ষণ করা হচ্ছে…" });
+  onProgress({ type: "stage", message: "Saving the draft…" });
   const fields = EventFields.parse({
     slug: slugFor(c.year, report.overview.title_en ?? ""),
     title: c.title_bn.slice(0, 200),
@@ -367,7 +367,7 @@ export async function generateDraft(input: GenerateInput, userId: string, onProg
     lat: main?.lat ?? null,
     lng: main?.lng ?? null,
   });
-  if (!main) warnings.push("মূল স্থান মানচিত্রে পাওয়া যায়নি; সম্পাদনায় গিয়ে স্থান বেছে নিন");
+  if (!main) warnings.push("Main place not found on the map; choose a place in the editor");
   const event = await createEvent(fields, userId);
   await db().from("historical_events").update({ ai_assisted: true }).eq("id", event.id);
 
@@ -426,13 +426,13 @@ export async function generateDraft(input: GenerateInput, userId: string, onProg
     await addStep(event.id, step, userId);
   }
   const abroad = report.steps.filter((s) => s.place_name && isAbroad(s.place_name)).length;
-  if (abroad) warnings.push(`${abroad}টি ধাপ বাংলাদেশের বাইরে; মানচিত্রে পিন দেওয়া হয়নি`);
-  if (unplaced - abroad > 0) warnings.push(`${unplaced - abroad}টি ধাপের স্থান মানচিত্রে পাওয়া যায়নি (শুধু লেখা, পিন নেই)`);
+  if (abroad) warnings.push(`${abroad} step(s) outside Bangladesh; not pinned on the map`);
+  if (unplaced - abroad > 0) warnings.push(`${unplaced - abroad} step(s) not found on the map (text only, no pin)`);
   const garbled = [fields.title, fields.summary, fields.narrative, ...report.steps.flatMap((x) => [x.title, x.text])].filter(hasForeignScript).length;
-  if (garbled) warnings.push(`${garbled}টি লেখায় অন্য ভাষার অক্ষর ঢুকে গেছে (AI-এর ত্রুটি); সম্পাদনায় ঠিক করুন`);
-  if (main) matched.unshift(`মূল স্থান: ${(c.place || report.overview.main_place || "").split(",")[0]} → ${main.name}`);
-  if (matched.length) warnings.push(`মানচিত্রে বসানো স্থান (আনুমানিক; ভুল হলে সম্পাদনায় ঠিক করুন): ${[...new Set(matched)].join(" · ")}`);
-  if (!input.candidate.check?.confirmed) warnings.push("এই ঘটনার তারিখ স্বয়ংক্রিয়ভাবে নিশ্চিত করা যায়নি; প্রকাশের আগে সূত্রের লিংক খুলে দেখুন");
+  if (garbled) warnings.push(`${garbled} text(s) contain letters from another script (AI error); fix them in the editor`);
+  if (main) matched.unshift(`Main place: ${(c.place || report.overview.main_place || "").split(",")[0]} → ${main.name}`);
+  if (matched.length) warnings.push(`Places put on the map (approximate; fix in the editor if wrong): ${[...new Set(matched)].join(" · ")}`);
+  if (!input.candidate.check?.confirmed) warnings.push("This event's date could not be confirmed automatically; open the source link before publishing");
 
   const bundle = await getEvent(event.id);
   onProgress({ type: "done", event_id: bundle!.event.id, warnings });

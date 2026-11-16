@@ -14,20 +14,20 @@ export async function requireAdmin(req: Request): Promise<Admin | Response> {
     return await check(req);
   } catch (e) {
     console.error(e);
-    return Response.json({ error: `সার্ভারে সমস্যা: ${(e as Error).message}` }, { status: 500 });
+    return Response.json({ error: `Server error: ${(e as Error).message}` }, { status: 500 });
   }
 }
 
 async function check(req: Request): Promise<Admin | Response> {
   const token = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
-  if (!token) return Response.json({ error: "লগইন করুন" }, { status: 401 });
+  if (!token) return Response.json({ error: "Please log in" }, { status: 401 });
   const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
     auth: { persistSession: false },
   });
   const { data, error } = await supabase.auth.getUser(token);
-  if (error || !data.user) return Response.json({ error: "লগইন মেয়াদ শেষ, আবার লগইন করুন" }, { status: 401 });
+  if (error || !data.user) return Response.json({ error: "Session expired, please log in again" }, { status: 401 });
   if (!(await isAdmin(data.user.id))) {
-    return Response.json({ error: "এই অ্যাকাউন্টের অ্যাডমিন অনুমতি নেই", userId: data.user.id }, { status: 403 });
+    return Response.json({ error: "This account doesn't have admin access", userId: data.user.id }, { status: 403 });
   }
   return { userId: data.user.id, email: data.user.email };
 }

@@ -3,13 +3,14 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { bnYear } from "@/lib/format";
-import { STATUS_BN, todayInDhaka, type EventStatus } from "@/lib/events/schema";
+import { STATUS_EN, todayInDhaka, type EventStatus } from "@/lib/events/schema";
 import { adminFetch } from "@/lib/supabase-browser";
 import { StatusBadge } from "./shared";
 
-const MONTHS_BN = ["জানুয়ারি", "ফেব্রুয়ারি", "মার্চ", "এপ্রিল", "মে", "জুন", "জুলাই", "আগস্ট", "সেপ্টেম্বর", "অক্টোবর", "নভেম্বর", "ডিসেম্বর"];
-const COUNTRIES = [{ code: "BD", name: "বাংলাদেশ" }];
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const COUNTRIES = [{ code: "BD", name: "Bangladesh" }];
+/** A year for the admin list: 1971, or 500 BC. */
+const yearEn = (y: number) => (y < 0 ? `${-y} BC` : String(y));
 const field = "h-10 rounded-control border border-line-strong bg-card px-3 text-meta outline-none focus:border-accent focus:ring-2 focus:ring-accent-ring";
 
 type Candidate = {
@@ -67,7 +68,7 @@ export function OnThisDayAdmin() {
     const d = r ? await r.json().catch(() => ({})) : {};
     if (!r || !r.ok) {
       setState("idle");
-      return setError(d.error ?? "ঘটনা খোঁজা যায়নি");
+      return setError(d.error ?? "Couldn't search for events");
     }
     setResult({ candidates: d.candidates, saved: d.saved, searched_at: d.searched_at });
     const first = (d.candidates as Candidate[]).findIndex((c) => !c.existing && c.check.confirmed);
@@ -94,7 +95,7 @@ export function OnThisDayAdmin() {
         setChosen(null);
         if (!r.ok) {
           setResult(null);
-          setError(d.error ?? "তালিকা আনা যায়নি");
+          setError(d.error ?? "Couldn't load the list");
           return setState("idle");
         }
         setError(null);
@@ -118,7 +119,7 @@ export function OnThisDayAdmin() {
     const c = result.candidates[chosen];
     setState("generating");
     setError(null);
-    setStage("শুরু হচ্ছে…");
+    setStage("Starting…");
     const res = await adminFetch("/api/admin/on-this-day/generate", {
       method: "POST",
       body: JSON.stringify({ day, month, country, candidate: { ...c, existing: undefined } }),
@@ -127,7 +128,7 @@ export function OnThisDayAdmin() {
       const d = res ? await res.json().catch(() => ({})) : {};
       setState("found");
       setStage(null);
-      return setError(d.error ?? "খসড়া তৈরি করা যায়নি");
+      return setError(d.error ?? "Couldn't create the draft");
     }
     const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
     let buffer = "";
@@ -159,24 +160,24 @@ export function OnThisDayAdmin() {
   return (
     <div className="mx-auto max-w-3xl px-4 py-6 md:px-6">
       <Link href="/admin/events" className="text-meta text-muted hover:text-ink">
-        ← সব ঘটনা
+        ← All events
       </Link>
-      <h1 className="mt-2 text-display font-bold tracking-tight">আজকের দিনে</h1>
-      <p className="mt-1 text-meta text-muted">তারিখ ও দেশ বেছে ঘটনা খুঁজুন, একটি বেছে নিন, AI খসড়া ও টাইমলাইন বানাবে। দেখে প্রকাশ করুন।</p>
+      <h1 className="mt-2 text-display font-bold tracking-tight">On this day</h1>
+      <p className="mt-1 text-meta text-muted">Pick a date and country to find events, then choose one. AI drafts it with a timeline. Review it and publish.</p>
 
       <form onSubmit={find} className="mt-5 flex flex-wrap items-end gap-2 rounded-2xl bg-card p-4 shadow-float">
         <label className="grid gap-1 text-meta font-semibold text-ink-2">
-          দিন
+          Day
           <select value={day} onChange={(e) => setDay(Number(e.target.value))} className={field} disabled={busy}>
             {Array.from({ length: days }, (_, i) => (
               <option key={i + 1} value={i + 1}>
-                {bnYear(i + 1)}
+                {i + 1}
               </option>
             ))}
           </select>
         </label>
         <label className="grid gap-1 text-meta font-semibold text-ink-2">
-          মাস
+          Month
           <select
             value={month}
             onChange={(e) => {
@@ -187,7 +188,7 @@ export function OnThisDayAdmin() {
             className={field}
             disabled={busy}
           >
-            {MONTHS_BN.map((m, i) => (
+            {MONTHS.map((m, i) => (
               <option key={m} value={i + 1}>
                 {m}
               </option>
@@ -195,7 +196,7 @@ export function OnThisDayAdmin() {
           </select>
         </label>
         <label className="grid gap-1 text-meta font-semibold text-ink-2">
-          দেশ
+          Country
           <select value={country} onChange={(e) => setCountry(e.target.value)} className={field} disabled={busy}>
             {COUNTRIES.map((c) => (
               <option key={c.code} value={c.code}>
@@ -205,15 +206,15 @@ export function OnThisDayAdmin() {
           </select>
         </label>
         <button type="submit" disabled={busy} className="h-10 rounded-full bg-accent px-5 text-meta font-semibold text-on-accent hover:bg-accent-hover disabled:opacity-50">
-          {state === "finding" ? "খোঁজা হচ্ছে…" : state === "loading" ? "…" : "ঘটনা খুঁজুন"}
+          {state === "finding" ? "Searching…" : state === "loading" ? "…" : "Find events"}
         </button>
-        {day === today.day && month === today.month && <span className="pb-2.5 text-micro text-muted">আজ</span>}
+        {day === today.day && month === today.month && <span className="pb-2.5 text-micro text-muted">Today</span>}
       </form>
 
       {state === "finding" && (
         <p className="mt-5 flex items-center gap-2 text-meta text-accent" role="status">
           <span className="size-3.5 animate-spin rounded-full border-2 border-accent-soft-hover border-t-accent" aria-hidden />
-          AI ওয়েবে খুঁজছে, তারপর প্রতিটি সূত্রের পাতা খুলে তারিখ মিলিয়ে দেখা হচ্ছে… (৩০–৬০ সেকেন্ড)
+          AI is searching the web, then each source page is opened to check the date… (30–60 seconds)
         </p>
       )}
       {error && (
@@ -223,28 +224,28 @@ export function OnThisDayAdmin() {
       )}
 
       {result && (
-        <section className="mt-5 rounded-2xl bg-card p-4 shadow-float" aria-label="পাওয়া ঘটনা">
+        <section className="mt-5 rounded-2xl bg-card p-4 shadow-float" aria-label="Events found">
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
             <h2 className="font-semibold">
-              {bnYear(day)} {MONTHS_BN[month - 1]}:{" "}
+              {day} {MONTHS[month - 1]}:{" "}
               {!result.searched_at
-                ? "এই দিনের এখনো খোঁজা হয়নি"
+                ? "not searched yet"
                 : result.candidates.length
-                  ? `${bnYear(result.candidates.length)}টি ঘটনা পাওয়া গেছে`
-                  : "নির্ভরযোগ্য কোনো ঘটনা পাওয়া যায়নি"}
+                  ? `${result.candidates.length} ${result.candidates.length === 1 ? "event" : "events"} found`
+                  : "no reliable events found"}
             </h2>
             {result.searched_at && (
               <span className="text-micro text-muted">
-                খোঁজা হয়েছে {new Date(result.searched_at).toLocaleString("bn-BD", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}
+                Searched {new Date(result.searched_at).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}
                 {" · "}
                 <button type="button" disabled={busy} onClick={() => load("fresh")} className="font-semibold text-accent hover:underline disabled:opacity-50">
-                  আবার খুঁজুন
+                  Search again
                 </button>
               </span>
             )}
           </div>
-          {result.searched_at && !result.candidates.length && <p className="mt-1 text-meta text-muted">অন্য তারিখ চেষ্টা করুন, বা পরে আবার খুঁজুন।</p>}
-          {!result.searched_at && <p className="mt-1 text-meta text-muted">&ldquo;ঘটনা খুঁজুন&rdquo; চাপলে AI খুঁজবে; ফলাফল এই দিনের জন্য সংরক্ষিত থাকবে।</p>}
+          {result.searched_at && !result.candidates.length && <p className="mt-1 text-meta text-muted">Try another date, or search again later.</p>}
+          {!result.searched_at && <p className="mt-1 text-meta text-muted">Press &ldquo;Find events&rdquo; and AI will search; the results are saved for this date.</p>}
           <ul className="mt-3 grid gap-2">
             {result.candidates.map((c, i) => (
               <li key={`${c.year}-${c.title_bn}`}>
@@ -254,18 +255,18 @@ export function OnThisDayAdmin() {
                   <input type="radio" name="event" className="mt-1 accent-[var(--accent)]" checked={chosen === i} disabled={!!c.existing || busy} onChange={() => setChosen(i)} />
                   <span className="min-w-0 flex-1">
                     <span className="flex flex-wrap items-baseline gap-x-2">
-                      <span className="font-semibold tabular-nums text-ink-2">{bnYear(c.year)}</span>
+                      <span className="font-semibold tabular-nums text-ink-2">{yearEn(c.year)}</span>
                       <span className="font-semibold">{c.title_bn}</span>
                     </span>
                     {c.summary_bn && <span className="mt-0.5 block text-meta text-ink-2">{c.summary_bn}</span>}
                     <span className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-micro">
                       {c.check.confirmed ? (
                         <span className="rounded-full bg-success-soft px-2 py-0.5 font-semibold text-success" title={c.check.reason}>
-                          ✓ সূত্রে তারিখ মিলেছে
+                          ✓ Date matches the source
                         </span>
                       ) : (
                         <span className="rounded-full bg-warning-soft px-2 py-0.5 font-semibold text-warning" title={c.check.reason}>
-                          ⚠ নিশ্চিত করা যায়নি
+                          ⚠ Couldn&rsquo;t confirm
                         </span>
                       )}
                       <a href={c.source_url} target="_blank" rel="noreferrer" className="text-muted hover:text-ink hover:underline" onClick={(e) => e.stopPropagation()}>
@@ -273,12 +274,12 @@ export function OnThisDayAdmin() {
                       </a>
                       {c.place && <span className="text-muted">{c.place}</span>}
                     </span>
-                    {!c.check.confirmed && <span className="mt-1 block text-micro text-warning">{c.check.reason}। লিংক খুলে নিজে দেখে নিন।</span>}
+                    {!c.check.confirmed && <span className="mt-1 block text-micro text-warning">{c.check.reason}. Open the link and check it yourself.</span>}
                     {c.existing && (
                       <span className="mt-1 flex items-center gap-2 text-micro">
                         <StatusBadge status={c.existing.status} />
                         <Link href={`/admin/events/${c.existing.id}/preview`} className="font-semibold text-accent hover:underline">
-                          আগেই আছে: খুলুন →
+                          Already exists: open →
                         </Link>
                       </span>
                     )}
@@ -290,16 +291,16 @@ export function OnThisDayAdmin() {
 
           {result.saved.length > 0 && (
             <div className="mt-4 border-t border-line pt-3">
-              <p className="text-micro font-semibold text-muted">এই দিনের যেসব ঘটনা আগেই আছে</p>
+              <p className="text-micro font-semibold text-muted">Events already saved for this date</p>
               <ul className="mt-1 grid gap-1">
                 {result.saved.map((s) => (
                   <li key={s.id} className="flex items-center gap-2 text-meta">
                     <StatusBadge status={s.status} />
                     <Link href={`/admin/events/${s.id}/preview`} className="hover:text-accent hover:underline">
-                      {s.year ? `${bnYear(s.year)} — ` : ""}
+                      {s.year ? `${yearEn(s.year)} — ` : ""}
                       {s.title}
                     </Link>
-                    <span className="text-micro text-muted">{STATUS_BN[s.status]}</span>
+                    <span className="text-micro text-muted">{STATUS_EN[s.status]}</span>
                   </li>
                 ))}
               </ul>
@@ -314,7 +315,7 @@ export function OnThisDayAdmin() {
                 onClick={generate}
                 className="h-11 rounded-full bg-accent px-6 text-meta font-semibold text-on-accent hover:bg-accent-hover disabled:opacity-50"
               >
-                {state === "generating" ? "তৈরি হচ্ছে…" : "খসড়া তৈরি করুন"}
+                {state === "generating" ? "Creating…" : "Create draft"}
               </button>
               {stage && (
                 <span className="flex items-center gap-2 text-meta text-accent" role="status" aria-live="polite">
@@ -322,7 +323,7 @@ export function OnThisDayAdmin() {
                   {stage}
                 </span>
               )}
-              {!stage && chosen !== null && !result.candidates[chosen].check.confirmed && <span className="text-micro text-warning">এই ঘটনার তারিখ নিশ্চিত নয়; প্রকাশের আগে সূত্র দেখে নেবেন।</span>}
+              {!stage && chosen !== null && !result.candidates[chosen].check.confirmed && <span className="text-micro text-warning">This event&rsquo;s date isn&rsquo;t confirmed; check the source before publishing.</span>}
             </div>
           )}
         </section>

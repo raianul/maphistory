@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Hind_Siliguri } from "next/font/google";
 import Link from "next/link";
+import { Analytics } from "@/components/Analytics";
 import { SITE } from "@/lib/places";
 import "./globals.css";
 
@@ -33,12 +34,30 @@ export default function RootLayout({ children, panel }: LayoutProps<"/">) {
         <header className="relative z-30 flex h-[calc(var(--header-h)+env(safe-area-inset-top))] shrink-0 items-center border-b border-line bg-paper ps-[max(1rem,env(safe-area-inset-left))] pe-[max(1rem,env(safe-area-inset-right))] pt-[env(safe-area-inset-top)] md:ps-[max(1.25rem,env(safe-area-inset-left))]">
           <Link href="/" className="-mx-1 flex h-10 items-center gap-2 rounded-md px-1">
             <span className="text-lg font-bold tracking-tight">{SITE.name}</span>
-            <span className="hidden text-meta text-muted sm:inline">{SITE.nameEn}</span>
+            <span className="hidden text-meta text-muted sm:inline">{SITE.tagline}</span>
           </Link>
+          {/* Menu (English). "AI" marks the About link: this site's content is written by AI. */}
+          <nav aria-label="Site" className="ms-auto flex items-center gap-1 text-meta">
+            <Link
+              href="/about"
+              title="This site's content is written by AI (Google Gemini)"
+              className="flex h-8 items-center gap-1.5 rounded-full px-2.5 font-semibold text-ink-2 transition-colors hover:bg-hover hover:text-ink"
+            >
+              <span className="rounded-full border border-accent/40 bg-accent-soft px-1.5 text-micro font-semibold text-accent">✦ AI</span>
+              About Us
+            </Link>
+            <span className="text-line-strong" aria-hidden>
+              |
+            </span>
+            <Link href="/privacy" className="flex h-8 items-center rounded-full px-2.5 text-ink-2 transition-colors hover:bg-hover hover:text-ink">
+              Privacy Policy
+            </Link>
+          </nav>
         </header>
         <main className="flex-1">{children}</main>
         {panel}
       </body>
+      <Analytics />
     </html>
   );
 }

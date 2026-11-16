@@ -1,7 +1,7 @@
 import { requireAdmin } from "@/lib/admin-auth";
 import { invalidatePublicEvents } from "@/lib/events/cache";
 import { getEvent, setEventStatus, verifyAll, withProblems } from "@/lib/events/db";
-import { canMove, EVENT_STATUSES, publishProblems, STATUS_BN, type EventStatus } from "@/lib/events/schema";
+import { canMove, EVENT_STATUSES, publishProblems, STATUS_EN, type EventStatus } from "@/lib/events/schema";
 
 /**
  * Move an event through draft → research → review → published → archived: { to: "<status>" }.
@@ -16,18 +16,18 @@ export async function POST(req: Request, { params }: RouteContext<"/api/admin/ev
   const body = (await req.json().catch(() => null)) as { to?: unknown } | null;
   const to = body?.to;
   if (typeof to !== "string" || !(EVENT_STATUSES as readonly string[]).includes(to)) {
-    return Response.json({ error: "অজানা অবস্থা" }, { status: 400 });
+    return Response.json({ error: "Unknown status" }, { status: 400 });
   }
   try {
     const found = await getEvent(id);
-    if (!found) return Response.json({ error: "পাওয়া যায়নি" }, { status: 404 });
+    if (!found) return Response.json({ error: "Not found" }, { status: 404 });
     const from = found.event.status;
     if (!canMove(from, to as EventStatus)) {
-      return Response.json({ error: `"${STATUS_BN[from]}" থেকে সরাসরি "${STATUS_BN[to as EventStatus]}" করা যায় না` }, { status: 409 });
+      return Response.json({ error: `Can't move directly from "${STATUS_EN[from]}" to "${STATUS_EN[to as EventStatus]}"` }, { status: 409 });
     }
     if (to === "published") {
       const problems = publishProblems(found.event, found.sources, found.steps);
-      if (problems.length) return Response.json({ error: "প্রকাশের আগে ঠিক করুন", problems }, { status: 409 });
+      if (problems.length) return Response.json({ error: "Fix these before publishing", problems }, { status: 409 });
     }
     // Publishing is the admin's verification of everything in the event (sources and steps).
     if (to === "published") await verifyAll(id, admin.userId);

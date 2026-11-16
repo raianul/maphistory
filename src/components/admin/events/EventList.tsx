@@ -3,12 +3,11 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { bnYear } from "@/lib/format";
-import { EVENT_STATUSES, STATUS_BN, type EventListRow, type EventStatus } from "@/lib/events/schema";
+import { EVENT_STATUSES, STATUS_EN, type EventListRow, type EventStatus } from "@/lib/events/schema";
 import { adminFetch, browserSupabase } from "@/lib/supabase-browser";
 import { dateBn, StatusBadge } from "./shared";
 
-const MONTHS_BN = ["জানুয়ারি", "ফেব্রুয়ারি", "মার্চ", "এপ্রিল", "মে", "জুন", "জুলাই", "আগস্ট", "সেপ্টেম্বর", "অক্টোবর", "নভেম্বর", "ডিসেম্বর"];
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const field = "h-10 rounded-control border border-line-strong bg-card px-3 text-meta outline-none focus:border-accent focus:ring-2 focus:ring-accent-ring";
 
 /** /admin/events: every historical event, with search and filters, and a way to start a new one. */
@@ -49,17 +48,17 @@ export function EventList({ email }: { email?: string }) {
     <div className="mx-auto max-w-5xl px-4 py-6 md:px-6">
       <header className="flex flex-wrap items-center gap-3">
         <Link href="/admin" className="text-meta text-muted hover:text-ink">
-          ← অ্যাডমিন মানচিত্র
+          ← Admin map
         </Link>
-        <h1 className="text-display font-bold tracking-tight">ঐতিহাসিক ঘটনা</h1>
+        <h1 className="text-display font-bold tracking-tight">Historical events</h1>
         <span className="ms-auto flex items-center gap-3 text-meta text-muted">
           {email}
           <button type="button" onClick={() => browserSupabase().auth.signOut()} className="hover:text-ink hover:underline">
-            লগআউট
+            Log out
           </button>
         </span>
       </header>
-      <p className="mt-1 text-meta text-muted">প্রকাশিত হলেই কেবল দর্শকেরা দেখবেন।</p>
+      <p className="mt-1 text-meta text-muted">Visitors only see published events.</p>
 
       <Link
         href="/admin/events/today"
@@ -69,8 +68,8 @@ export function EventList({ email }: { email?: string }) {
           📅
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block text-lead font-bold">আজকের দিনে</span>
-          <span className="block text-meta opacity-90">তারিখ ও দেশ বেছে ঘটনা খুঁজুন → একটি বেছে নিন → AI খসড়া ও টাইমলাইন বানাবে → দেখে প্রকাশ করুন</span>
+          <span className="block text-lead font-bold">On this day</span>
+          <span className="block text-meta opacity-90">Pick a date and country to find events → choose one → AI drafts it with a timeline → review and publish</span>
         </span>
         <span className="text-lead" aria-hidden>
           →
@@ -78,30 +77,30 @@ export function EventList({ email }: { email?: string }) {
       </Link>
 
       <div className="mt-5 flex flex-wrap items-center gap-2">
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="শিরোনাম, স্থান বা স্লাগ খুঁজুন…" className={`${field} min-w-56 flex-1`} aria-label="খুঁজুন" />
-        <select value={status} onChange={(e) => setStatus(e.target.value as EventStatus | "")} className={field} aria-label="অবস্থা">
-          <option value="">সব অবস্থা</option>
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search title, place or slug…" className={`${field} min-w-56 flex-1`} aria-label="Search" />
+        <select value={status} onChange={(e) => setStatus(e.target.value as EventStatus | "")} className={field} aria-label="Status">
+          <option value="">All statuses</option>
           {EVENT_STATUSES.map((s) => (
             <option key={s} value={s}>
-              {STATUS_BN[s]}
+              {STATUS_EN[s]}
             </option>
           ))}
         </select>
-        <select value={month} onChange={(e) => setMonth(e.target.value)} className={field} aria-label="মাস">
-          <option value="">সব মাস</option>
-          {MONTHS_BN.map((m, i) => (
+        <select value={month} onChange={(e) => setMonth(e.target.value)} className={field} aria-label="Month">
+          <option value="">All months</option>
+          {MONTHS.map((m, i) => (
             <option key={m} value={i + 1}>
               {m}
             </option>
           ))}
         </select>
-        <input value={country} onChange={(e) => setCountry(e.target.value)} placeholder="দেশ (BD)" maxLength={2} className={`${field} w-24 uppercase`} aria-label="দেশ" />
+        <input value={country} onChange={(e) => setCountry(e.target.value)} placeholder="BD" maxLength={2} className={`${field} w-24 uppercase`} aria-label="Country" />
         <button
           type="button"
           onClick={() => setCreating(true)}
           className="h-10 rounded-full bg-hover px-4 text-meta font-semibold text-ink-2 transition-colors hover:bg-pressed"
         >
-          + নিজে লিখুন
+          + Write one yourself
         </button>
       </div>
 
@@ -110,8 +109,8 @@ export function EventList({ email }: { email?: string }) {
       {error && <p className="mt-4 rounded-control bg-warning-soft px-3 py-2 text-meta text-warning">{error}</p>}
 
       <ul className="mt-5 divide-y divide-line rounded-2xl bg-card shadow-float">
-        {rows === null && !error && <li className="p-4 text-meta text-muted">লোড হচ্ছে…</li>}
-        {rows?.length === 0 && <li className="p-4 text-meta text-muted">কোনো ঘটনা পাওয়া যায়নি।</li>}
+        {rows === null && !error && <li className="p-4 text-meta text-muted">Loading…</li>}
+        {rows?.length === 0 && <li className="p-4 text-meta text-muted">No events found.</li>}
         {rows?.map((r) => (
           <li key={r.id}>
             <Link href={`/admin/events/${r.id}/preview`} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 transition-colors hover:bg-hover">
@@ -119,11 +118,11 @@ export function EventList({ email }: { email?: string }) {
               <span className="min-w-0 flex-1">
                 <span className="block truncate font-semibold">{r.title}</span>
                 <span className="block truncate text-meta text-muted">
-                  {[r.place_name, r.city, r.country].filter(Boolean).join(" · ") || "স্থান দেওয়া হয়নি"}
-                  {r.recurring && " · প্রতি বছর"}
+                  {[r.place_name, r.city, r.country].filter(Boolean).join(" · ") || "No place set"}
+                  {r.recurring && " · every year"}
                 </span>
               </span>
-              <span className="text-micro text-muted">সূত্র {bnYear(r.source_count)}</span>
+              <span className="text-micro text-muted">{r.source_count} {r.source_count === 1 ? "source" : "sources"}</span>
               <StatusBadge status={r.status} />
             </Link>
           </li>
@@ -160,11 +159,11 @@ function NewEvent({ onCancel }: { onCancel: () => void }) {
   return (
     <form onSubmit={create} className="mt-4 grid gap-3 rounded-2xl bg-card p-4 shadow-float md:grid-cols-[1fr_1fr_auto] md:items-end">
       <label className="grid gap-1 text-meta">
-        শিরোনাম
-        <input required value={title} onChange={(e) => setTitle(e.target.value)} className={field} placeholder="যেমন: ভাষা আন্দোলন" autoFocus />
+        Title
+        <input required value={title} onChange={(e) => setTitle(e.target.value)} className={field} placeholder="e.g. ভাষা আন্দোলন" autoFocus />
       </label>
       <label className="grid gap-1 text-meta">
-        স্লাগ (লিংকের জন্য, ইংরেজিতে)
+        Slug (for the link, in English)
         <input
           required
           value={slug}
@@ -175,10 +174,10 @@ function NewEvent({ onCancel }: { onCancel: () => void }) {
       </label>
       <div className="flex gap-2">
         <button type="submit" disabled={busy} className="h-10 rounded-full bg-accent px-4 text-meta font-semibold text-on-accent hover:bg-accent-hover disabled:opacity-50">
-          {busy ? "তৈরি হচ্ছে…" : "তৈরি করুন"}
+          {busy ? "Creating…" : "Create"}
         </button>
         <button type="button" onClick={onCancel} className="h-10 rounded-full px-3 text-meta text-muted hover:text-ink">
-          বাতিল
+          Cancel
         </button>
       </div>
       {error && <p className="text-meta text-danger md:col-span-3">{error}</p>}

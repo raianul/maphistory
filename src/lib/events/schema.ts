@@ -21,6 +21,27 @@ export const STATUS_BN: Record<EventStatus, string> = {
   archived: "আর্কাইভ",
 };
 
+/** Admin (English interface) labels for statuses. Visitors never see statuses. */
+export const STATUS_EN: Record<EventStatus, string> = {
+  draft: "Draft",
+  research: "Researching",
+  review: "In review",
+  published: "Published",
+  archived: "Archived",
+};
+
+/** Admin labels for source types (visitors see SOURCE_TYPE_BN). */
+export const SOURCE_TYPE_EN: Record<(typeof SOURCE_TYPES)[number], string> = {
+  book: "Book",
+  archive: "Archive / document",
+  academic: "Academic paper",
+  article: "Article / news",
+  encyclopedia: "Encyclopedia",
+  government: "Government record",
+  oral: "Oral account",
+  other: "Other",
+};
+
 export const SOURCE_TYPE_BN: Record<(typeof SOURCE_TYPES)[number], string> = {
   book: "বই",
   archive: "আর্কাইভ/দলিল",
@@ -66,22 +87,22 @@ const HttpUrl = z
     } catch {
       return false;
     }
-  }, "লিংক http:// বা https:// দিয়ে শুরু হতে হবে");
+  }, "Link must start with http:// or https://");
 
 export const Slug = z
   .string()
   .trim()
   .max(80)
-  .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, "স্লাগ: ছোট হাতের ইংরেজি অক্ষর, সংখ্যা ও হাইফেন (যেমন: language-movement-1952)");
+  .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, "Slug: lowercase English letters, digits and hyphens (e.g. language-movement-1952)");
 
 /** A cover image chosen through the Commons search (licence already checked there). */
 export const CoverImage = z.object({
-  src: HttpUrl.refine((v) => new URL(v).hostname.endsWith("wikimedia.org"), "শুধু উইকিমিডিয়া কমন্সের ছবি"),
+  src: HttpUrl.refine((v) => new URL(v).hostname.endsWith("wikimedia.org"), "Only Wikimedia Commons images"),
   credit: z.object({
     author: z.string().trim().min(1).max(300),
     license: z.string().trim().min(1).max(120),
     licenseUrl: HttpUrl.optional(),
-    sourceUrl: HttpUrl.refine((v) => new URL(v).hostname.endsWith("wikimedia.org"), "শুধু উইকিমিডিয়া কমন্সের ছবি"),
+    sourceUrl: HttpUrl.refine((v) => new URL(v).hostname.endsWith("wikimedia.org"), "Only Wikimedia Commons images"),
   }),
 });
 
@@ -91,7 +112,7 @@ const daysIn = (year: number | null | undefined, month: number) => new Date(Date
 export const EventFields = z
   .object({
     slug: Slug,
-    title: z.string().trim().min(1, "শিরোনাম দিন").max(200),
+    title: z.string().trim().min(1, "Enter a title").max(200),
     summary: optText(600),
     narrative: optText(20000),
     language: z
@@ -111,7 +132,7 @@ export const EventFields = z
       .string()
       .trim()
       .toUpperCase()
-      .regex(/^[A-Z]{2}$/, "দেশের দুই অক্ষরের কোড, যেমন BD")
+      .regex(/^[A-Z]{2}$/, "Two-letter country code, e.g. BD")
       .nullable()
       .optional()
       .or(z.literal("").transform(() => null)),
@@ -124,32 +145,32 @@ export const EventFields = z
     const need = (cond: boolean, path: string, message: string) => !cond && ctx.addIssue({ code: "custom", path: [path], message });
     switch (e.date_precision) {
       case "day":
-        need(has(e.event_year) && has(e.event_month) && has(e.event_day), "event_day", "নির্দিষ্ট দিনের জন্য বছর, মাস ও দিন লাগবে");
+        need(has(e.event_year) && has(e.event_month) && has(e.event_day), "event_day", "An exact day needs year, month and day");
         break;
       case "month":
-        need(has(e.event_year) && has(e.event_month), "event_month", "মাসের জন্য বছর ও মাস লাগবে");
-        need(!has(e.event_day), "event_day", "মাস পর্যন্ত জানা থাকলে দিন খালি রাখুন");
+        need(has(e.event_year) && has(e.event_month), "event_month", "Month precision needs year and month");
+        need(!has(e.event_day), "event_day", "Leave the day empty when only the month is known");
         break;
       case "year":
-        need(has(e.event_year), "event_year", "বছর লাগবে");
-        need(!has(e.event_month) && !has(e.event_day), "event_month", "শুধু বছর জানা থাকলে মাস ও দিন খালি রাখুন");
+        need(has(e.event_year), "event_year", "Year is required");
+        need(!has(e.event_month) && !has(e.event_day), "event_month", "Leave month and day empty when only the year is known");
         break;
       case "approximate":
-        need(has(e.date_label), "date_label", "আনুমানিক তারিখের জন্য তারিখের বর্ণনা লিখুন, যেমন: আনুমানিক ১৭৫৭");
+        need(has(e.date_label), "date_label", "An approximate date needs a date label, e.g. আনুমানিক ১৭৫৭ (c. 1757)");
         break;
     }
     // A real calendar day (31 April, 30 February … are refused; 29 February only in leap years).
     if (has(e.event_month) && has(e.event_day) && e.event_day! > daysIn(e.event_year, e.event_month!)) {
-      ctx.addIssue({ code: "custom", path: ["event_day"], message: "এই মাসে এত দিন নেই" });
+      ctx.addIssue({ code: "custom", path: ["event_day"], message: "This month doesn't have that many days" });
     }
-    need(!e.recurring || e.date_precision === "day", "recurring", "প্রতি বছর দেখাতে নির্দিষ্ট দিন জানা থাকতে হবে");
-    need(has(e.lat) === has(e.lng), "lat", "অক্ষাংশ ও দ্রাঘিমাংশ দুটোই দিন, অথবা দুটোই খালি রাখুন");
+    need(!e.recurring || e.date_precision === "day", "recurring", "Showing it every year needs an exact day");
+    need(has(e.lat) === has(e.lng), "lat", "Enter both latitude and longitude, or leave both empty");
   });
 export type EventFieldsT = z.infer<typeof EventFields>;
 
 /** A source attached to an event. */
 export const SourceFields = z.object({
-  title: z.string().trim().min(1, "সূত্রের নাম দিন").max(300),
+  title: z.string().trim().min(1, "Enter the source name").max(300),
   url: HttpUrl.nullable()
     .optional()
     .or(z.literal("").transform(() => null)),
@@ -170,12 +191,12 @@ export type SourceFieldsT = z.infer<typeof SourceFields>;
  * Each reads as text on the light panel (WCAG AA, 4.7–6.5:1) and they stay distinct on the map.
  */
 export const PHASE_PALETTE = {
-  purple: { hex: "#6b5b95", bn: "বেগুনি" },
-  crimson: { hex: "#b8324b", bn: "লাল" },
-  teal: { hex: "#2e7d6b", bn: "সবুজ" },
-  amber: { hex: "#8f6416", bn: "সোনালি" },
-  blue: { hex: "#2f6f9f", bn: "নীল" },
-  slate: { hex: "#4f5d6b", bn: "ধূসর" },
+  purple: { hex: "#6b5b95", bn: "বেগুনি", en: "Purple" },
+  crimson: { hex: "#b8324b", bn: "লাল", en: "Red" },
+  teal: { hex: "#2e7d6b", bn: "সবুজ", en: "Green" },
+  amber: { hex: "#8f6416", bn: "সোনালি", en: "Gold" },
+  blue: { hex: "#2f6f9f", bn: "নীল", en: "Blue" },
+  slate: { hex: "#4f5d6b", bn: "ধূসর", en: "Grey" },
 } as const;
 export type PhaseColor = keyof typeof PHASE_PALETTE;
 export const PHASE_COLORS = Object.keys(PHASE_PALETTE) as PhaseColor[];
@@ -183,11 +204,11 @@ export const PHASE_COLORS = Object.keys(PHASE_PALETTE) as PhaseColor[];
 const PhaseId = z
   .string()
   .trim()
-  .regex(/^[a-z0-9-]{1,40}$/, "পর্বের আইডি: ছোট হাতের ইংরেজি অক্ষর, সংখ্যা, হাইফেন");
+  .regex(/^[a-z0-9-]{1,40}$/, "Phase ID: lowercase English letters, digits, hyphens");
 
 export const Phase = z.object({
   id: PhaseId,
-  label: z.string().trim().min(1, "পর্বের নাম দিন").max(60),
+  label: z.string().trim().min(1, "Enter the phase name").max(60),
   color: z.enum(PHASE_COLORS as [PhaseColor, ...PhaseColor[]]),
 });
 export type PhaseT = z.infer<typeof Phase>;
@@ -195,12 +216,12 @@ export type PhaseT = z.infer<typeof Phase>;
 /** 1–4 phases for an event; ids and colours must not repeat. (0 is allowed while drafting.) */
 export const Phases = z
   .array(Phase)
-  .max(4, "সর্বোচ্চ ৪টি পর্ব")
+  .max(4, "At most 4 phases")
   .superRefine((ps, ctx) => {
     const dup = (k: "id" | "color", msg: string) =>
       new Set(ps.map((p) => p[k])).size !== ps.length && ctx.addIssue({ code: "custom", message: msg });
-    dup("id", "পর্বের আইডি আলাদা হতে হবে");
-    dup("color", "প্রতিটি পর্বের রং আলাদা হতে হবে");
+    dup("id", "Phase IDs must be unique");
+    dup("color", "Each phase needs a different color");
   });
 
 // ── Timeline steps (Phase 2) ──────────────────────────────────────────────────────────────
@@ -227,13 +248,32 @@ export const EVIDENCE_BN: Record<(typeof EVIDENCE_LEVELS)[number], string> = {
   disputed: "বিতর্কিত",
 };
 
+/** Admin (English interface) versions of the timeline labels; visitors keep the Bangla ones above. */
+export const MAP_TYPE_EN: Record<(typeof MAP_TYPES)[number], string> = {
+  marker: "A place",
+  route: "A route (from → to)",
+  area: "An area (circle)",
+  none: "Nothing on the map",
+};
+export const LOCATION_PRECISION_EN: Record<(typeof LOCATION_PRECISIONS)[number], string> = {
+  exact: "Exact",
+  approximate: "Approximate",
+  unknown: "Unknown",
+};
+export const EVIDENCE_EN: Record<(typeof EVIDENCE_LEVELS)[number], string> = {
+  documented: "Documented",
+  scholarly: "Scholars' interpretation",
+  tradition: "Tradition / folklore",
+  disputed: "Disputed",
+};
+
 const Lat = z.number().min(-90).max(90);
 const Lng = z.number().min(-180).max(180);
 
 /** A timeline step's editable fields, checked against its map type and how well its place is known. */
 export const StepFields = z
   .object({
-    title: z.string().trim().min(1, "ধাপের শিরোনাম দিন").max(200),
+    title: z.string().trim().min(1, "Enter the step title").max(200),
     narrative: optText(5000),
     date_label: optText(120),
     sort_minutes: z.number().int().min(-5256000).max(5256000).nullable().optional(),
@@ -246,7 +286,7 @@ export const StepFields = z
     from_place_name: optText(200),
     from_lat: Lat.nullable().optional(),
     from_lng: Lng.nullable().optional(),
-    radius_m: z.number().int().min(10, "ব্যাসার্ধ অন্তত ১০ মিটার").max(200000, "ব্যাসার্ধ ২০০ কিমির বেশি নয়").nullable().optional(),
+    radius_m: z.number().int().min(10, "Radius must be at least 10 m").max(200000, "Radius can't exceed 200 km").nullable().optional(),
     image: CoverImage.nullable().optional(),
     evidence: z.enum(EVIDENCE_LEVELS),
     verified: z.boolean().default(false),
@@ -269,16 +309,16 @@ export const StepFields = z
   .superRefine((s, ctx) => {
     const has = (v: unknown) => v !== null && v !== undefined;
     const need = (cond: boolean, path: string, message: string) => !cond && ctx.addIssue({ code: "custom", path: [path], message });
-    need(has(s.lat) === has(s.lng), "lat", "অক্ষাংশ ও দ্রাঘিমাংশ দুটোই লাগবে");
-    need(has(s.from_lat) === has(s.from_lng), "from_lat", "শুরুর স্থানের অক্ষাংশ ও দ্রাঘিমাংশ দুটোই লাগবে");
+    need(has(s.lat) === has(s.lng), "lat", "Both latitude and longitude are required");
+    need(has(s.from_lat) === has(s.from_lng), "from_lat", "The start place needs both latitude and longitude");
     const draws = s.map_type !== "none" && s.location_precision !== "unknown";
     if (draws) {
-      need(has(s.lat), "lat", s.map_type === "route" ? "গন্তব্য বেছে নিন" : s.map_type === "area" ? "এলাকার কেন্দ্র বেছে নিন" : "স্থান বেছে নিন");
-      if (s.map_type === "route") need(has(s.from_lat), "from_lat", "যাত্রার শুরুর স্থান বেছে নিন");
-      if (s.map_type === "area") need(has(s.radius_m), "radius_m", "এলাকার ব্যাসার্ধ দিন");
+      need(has(s.lat), "lat", s.map_type === "route" ? "Choose the destination" : s.map_type === "area" ? "Choose the area's center" : "Choose a place");
+      if (s.map_type === "route") need(has(s.from_lat), "from_lat", "Choose the route's start place");
+      if (s.map_type === "area") need(has(s.radius_m), "radius_m", "Enter the area's radius");
     }
     // Verified means checked against sources: at least one must back it.
-    need(!s.verified || s.source_ids.length > 0, "verified", "অন্তত একটি সূত্র যুক্ত না করে যাচাই করা চিহ্ন দেওয়া যায় না");
+    need(!s.verified || s.source_ids.length > 0, "verified", "Can't mark as verified without attaching at least one source");
   });
 export type StepFieldsT = z.infer<typeof StepFields>;
 
@@ -331,30 +371,29 @@ export type EventSource = SourceFieldsT & {
  */
 export function publishProblems(e: HistoricalEvent, sources: EventSource[], steps: TimelineStep[] = []): string[] {
   const problems: string[] = [];
-  if (!e.summary) problems.push("সংক্ষিপ্ত বিবরণ নেই");
-  if (!sources.length) problems.push("অন্তত একটি সূত্র লাগবে");
-  if (e.lat === null || e.lat === undefined) problems.push("মূল স্থানের স্থানাঙ্ক নেই");
+  if (!e.summary) problems.push("Summary is missing");
+  if (!sources.length) problems.push("At least one source is required");
+  if (e.lat === null || e.lat === undefined) problems.push("Main place has no coordinates");
   // Follows the map: in Bangladesh-only mode the event's place must be in Bangladesh.
-  else if (!inRegion(e.lat, e.lng!)) problems.push("মূল স্থান বর্তমান মানচিত্রের এলাকার (বাংলাদেশ) বাইরে");
+  else if (!inRegion(e.lat, e.lng!)) problems.push("Main place is outside the current map area (Bangladesh)");
 
   // Timeline: optional, but every step must be drawable (a place for those that show one).
   steps.forEach((s, i) => {
-    const n = `ধাপ ${bnNum(i + 1)}`;
+    const n = `Step ${i + 1}`;
     const draws = s.map_type !== "none" && s.location_precision !== "unknown";
     if (draws) {
       for (const [lat, lng, what] of [
-        [s.lat, s.lng, "স্থান"],
-        ...(s.map_type === "route" ? [[s.from_lat, s.from_lng, "শুরুর স্থান"] as const] : []),
+        [s.lat, s.lng, "place"],
+        ...(s.map_type === "route" ? [[s.from_lat, s.from_lng, "start place"] as const] : []),
       ] as const) {
-        if (lat === null || lat === undefined || lng === null || lng === undefined) problems.push(`${n}: ${what}ের স্থানাঙ্ক নেই`);
-        else if (!inRegion(lat, lng)) problems.push(`${n}: ${what} মানচিত্রের এলাকার (বাংলাদেশ) বাইরে`);
+        if (lat === null || lat === undefined || lng === null || lng === undefined) problems.push(`${n}: ${what} has no coordinates`);
+        else if (!inRegion(lat, lng)) problems.push(`${n}: ${what} is outside the map area (Bangladesh)`);
       }
     }
   });
   return problems;
 }
 
-const bnNum = (n: number) => new Intl.NumberFormat("bn-BD", { useGrouping: false }).format(n);
 
 /** Whether a status change is allowed (publishing also needs publishProblems to be empty). */
 export function canMove(from: EventStatus, to: EventStatus): boolean {

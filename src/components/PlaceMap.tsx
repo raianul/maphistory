@@ -8,7 +8,7 @@ import { pinTarget, type MapPin } from "@/lib/map-pin";
 import { BANGLADESH_ONLY, bangladeshShape, BD_MIN_ZOOM, inRegion, MAX_BOUNDS, outsideMask } from "@/lib/region";
 import { PIN_MIN_ZOOM, tileKey, tilesInView, type Tile } from "@/lib/tiles";
 import { bnDistance, haversine } from "@/lib/format";
-import { loadStyle, MIN_ZOOM } from "@/lib/map-style";
+import { initialMapLang, loadStyle, MIN_ZOOM, saveMapLang, setMapLang, type MapLang } from "@/lib/map-style";
 import { searchPlaces, type GeoResult } from "@/lib/geo-search";
 import { AiPanel, aiShareUrl, type AiTarget } from "./AiPanel";
 import { OnThisDayPanel, STEP_REQUEST } from "./OnThisDayPanel";
@@ -32,7 +32,7 @@ function toGeoJSON(pins: MapPin[]): GeoData {
     features: pins.map((p) => ({
       type: "Feature",
       geometry: { type: "Point", coordinates: [p.lng, p.lat] },
-      properties: { label: p.label, verified: p.verified, name: p.name, kind: p.kind ?? "" },
+      properties: { label: p.label, label_en: p.label_en ?? p.label, verified: p.verified, name: p.name, kind: p.kind ?? "" },
     })),
   };
 }
@@ -56,6 +56,9 @@ export function PlaceMap() {
   const [ready, setReady] = useState(false);
   /** The map is turned or tilted (shouldn't happen any more): show the "straighten" button. */
   const [turned, setTurned] = useState(false);
+  /** The language of the base map's place names (the content itself stays Bangla). */
+  const [mapLang, setMapLangState] = useState<MapLang>("bn");
+  const mapLangRef = useRef<MapLang>("bn");
   /** The map once loaded, for components drawn over it (refs can't be read while rendering). */
   const [mapObj, setMapObj] = useState<MLMap | null>(null);
   const [me, setMe] = useState<{ lat: number; lng: number } | null>(null);
@@ -317,7 +320,11 @@ export function PlaceMap() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const [maplibregl, style] = await Promise.all([import("maplibre-gl"), loadStyle()]);
+      // The visitor's saved choice, or their browser's language (English browsers get English names).
+      const lang = initialMapLang();
+      mapLangRef.current = lang;
+      setMapLangState(lang);
+      const [maplibregl, style] = await Promise.all([import("maplibre-gl"), loadStyle(lang)]);
       if (cancelled || !container.current) return;
       // Copied to public/ by the predev/prebuild scripts (MapLibre 6 ships its worker separately).
       maplibregl.setWorkerUrl("/maplibre-gl-worker.mjs");
@@ -404,7 +411,7 @@ export function PlaceMap() {
           // Names a step later than the dots, once there is room for them.
           minzoom: PIN_MIN_ZOOM + 1,
           layout: {
-            "text-field": ["get", "label"],
+            "text-field": ["get", mapLangRef.current === "en" ? "label_en" : "label"],
             "text-font": ["Noto Sans Bold"],
             "text-size": 14,
             "text-offset": [0, 1.3],
@@ -428,8 +435,12 @@ export function PlaceMap() {
         // Squares of pins: fetched for what is on screen, after every move (and once now).
         map.on("moveend", () => loadPinsRef.current());
         loadPinsRef.current();
+        // The AI gets the Bangla name (stories are written in Bangla); the hover hint shows the name
+        // in the map's language, as on the label.
         const labelOf = (props: Record<string, unknown> | undefined) =>
           (props?.["name:bn"] ?? props?.name) as string | undefined;
+        const shownLabel = (props: Record<string, unknown> | undefined) =>
+          (mapLangRef.current === "en" ? (props?.["name:en"] ?? props?.["name_en"] ?? props?.["name:latin"] ?? props?.name) : labelOf(props)) as string | undefined;
         // EXPERIMENT: any named place on the base map opens a live AI story:
         // places, points of interest, road names and rivers or lakes.
         const labelLayers = map
@@ -481,7 +492,7 @@ export function PlaceMap() {
         // Hover hint: the label's name and "গল্প পড়ুন", following the pointer (not over the blank-out).
         map.on("mousemove", labelLayers, (e: MapLayerMouseEvent) => {
           const tip = tooltip.current;
-          const name = labelOf(e.features?.[0]?.properties);
+          const name = shownLabel(e.features?.[0]?.properties);
           if (!tip) return;
           if (!name || !inRegion(e.lngLat.lat, e.lngLat.lng)) {
             tip.hidden = true;
@@ -818,6 +829,37 @@ export function PlaceMap() {
           onClose={closeOtd}
         />
       )}
+
+      {/* Map label language: বাংলা | EN (only the map's place names; browsers translate the rest). */}
+      <div
+        role="radiogroup"
+        aria-label="Map labels language"
+        className="absolute end-3 bottom-[7.5rem] z-10 flex rounded-full bg-card p-0.5 text-micro font-semibold shadow-float md:end-4 md:bottom-28"
+      >
+        {(["bn", "en"] as const).map((l) => (
+          <button
+            key={l}
+            type="button"
+            role="radio"
+            aria-checked={mapLang === l}
+            onClick={() => {
+              mapLangRef.current = l;
+              setMapLangState(l);
+              saveMapLang(l);
+              const map = mapRef.current;
+              // Our own layers (pins, events, labels we draw) keep their names.
+              if (map) {
+                setMapLang(map, l, (id) => EVENT_LAYERS.includes(id) || /^(pins|pin-labels|ai-target|outside)/.test(id));
+                // Our story pins: their English name in EN (the Bangla one when a story has none).
+                if (map.getLayer("pin-labels")) map.setLayoutProperty("pin-labels", "text-field", ["get", l === "en" ? "label_en" : "label"]);
+              }
+            }}
+            className={`h-7 min-w-9 rounded-full px-2 transition-colors ${mapLang === l ? "bg-accent text-on-accent" : "text-ink-2 hover:text-ink"}`}
+          >
+            {l === "bn" ? "বাংলা" : "EN"}
+          </button>
+        ))}
+      </div>
 
       {/* Turned or tilted map: one tap puts it back north-up and flat. */}
       {turned && (

@@ -36,7 +36,7 @@ export async function POST(req: Request, { params }: Ctx) {
   const { id, runId } = await params;
   if (!isId(id) || !isId(runId)) return notFound();
   const parsed = DecisionBody.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) return Response.json({ error: "সিদ্ধান্ত ঠিক নেই" }, { status: 400 });
+  if (!parsed.success) return Response.json({ error: "Invalid decision" }, { status: 400 });
   try {
     await decide(id, runId, parsed.data as Decision, admin.userId);
     const [bundle, run] = await Promise.all([getEvent(id), getRun(id, runId)]);
@@ -44,6 +44,6 @@ export async function POST(req: Request, { params }: Ctx) {
   } catch (e) {
     if (e instanceof AcceptError) return Response.json({ error: e.message }, { status: e.status });
     console.error("research decision:", e);
-    return Response.json({ error: "সিদ্ধান্তটি সংরক্ষণ করা যায়নি" }, { status: 500 });
+    return Response.json({ error: "Could not save the decision" }, { status: 500 });
   }
 }

@@ -1,16 +1,15 @@
-import { bnYear } from "@/lib/format";
-import { STATUS_BN, type EventStatus, type HistoricalEvent } from "@/lib/events/schema";
+import { STATUS_EN, type EventStatus, type HistoricalEvent } from "@/lib/events/schema";
 
-const MONTHS_BN = ["জানুয়ারি", "ফেব্রুয়ারি", "মার্চ", "এপ্রিল", "মে", "জুন", "জুলাই", "আগস্ট", "সেপ্টেম্বর", "অক্টোবর", "নভেম্বর", "ডিসেম্বর"];
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
-/** An event's date as people say it, at the precision it is known. */
+/** An event's date for the admin (English), at the precision it is known: "16 November 1971", "March 1971", "500 BC". */
 export function dateBn(e: Pick<HistoricalEvent, "date_precision" | "event_year" | "event_month" | "event_day" | "date_label">): string {
-  if (e.date_precision === "approximate") return e.date_label ?? "আনুমানিক";
-  const y = e.event_year !== null && e.event_year !== undefined ? (e.event_year < 0 ? `খ্রিস্টপূর্ব ${bnYear(-e.event_year)}` : bnYear(e.event_year)) : "";
+  if (e.date_precision === "approximate") return e.date_label ?? "Approximate";
+  const y = e.event_year !== null && e.event_year !== undefined ? (e.event_year < 0 ? `${-e.event_year} BC` : String(e.event_year)) : "";
   if (e.date_precision === "year") return y;
-  const m = e.event_month ? MONTHS_BN[e.event_month - 1] : "";
-  if (e.date_precision === "month") return `${m} ${y}`;
-  return `${e.event_day ? bnYear(e.event_day) : ""} ${m} ${y}`.trim();
+  const m = e.event_month ? MONTHS[e.event_month - 1] : "";
+  if (e.date_precision === "month") return `${m} ${y}`.trim();
+  return `${e.event_day ?? ""} ${m} ${y}`.trim();
 }
 
 const STATUS_STYLE: Record<EventStatus, string> = {
@@ -22,5 +21,5 @@ const STATUS_STYLE: Record<EventStatus, string> = {
 };
 
 export function StatusBadge({ status }: { status: EventStatus }) {
-  return <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-micro font-semibold ${STATUS_STYLE[status]}`}>{STATUS_BN[status]}</span>;
+  return <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-micro font-semibold ${STATUS_STYLE[status]}`}>{STATUS_EN[status]}</span>;
 }

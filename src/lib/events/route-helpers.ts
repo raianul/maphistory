@@ -7,7 +7,7 @@ import { getEvent, withProblems, type EventBundle } from "./db";
 import { publishProblems } from "./schema";
 
 export const isId = (id: string) => /^[0-9a-f-]{36}$/i.test(id);
-export const notFound = () => Response.json({ error: "পাওয়া যায়নি" }, { status: 404 });
+export const notFound = () => Response.json({ error: "Not found" }, { status: 404 });
 export const badRequest = (error: string, issues?: unknown) => Response.json({ error, issues }, { status: 400 });
 
 /**
@@ -27,7 +27,7 @@ export async function applyChange(
     if (current.event.status === "published" && check) {
       const after = check(current);
       const problems = publishProblems(after.event, after.sources, after.steps);
-      if (problems.length) return Response.json({ error: "প্রকাশিত ঘটনায় এই পরিবর্তন করা যায় না; আগে অপ্রকাশিত করুন", problems }, { status: 409 });
+      if (problems.length) return Response.json({ error: "This change isn't allowed on a published event; unpublish it first", problems }, { status: 409 });
     }
     await change(current);
     if (current.event.status === "published") invalidatePublicEvents();

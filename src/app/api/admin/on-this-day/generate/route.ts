@@ -16,7 +16,7 @@ const Body = z.object({
     summary_bn: z.string().trim().max(800).default(""),
     place: z.string().trim().max(200).default(""),
     category: z.enum(CATEGORIES).default("other"),
-    source_url: z.string().trim().max(2000).regex(/^https?:\/\/[^\s]+$/i, "লিংক http(s) হতে হবে"),
+    source_url: z.string().trim().max(2000).regex(/^https?:\/\/[^\s]+$/i, "Link must start with http(s)"),
     source_quote: z.string().trim().max(1200).default(""),
     check: z.object({ confirmed: z.boolean(), reason: z.string().max(500), page_title: z.string().max(300).nullable() }).optional(),
   }),
@@ -32,7 +32,7 @@ export async function POST(req: Request) {
   const admin = await requireAdmin(req);
   if (admin instanceof Response) return admin;
   const parsed = Body.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) return Response.json({ error: "তথ্য ঠিক নেই" }, { status: 400 });
+  if (!parsed.success) return Response.json({ error: "Invalid data" }, { status: 400 });
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
@@ -49,7 +49,7 @@ export async function POST(req: Request) {
       } catch (e) {
         console.error("on-this-day generate:", e);
         const m = (e as Error).message;
-        send({ type: "error", message: /মাইগ্রেশন|স্লাগ/.test(m) ? m : "খসড়া তৈরি করা যায়নি। একটু পরে আবার চেষ্টা করুন।" });
+        send({ type: "error", message: /migration|slug/i.test(m) ? m : "Could not create the draft. Please try again shortly." });
       } finally {
         controller.close();
       }

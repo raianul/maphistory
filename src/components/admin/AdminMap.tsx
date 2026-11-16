@@ -5,12 +5,12 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AiStoryDataT } from "@/lib/ai/types";
-import { bnYear } from "@/lib/format";
 import { loadStyle, MIN_ZOOM, lockFlat } from "@/lib/map-style";
 import { adminFetch, browserSupabase } from "@/lib/supabase-browser";
 import { aiShareUrl } from "../AiPanel";
 import { AiStory } from "../AiStory";
 import { SidePanel } from "../SidePanel";
+import { ImagePicker } from "./events/ImagePicker";
 import { StoryEditor } from "./StoryEditor";
 import { VideoManager } from "./VideoManager";
 import type { PlaceVideo } from "@/lib/video";
@@ -44,9 +44,9 @@ type Detail = Row & {
 };
 
 const STATUS: Record<Status, { bn: string; color: string }> = {
-  ai: { bn: "AI · যাচাই হয়নি", color: "#8a8178" },
-  verified: { bn: "✓ যাচাই করা", color: "#b8860b" },
-  hidden: { bn: "লুকানো", color: "#cfc6b8" },
+  ai: { bn: "AI · not verified", color: "#8a8178" },
+  verified: { bn: "✓ Verified", color: "#b8860b" },
+  hidden: { bn: "Hidden", color: "#cfc6b8" },
 };
 const REPORTED = "#c0392b";
 /** Shown on the public map (show_on_map): blue, whatever its status; grey/gold pins are off the public map. */
@@ -108,7 +108,7 @@ export function AdminMap({ email }: { email?: string }) {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const [maplibregl, style] = await Promise.all([import("maplibre-gl"), loadStyle()]);
+      const [maplibregl, style] = await Promise.all([import("maplibre-gl"), loadStyle("en")]); // English interface: English place names
       if (cancelled || !container.current) return;
       maplibregl.setWorkerUrl("/maplibre-gl-worker.mjs");
       const map = new maplibregl.Map({
@@ -204,30 +204,30 @@ export function AdminMap({ email }: { email?: string }) {
         <div className="border-b border-line p-3">
           <div className="flex items-center justify-between text-sm">
             <span className="flex items-center gap-3">
-              <span className="font-bold">অ্যাডমিন</span>
+              <span className="font-bold">Admin</span>
               <Link href="/admin/events" className="font-semibold text-accent hover:underline">
-                ঐতিহাসিক ঘটনা →
+                Historical events →
               </Link>
             </span>
             <button type="button" onClick={() => browserSupabase().auth.signOut()} className="text-muted underline" title={email}>
-              লগআউট
+              Log out
             </button>
           </div>
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="তালিকায় খুঁজুন…"
+            placeholder="Search the list…"
             className="mt-2 w-full rounded-lg border border-line bg-card px-2.5 py-1.5 text-sm outline-none focus:border-accent"
           />
           <div className="mt-2 flex flex-wrap gap-1 text-xs">
             {(
               [
-                ["all", "সব"],
+                ["all", "All"],
                 ["ai", "AI"],
-                ["verified", "যাচাই করা"],
-                ["on_map", "ম্যাপে"],
-                ["reported", "রিপোর্ট"],
-                ["hidden", "লুকানো"],
+                ["verified", "Verified"],
+                ["on_map", "On map"],
+                ["reported", "Reported"],
+                ["hidden", "Hidden"],
               ] as [Filter, string][]
             ).map(([f, label]) => (
               <button
@@ -236,7 +236,7 @@ export function AdminMap({ email }: { email?: string }) {
                 onClick={() => setFilter(f)}
                 className={`rounded-full border px-2 py-0.5 ${filter === f ? "border-accent bg-accent text-white" : "border-line bg-card"}`}
               >
-                {label} {bnYear(counts[f])}
+                {label} {counts[f]}
               </button>
             ))}
           </div>
@@ -245,20 +245,20 @@ export function AdminMap({ email }: { email?: string }) {
             onChange={(e) => setSort(e.target.value as typeof sort)}
             className="mt-2 w-full rounded-lg border border-line bg-card px-2 py-1 text-xs"
           >
-            <option value="views">সবচেয়ে বেশি খোলা আগে</option>
-            <option value="reports">সবচেয়ে বেশি রিপোর্ট আগে</option>
-            <option value="recent">সাম্প্রতিক পরিবর্তন আগে</option>
+            <option value="views">Most viewed first</option>
+            <option value="reports">Most reported first</option>
+            <option value="recent">Recently changed first</option>
           </select>
           {/* What the pin colours mean. */}
           <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
             <span className="flex items-center gap-1">
-              <span className="size-2.5 rounded-full" style={{ background: ON_MAP }} aria-hidden /> পাবলিক ম্যাপে
+              <span className="size-2.5 rounded-full" style={{ background: ON_MAP }} aria-hidden /> On the public map
             </span>
             <span className="flex items-center gap-1">
-              <span className="size-2.5 rounded-full" style={{ background: STATUS.ai.color }} aria-hidden /> ম্যাপে নেই
+              <span className="size-2.5 rounded-full" style={{ background: STATUS.ai.color }} aria-hidden /> Not on the map
             </span>
             <span className="flex items-center gap-1">
-              <span className="size-2.5 rounded-full" style={{ background: STATUS.verified.color }} aria-hidden /> যাচাই করা, ম্যাপে নেই
+              <span className="size-2.5 rounded-full" style={{ background: STATUS.verified.color }} aria-hidden /> Verified, not on the map
             </span>
           </p>
         </div>
@@ -274,21 +274,21 @@ export function AdminMap({ email }: { email?: string }) {
                 <span
                   className="size-2.5 shrink-0 rounded-full"
                   style={{ background: pinColor(r) }}
-                  title={r.show_on_map && r.status !== "hidden" ? "পাবলিক ম্যাপে দেখানো হচ্ছে" : "পাবলিক ম্যাপে নেই"}
+                  title={r.show_on_map && r.status !== "hidden" ? "Shown on the public map" : "Not on the public map"}
                 />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-semibold">{r.name_bn}</span>
                   <span className="block truncate text-xs text-muted">{r.name_en}</span>
                 </span>
                 <span className="shrink-0 text-end text-xs text-muted">
-                  👁 {bnYear(r.views)}
-                  {r.reports > 0 && <span className="block font-semibold text-red-700">⚑ {bnYear(r.reports)}</span>}
+                  👁 {r.views}
+                  {r.reports > 0 && <span className="block font-semibold text-red-700">⚑ {r.reports}</span>}
                 </span>
               </button>
             </li>
           ))}
           {rows.length === 0 && !error && (
-            <li className="p-3 text-sm text-muted">এখনো কোনো গল্প সংরক্ষিত হয়নি। মূল মানচিত্রে কোনো জায়গায় ক্লিক করলেই এখানে দেখা যাবে।</li>
+            <li className="p-3 text-sm text-muted">No stories saved yet. Click any place on the main map and it will show up here.</li>
           )}
         </ul>
         <div className="border-t border-line p-3 text-xs text-muted">
@@ -298,20 +298,20 @@ export function AdminMap({ email }: { email?: string }) {
           </span>
           <span className="me-3">
             <span className="me-1 inline-block size-2 rounded-full" style={{ background: STATUS.verified.color }} />
-            যাচাই করা
+            Verified
           </span>
           <span>
             <span className="me-1 inline-block size-2 rounded-full border-2" style={{ borderColor: REPORTED }} />
-            রিপোর্ট
+            Reported
           </span>
-          <p className="mt-1">বড় পিন = বেশি খোলা হয়েছে</p>
+          <p className="mt-1">Bigger pin = opened more often</p>
         </div>
       </aside>
 
       {/* Map */}
       <div className="relative flex-1">
         <div className="absolute inset-0">
-          <div ref={container} className="h-full w-full bg-[var(--map-ground)]" aria-label="সংরক্ষিত গল্পের মানচিত্র" />
+          <div ref={container} className="h-full w-full bg-[var(--map-ground)]" aria-label="Map of saved stories" />
         </div>
       </div>
 
@@ -362,9 +362,9 @@ function StoryPanel({ id, onClose, onChanged }: { id: string; onClose: () => voi
   const button = "rounded-full border border-line bg-card px-3 py-1.5 text-sm font-semibold hover:border-accent disabled:opacity-50";
 
   return (
-    <SidePanel title={detail?.name_bn ?? "গল্প"} onClose={onClose}>
+    <SidePanel title={detail?.name_bn ?? "Story"} onClose={onClose}>
       {!detail ? (
-        <p className="py-8 text-muted">{error ?? "লোড হচ্ছে…"}</p>
+        <p className="py-8 text-muted">{error ?? "Loading…"}</p>
       ) : (
         <>
           {/* Admin tools */}
@@ -373,15 +373,15 @@ function StoryPanel({ id, onClose, onChanged }: { id: string; onClose: () => voi
               <span className="rounded-full px-2 py-0.5 font-semibold text-white" style={{ background: STATUS[detail.status].color }}>
                 {STATUS[detail.status].bn}
               </span>
-              <span className="text-muted">👁 {bnYear(detail.views)} বার খোলা</span>
-              {detail.reports > 0 && <span className="font-semibold text-red-700">⚑ {bnYear(detail.reports)}টি রিপোর্ট</span>}
+              <span className="text-muted">👁 {detail.views} views</span>
+              {detail.reports > 0 && <span className="font-semibold text-red-700">⚑ {detail.reports} {detail.reports === 1 ? "report" : "reports"}</span>}
               <a
                 href={aiShareUrl({ name: detail.name_bn, lat: detail.lat, lng: detail.lng, kind: detail.kind ?? undefined })}
                 target="_blank"
                 rel="noreferrer"
                 className="ms-auto text-accent underline"
               >
-                সাইটে দেখুন ↗
+                View on site ↗
               </a>
             </div>
             <div className="mt-2 flex flex-wrap gap-1.5">
@@ -392,11 +392,11 @@ function StoryPanel({ id, onClose, onChanged }: { id: string; onClose: () => voi
                   onClick={() => act("verify", "verify")}
                   className="rounded-full bg-emerald-700 px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
                 >
-                  {busy === "verify" ? "…" : "✓ যাচাই করুন"}
+                  {busy === "verify" ? "…" : "✓ Verify"}
                 </button>
               ) : (
                 <button type="button" disabled={!!busy} onClick={() => act("unverify", "unverify")} className={button}>
-                  যাচাই তুলে নিন
+                  Unverify
                 </button>
               )}
               {/* A pin on the public map: a simple on/off switch. */}
@@ -405,7 +405,7 @@ function StoryPanel({ id, onClose, onChanged }: { id: string; onClose: () => voi
                 role="switch"
                 aria-checked={!!detail.show_on_map}
                 disabled={!!busy || detail.status === "hidden"}
-                title={detail.status === "hidden" ? "লুকানো গল্প ম্যাপে দেখানো যায় না" : undefined}
+                title={detail.status === "hidden" ? "Hidden stories can't be shown on the map" : undefined}
                 onClick={() => act(detail.show_on_map ? "hide_from_map" : "show_on_map", "map")}
                 className={`${button} flex items-center gap-2 ${detail.show_on_map ? "border-accent bg-accent-soft text-accent" : ""}`}
               >
@@ -415,14 +415,14 @@ function StoryPanel({ id, onClose, onChanged }: { id: string; onClose: () => voi
                 >
                   <span className={`absolute top-0.5 size-3 rounded-full bg-white transition-all ${detail.show_on_map ? "start-3.5" : "start-0.5"}`} />
                 </span>
-                {busy === "map" ? "…" : "ম্যাপে পিন"}
+                {busy === "map" ? "…" : "Pin on map"}
               </button>
               <button type="button" disabled={!!busy} onClick={() => setEditing((e) => !e)} className={button}>
-                {editing ? "সম্পাদনা বন্ধ" : "সম্পাদনা"}
+                {editing ? "Close editor" : "Edit"}
               </button>
               {!confirmRegen ? (
                 <button type="button" disabled={!!busy} onClick={() => setConfirmRegen(true)} className={button}>
-                  আবার লিখুন
+                  Rewrite
                 </button>
               ) : (
                 <button
@@ -431,16 +431,16 @@ function StoryPanel({ id, onClose, onChanged }: { id: string; onClose: () => voi
                   onClick={() => call("regen", `/api/admin/stories/${id}/regenerate`, { method: "POST" })}
                   className="rounded-full bg-amber-600 px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-60"
                 >
-                  {busy === "regen" ? "AI লিখছে… (১০–২০ সে.)" : "নিশ্চিত? পুরনো গল্প মুছে যাবে"}
+                  {busy === "regen" ? "AI is writing… (10–20 s)" : "Sure? The old story will be deleted"}
                 </button>
               )}
               {detail.status !== "hidden" ? (
                 <button type="button" disabled={!!busy} onClick={() => act("hide", "hide")} className={button}>
-                  লুকান
+                  Hide
                 </button>
               ) : (
                 <button type="button" disabled={!!busy} onClick={() => act("unhide", "unhide")} className={button}>
-                  আবার দেখান
+                  Unhide
                 </button>
               )}
             </div>
@@ -450,19 +450,33 @@ function StoryPanel({ id, onClose, onChanged }: { id: string; onClose: () => voi
           {/* Visitors' reports */}
           {detail.report_list.length > 0 && (
             <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-3 text-sm">
-              <p className="font-semibold text-red-800">দর্শকদের রিপোর্ট</p>
+              <p className="font-semibold text-red-800">Visitor reports</p>
               <ul className="mt-1 grid gap-1.5">
                 {detail.report_list.map((r) => (
                   <li key={r.id} className="text-red-950">
-                    “{r.message}” <span className="text-xs text-red-700">· {new Date(r.created_at).toLocaleDateString("bn-BD")}</span>
+                    “{r.message}” <span className="text-xs text-red-700">· {new Date(r.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</span>
                   </li>
                 ))}
               </ul>
               <button type="button" disabled={!!busy} onClick={() => act("clear_reports", "clear")} className="mt-2 text-xs font-semibold text-red-800 underline">
-                ঠিক করেছি, রিপোর্টগুলো সরান
+                Fixed, clear reports
               </button>
             </div>
           )}
+
+          {/* The story's picture: change it (Wikimedia Commons, licence checked) or remove it. */}
+          <div className="rounded-xl border border-line bg-card p-3">
+            <p className="text-sm font-semibold">Image</p>
+            <p className="mt-0.5 text-xs text-muted">Search Wikimedia Commons or browse photos taken nearby. Only images with a usable licence can be picked.</p>
+            <div className="mt-2">
+              <ImagePicker
+                value={detail.image}
+                near={{ lat: detail.lat, lng: detail.lng }}
+                onChange={(image) => call("image", `/api/admin/stories/${id}`, { method: "PATCH", body: JSON.stringify({ image }) })}
+              />
+            </div>
+            {busy === "image" && <p className="mt-1 text-xs text-muted">Saving…</p>}
+          </div>
 
           <VideoManager storyId={id} videos={detail.videos ?? []} onChange={(videos) => setDetail({ ...detail, videos })} />
 

@@ -72,7 +72,7 @@ Sort by year, oldest first. Titles and summaries in clear modern Bangla.`;
 /** Calls Gemini with Google Search (main model, then the lighter one on overload). Returns raw text. */
 export async function askGemini(prompt: string): Promise<string> {
   const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) throw new Error("GEMINI_API_KEY নেই");
+  if (!apiKey) throw new Error("GEMINI_API_KEY is not set");
   const ai = new GoogleGenAI({ apiKey });
   const run = (model: string) => ai.models.generateContent({ model, contents: prompt, config: { tools: [{ googleSearch: {} }] } });
   try {
@@ -141,15 +141,15 @@ export async function checkCandidate(
   // Wikipedia pages are read through its API (plain text, follows redirects); others SSRF-safely.
   const wiki = await wikipediaFromUrl(c.source_url, deps.fetch, 400_000).catch(() => null); // whole article: the date may be far down
   const page = wiki ? { ok: true as const, title: wiki.title, text: wiki.excerpt ?? "" } : await safeFetch(c.source_url, deps);
-  if (!page.ok) return { confirmed: false, reason: `সূত্রের পাতা খোলা যায়নি: ${page.reason}`, page_title: null };
+  if (!page.ok) return { confirmed: false, reason: `Could not open the source page: ${page.reason}`, page_title: null };
   const quoteOk = c.source_quote.length >= 12 && normalise(page.text.replace(/\[\s*\d+\s*\]/g, " ")).includes(normalise(c.source_quote));
   if (pageStatesDate(page.text, day, month, c.year)) {
-    return { confirmed: true, reason: quoteOk ? "পাতায় উদ্ধৃতি ও তারিখ দুটোই আছে" : "পাতায় তারিখ ও সাল আছে (উদ্ধৃতি হুবহু মেলেনি)", page_title: page.title };
+    return { confirmed: true, reason: quoteOk ? "Page has both the quote and the date" : "Page has the date and year (quote not an exact match)", page_title: page.title };
   }
   const dayOnly = datePatterns(day, month).some((re) => re.test(normalise(page.text)));
   return {
     confirmed: false,
-    reason: dayOnly ? "পাতায় দিন-মাস আছে, কিন্তু সালের পাশে নয়" : "পাতাটি খোলা গেছে, কিন্তু সেখানে এই দিন-মাস পাওয়া যায়নি",
+    reason: dayOnly ? "Page has the day and month, but not next to the year" : "Page opened, but this day and month weren't found on it",
     page_title: page.title,
   };
 }
@@ -166,7 +166,7 @@ export async function discoverEvents(
 ): Promise<{ candidates: Candidate[]; dropped: number }> {
   const text = await (deps.ask ?? askGemini)(discoverPrompt(day, month, country));
   const parsed = RawAnswer.safeParse(extractJson(text));
-  if (!parsed.success) throw new Error("AI-এর উত্তর পড়া যায়নি");
+  if (!parsed.success) throw new Error("Could not read the AI's answer");
   let dropped = 0;
   const seen = new Set<string>();
   const raw: Omit<Candidate, "check">[] = [];

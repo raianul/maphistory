@@ -61,6 +61,6 @@ describe("collectMaterial", () => {
   it("carries on when Wikipedia is down, and says nothing could be retrieved", async () => {
     const m = await collectMaterial({ title: "x" }, { fetch: fakeNet({ wikiDown: true }), resolve, wikidata });
     expect(m.sources).toHaveLength(0);
-    expect(m.problems.join(" ")).toMatch(/কোনো সূত্র থেকেই/);
+    expect(m.problems.join(" ")).toMatch(/from any source/);
   });
 });

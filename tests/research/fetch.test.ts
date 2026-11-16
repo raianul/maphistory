@@ -39,7 +39,7 @@ describe("safeFetch", () => {
     const f = (async () => new Response("", { status: 302, headers: { location: "http://169.254.169.254/latest/meta-data" } })) as unknown as typeof fetch;
     const r = await safeFetch("https://example.org/r", { fetch: f, resolve: publicDns });
     expect(r.ok).toBe(false);
-    expect(!r.ok && r.reason).toMatch(/রিডাইরেক্ট বাতিল/);
+    expect(!r.ok && r.reason).toMatch(/Redirect blocked/);
   });
   it("stops after too many redirects", async () => {
     const f = (async (u: string) => new Response("", { status: 302, headers: { location: `${u}x` } })) as unknown as typeof fetch;
@@ -48,14 +48,14 @@ describe("safeFetch", () => {
   it("reports HTTP errors, non-text types, oversize bodies and near-empty pages without throwing", async () => {
     expect(await safeFetch("https://example.org/", { fetch: html(LONG, 404), resolve: publicDns })).toMatchObject({ ok: false, reason: expect.stringMatching(/404/) });
     expect(await safeFetch("https://example.org/", { fetch: html(LONG, 200, { "content-type": "application/pdf" }), resolve: publicDns })).toMatchObject({ ok: false });
-    expect(await safeFetch("https://example.org/", { fetch: html(LONG, 200, { "content-length": "99999999" }), resolve: publicDns })).toMatchObject({ ok: false, reason: "পাতাটি খুব বড়" });
+    expect(await safeFetch("https://example.org/", { fetch: html(LONG, 200, { "content-length": "99999999" }), resolve: publicDns })).toMatchObject({ ok: false, reason: "Page is too large" });
     expect(await safeFetch("https://example.org/", { fetch: html("<p>hi</p>"), resolve: publicDns })).toMatchObject({ ok: false });
   });
   it("turns a network failure into a reason, not an exception", async () => {
     const f = (async () => {
       throw new Error("ECONNRESET");
     }) as unknown as typeof fetch;
-    expect(await safeFetch("https://example.org/", { fetch: f, resolve: publicDns })).toMatchObject({ ok: false, reason: "পাতাটি আনা যায়নি" });
+    expect(await safeFetch("https://example.org/", { fetch: f, resolve: publicDns })).toMatchObject({ ok: false, reason: "Could not fetch the page" });
   });
 });
 

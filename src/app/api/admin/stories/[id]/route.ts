@@ -1,4 +1,5 @@
 import { AiStoryData } from "@/lib/ai/place-story";
+import { CoverImage } from "@/lib/events/schema";
 import { requireAdmin } from "@/lib/admin-auth";
 import { clearReports, getStoryForAdmin, uniqueSlug, updateStory } from "@/lib/db";
 
@@ -7,26 +8,32 @@ export async function GET(req: Request, { params }: RouteContext<"/api/admin/sto
   const admin = await requireAdmin(req);
   if (admin instanceof Response) return admin;
   const story = await getStoryForAdmin((await params).id);
-  return story ? Response.json(story) : Response.json({ error: "পাওয়া যায়নি" }, { status: 404 });
+  return story ? Response.json(story) : Response.json({ error: "Not found" }, { status: 404 });
 }
 
 /**
  * Change a story: { action: "verify" | "unverify" | "hide" | "unhide" | "clear_reports" |
- * "show_on_map" | "hide_from_map" } or { story: <edited story JSON> }.
+ * "show_on_map" | "hide_from_map" }, { story: <edited story JSON> }, or { image: <Commons image> | null }
+ * (a Wikimedia Commons picture chosen in the admin's picker, licence already checked; null removes it).
  */
 export async function PATCH(req: Request, { params }: RouteContext<"/api/admin/stories/[id]">) {
   const admin = await requireAdmin(req);
   if (admin instanceof Response) return admin;
   const { id } = await params;
-  const body = (await req.json().catch(() => null)) as { action?: string; story?: unknown } | null;
+  const body = (await req.json().catch(() => null)) as { action?: string; story?: unknown; image?: unknown } | null;
   const current = await getStoryForAdmin(id);
-  if (!current) return Response.json({ error: "পাওয়া যায়নি" }, { status: 404 });
+  if (!current) return Response.json({ error: "Not found" }, { status: 404 });
 
   try {
-    if (body?.story !== undefined) {
+    if (body && "image" in body) {
+      // Only Commons images, with their credit (the same rule as event covers).
+      const parsed = body.image === null ? null : CoverImage.safeParse(body.image);
+      if (parsed && !parsed.success) return Response.json({ error: parsed.error.issues[0]?.message ?? "Invalid image data" }, { status: 400 });
+      await updateStory(id, { image: parsed ? parsed.data : null });
+    } else if (body?.story !== undefined) {
       const parsed = AiStoryData.safeParse(body.story);
       if (!parsed.success) {
-        return Response.json({ error: "গল্পের গঠন ঠিক নেই: " + parsed.error.issues.map((i) => i.path.join(".")).join(", ") }, { status: 400 });
+        return Response.json({ error: "Invalid story structure: " + parsed.error.issues.map((i) => i.path.join(".")).join(", ") }, { status: 400 });
       }
       await updateStory(id, { story: parsed.data, name_en: parsed.data.name_en, country: parsed.data.country ?? null });
     } else {

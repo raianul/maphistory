@@ -56,7 +56,7 @@ export function EventPreview({ id }: { id: string }) {
     else setError({ message: (await r.json().catch(() => ({}))).error ?? `HTTP ${r.status}` });
   }
 
-  if (!data) return <p className="p-8 text-muted">{error?.message ?? "লোড হচ্ছে…"}</p>;
+  if (!data) return <p className="p-8 text-muted">{error?.message ?? "Loading…"}</p>;
   const { event, sources, steps, problems } = data;
   const published = event.status === "published";
 
@@ -67,10 +67,10 @@ export function EventPreview({ id }: { id: string }) {
           href={event.event_month && event.event_day ? `/admin/events/today?day=${event.event_day}&month=${event.event_month}&country=${event.country ?? "BD"}` : "/admin/events/today"}
           className="text-muted hover:text-ink"
         >
-          ← আজকের দিনে
+          ← On this day
         </Link>
         <Link href="/admin/events" className="text-muted hover:text-ink">
-          সব ঘটনা
+          All events
         </Link>
       </div>
 
@@ -89,45 +89,45 @@ export function EventPreview({ id }: { id: string }) {
       <div className="sticky top-0 z-10 mt-4 flex flex-wrap items-center gap-2 rounded-2xl bg-card/95 p-3 shadow-float backdrop-blur">
         {published ? (
           <>
-            <span className="text-meta font-semibold text-success">✓ প্রকাশিত: দর্শকেরা দেখছেন</span>
+            <span className="text-meta font-semibold text-success">✓ Published: visitors can see it</span>
             <Link href={`/?event=${event.slug}`} target="_blank" className={`${btn} ms-auto grid place-items-center bg-hover text-ink-2 hover:bg-pressed`}>
-              সাইটে দেখুন ↗
+              View on site ↗
             </Link>
             <button type="button" disabled={busy} onClick={() => move("review")} className={`${btn} bg-warning-soft text-warning hover:bg-warning-soft-hover`}>
-              অপ্রকাশিত করুন
+              Unpublish
             </button>
           </>
         ) : (
           <>
             <button type="button" disabled={busy || problems.length > 0} onClick={() => move("published")} className={`${btn} bg-accent text-on-accent hover:bg-accent-hover`}>
-              {busy ? "…" : "যাচাই করে প্রকাশ করুন"}
+              {busy ? "…" : "Verify and publish"}
             </button>
-            <span className="text-micro text-muted">প্রকাশ মানে আপনি পড়ে দেখে নিশ্চিত করেছেন।</span>
+            <span className="text-micro text-muted">Publishing means you have read and checked it.</span>
           </>
         )}
         <Link href={`/admin/events/${id}`} className={`${btn} grid place-items-center bg-accent-soft text-accent hover:bg-accent-soft-hover ${published ? "" : "ms-auto"}`}>
-          সম্পাদনা
+          Edit
         </Link>
         {!published &&
           (confirmDelete ? (
             <span className="flex gap-1">
               <button type="button" onClick={remove} className={`${btn} bg-danger text-white`}>
-                মুছুন
+                Delete
               </button>
               <button type="button" onClick={() => setConfirmDelete(false)} className={`${btn} text-muted`}>
-                বাতিল
+                Cancel
               </button>
             </span>
           ) : (
             <button type="button" onClick={() => setConfirmDelete(true)} className={`${btn} text-danger hover:bg-hover`}>
-              বাদ দিন
+              Discard
             </button>
           ))}
       </div>
 
       {!published && problems.length > 0 && (
         <div className="mt-3 rounded-control bg-warning-soft px-3 py-2 text-meta text-warning">
-          <p className="font-semibold">প্রকাশের আগে ঠিক করুন (সম্পাদনায় গিয়ে):</p>
+          <p className="font-semibold">Fix before publishing (in Edit):</p>
           {problems.map((p) => (
             <p key={p}>• {p}</p>
           ))}
@@ -135,7 +135,7 @@ export function EventPreview({ id }: { id: string }) {
       )}
       {!published && warnings.length > 0 && (
         <div className="mt-3 rounded-control border border-dashed border-warning/50 px-3 py-2 text-meta text-warning">
-          <p className="font-semibold">AI খসড়া: দেখে নিন</p>
+          <p className="font-semibold">AI draft: please check</p>
           {warnings.map((w) => (
             <p key={w}>• {w}</p>
           ))}
@@ -152,10 +152,10 @@ export function EventPreview({ id }: { id: string }) {
         <section className="rounded-2xl bg-card p-4 shadow-float md:p-5">
           {event.summary && <p className="text-lead font-semibold leading-snug">{event.summary}</p>}
           {event.narrative && <p className="mt-3 text-body whitespace-pre-line text-ink-2">{event.narrative}</p>}
-          {!event.summary && !event.narrative && <p className="text-meta text-muted">এখনো কোনো লেখা নেই।</p>}
+          {!event.summary && !event.narrative && <p className="text-meta text-muted">No text yet.</p>}
         </section>
         <section className="rounded-2xl bg-card p-4 shadow-float md:p-5">
-          <h2 className="text-meta font-semibold text-ink-2">সূত্র ({sources.length.toLocaleString("bn-BD")})</h2>
+          <h2 className="text-meta font-semibold text-ink-2">Sources ({sources.length})</h2>
           <ul className="mt-2 grid gap-1.5 text-meta">
             {sources.map((s) => (
               <li key={s.id}>
@@ -169,14 +169,14 @@ export function EventPreview({ id }: { id: string }) {
                 {s.notes && <span className="block text-micro text-muted">{s.notes}</span>}
               </li>
             ))}
-            {!sources.length && <li className="text-muted">কোনো সূত্র নেই</li>}
+            {!sources.length && <li className="text-muted">No sources</li>}
           </ul>
         </section>
       </div>
 
-      <section className="mt-5 rounded-2xl bg-card p-4 shadow-float md:p-5" aria-label="টাইমলাইন">
-        <h2 className="font-semibold">টাইমলাইন ({steps.length.toLocaleString("bn-BD")} ধাপ)</h2>
-        <p className="mt-1 text-meta text-muted">দর্শকেরা যেমন দেখবেন। ভুল স্থান বা লেখা থাকলে &ldquo;সম্পাদনা&rdquo;-তে গিয়ে ঠিক করুন।</p>
+      <section className="mt-5 rounded-2xl bg-card p-4 shadow-float md:p-5" aria-label="Timeline">
+        <h2 className="font-semibold">Timeline ({steps.length} {steps.length === 1 ? "step" : "steps"})</h2>
+        <p className="mt-1 text-meta text-muted">As visitors will see it. If a place or text is wrong, fix it in &ldquo;Edit&rdquo;.</p>
         <div className="mt-3">
           <TimelinePreview event={event} steps={steps} />
         </div>

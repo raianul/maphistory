@@ -12,13 +12,13 @@ export async function PUT(req: Request, { params }: Ctx) {
   const { id, stepId } = await params;
   if (!isId(stepId)) return notFound();
   const parsed = StepFields.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) return badRequest(parsed.error.issues[0]?.message ?? "ধাপের তথ্য ঠিক নেই", parsed.error.issues);
+  if (!parsed.success) return badRequest(parsed.error.issues[0]?.message ?? "Invalid step data", parsed.error.issues);
   return applyChange(
     id,
     async (cur) => {
-      if (!cur.steps.some((s) => s.id === stepId)) throw new Error("ধাপটি পাওয়া যায়নি");
+      if (!cur.steps.some((s) => s.id === stepId)) throw new Error("Step not found");
       const own = new Set(cur.sources.map((s) => s.id));
-      if (parsed.data.source_ids.some((s) => !own.has(s))) throw new Error("এই ঘটনার নয় এমন সূত্র যুক্ত করা যায় না");
+      if (parsed.data.source_ids.some((s) => !own.has(s))) throw new Error("Can't attach a source that doesn't belong to this event");
       await updateStep(id, stepId, parsed.data, admin.userId);
     },
     (cur) => ({ ...cur, steps: cur.steps.map((s) => (s.id === stepId ? ({ ...s, ...parsed.data } as TimelineStep) : s)) }),
@@ -34,7 +34,7 @@ export async function DELETE(req: Request, { params }: Ctx) {
   return applyChange(
     id,
     async (cur) => {
-      if (!cur.steps.some((s) => s.id === stepId)) throw new Error("ধাপটি পাওয়া যায়নি");
+      if (!cur.steps.some((s) => s.id === stepId)) throw new Error("Step not found");
       await deleteStep(id, stepId);
     },
     (cur) => ({ ...cur, steps: cur.steps.filter((s) => s.id !== stepId) }),

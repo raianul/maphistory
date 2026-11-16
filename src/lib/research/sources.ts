@@ -138,7 +138,7 @@ export async function collectMaterial(
   const wiki = await Promise.all(
     (["en", "bn"] as const).map((lang) =>
       wikipediaArticle(lang, lang === "bn" ? input.title : query, fetchImpl).catch((e) => {
-        problems.push(`উইকিপিডিয়া (${lang}) পাওয়া যায়নি: ${(e as Error).message}`);
+        problems.push(`Wikipedia (${lang}) not found: ${(e as Error).message}`);
         return null;
       }),
     ),
@@ -166,13 +166,13 @@ export async function collectMaterial(
         getWikidata(q)
           .then((d): WikidataHints => ({ qid: d.qid, url: d.url, inceptionYear: d.inceptionYear, coords: d.coords }))
           .catch(() => {
-            problems.push(`উইকিডেটা ${q} পাওয়া যায়নি`);
+            problems.push(`Wikidata ${q} not found`);
             return null;
           }),
       ),
     )
   ).filter((x): x is WikidataHints => !!x);
 
-  if (!sources.some((s) => s.retrieval === "retrieved")) problems.push("কোনো সূত্র থেকেই লেখা আনা যায়নি");
+  if (!sources.some((s) => s.retrieval === "retrieved")) problems.push("Couldn't get text from any source");
   return { sources, leads, wikidata, problems };
 }

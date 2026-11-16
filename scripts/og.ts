@@ -68,7 +68,7 @@ h1 { margin-top: 28px; font-size: ${p.name.bn.length > 14 ? 76 : 96}px; font-wei
   <h1>${esc(p.name.bn)}</h1>
   ${p.name.en ? `<div class="en">${esc(p.name.en)}</div>` : ""}
   <div class="meta">${esc(p.city.bn)} · ${years}${p.built.note ? ` · ${esc(p.built.note.bn)}` : ""}</div>
-  <div class="site">জায়গার গল্প <span>jaygargolpo.com</span></div>
+  <div class="site">Ondor <span>ondor.site</span></div>
 </div>
 <div class="side"></div>
 </body></html>`;

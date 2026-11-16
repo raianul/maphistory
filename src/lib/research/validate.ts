@@ -113,10 +113,10 @@ function checkClaim(id: string, raw: z.infer<typeof RawClaim>, byId: Map<string,
     const src = byId.get(c.source_id);
     log.push(
       !src
-        ? `${id}: অজানা সূত্র "${c.source_id}" বাদ — কেবল সংগ্রহ করা সূত্র উদ্ধৃত করা যায়`
+        ? `${id}: unknown source "${c.source_id}" dropped — only collected sources can be cited`
         : src.retrieval !== "retrieved"
-          ? `${id}: ${c.source_id} সংগ্রহ করা যায়নি, তাই প্রমাণ হিসেবে গণ্য নয়`
-          : `${id}: ${c.source_id}-এর লেখায় উদ্ধৃতিটি পাওয়া যায়নি`,
+          ? `${id}: ${c.source_id} could not be retrieved, so it doesn't count as evidence`
+          : `${id}: quote not found in the text of ${c.source_id}`,
     );
   }
   // Citations to sources that don't exist are dropped entirely (an invented id or URL says nothing).
@@ -126,13 +126,13 @@ function checkClaim(id: string, raw: z.infer<typeof RawClaim>, byId: Map<string,
   let note = raw.note ?? null;
   if (!anyFound && evidence !== "unverified") {
     evidence = "unverified";
-    note = `যাচাইযোগ্য উদ্ধৃতি নেই: ${bad.length ? "দেওয়া উদ্ধৃতি সূত্রের লেখায় মেলেনি" : "কোনো সূত্র উল্লেখ করা হয়নি"}${note ? ` (AI-এর মন্তব্য: ${note})` : ""}`;
+    note = `No verifiable quote: ${bad.length ? "the quotes given didn't match the source text" : "no source was cited"}${note ? ` (AI note: ${note})` : ""}`;
   }
   // "Strong" needs more than one checked source or explicit primary material; one source caps at moderate.
   const distinct = new Set(kept.filter((c) => c.found).map((c) => c.source_id)).size;
   if (evidence === "strong" && distinct < 2) {
     evidence = "moderate";
-    log.push(`${id}: "দৃঢ়" থেকে "মাঝারি" — মাত্র একটি সূত্রে সমর্থন`);
+    log.push(`${id}: "strong" lowered to "moderate" — supported by only one source`);
   }
   return { id, text: raw.text, citations: kept, evidence, note };
 }
@@ -158,7 +158,7 @@ export function validateReport(rawJson: unknown, sources: ResearchSource[]): Res
   const phases = r.phases
     .map((p) => ({ id: p.id.toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-|-$/g, "").slice(0, 40), label: p.label }))
     .filter((p, i, a) => p.id && p.label && a.findIndex((x) => x.id === p.id) === i);
-  if (phases.length > 4) log.push(`AI ${phases.length}টি পর্ব প্রস্তাব করেছিল; প্রথম ৪টি রাখা হলো`);
+  if (phases.length > 4) log.push(`AI suggested ${phases.length} phases; kept the first 4`);
   const keptPhases = phases.slice(0, 4);
   const phaseIds = new Set(keptPhases.map((p) => p.id));
 
@@ -166,7 +166,7 @@ export function validateReport(rawJson: unknown, sources: ResearchSource[]): Res
   let { year, month, day } = o;
   let precision = o.date_precision;
   if (!realDate(year, month, day)) {
-    log.push("প্রস্তাবিত তারিখ বাস্তব নয় (যেমন ৩১ এপ্রিল); তারিখ অনিশ্চিত হিসেবে রাখা হলো");
+    log.push("Suggested date doesn't exist (e.g. 31 April); date kept as uncertain");
     [year, month, day, precision] = [year ?? null, null, null, year ? "year" : "unknown"];
   }
   // Precision must match what's given (no "exact day" without a day).
@@ -178,7 +178,7 @@ export function validateReport(rawJson: unknown, sources: ResearchSource[]): Res
     .map((s, i) => {
       const claim = checkClaim(`step.${i}`, s, byId, log);
       const phase = s.phase ? s.phase.toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-|-$/g, "") : null;
-      if (phase && !phaseIds.has(phase)) log.push(`step.${i}: অজানা পর্ব "${s.phase}" বাদ দেওয়া হলো`);
+      if (phase && !phaseIds.has(phase)) log.push(`step.${i}: unknown phase "${s.phase}" dropped`);
       // No place, no map: an unknown location never gets a map type that would draw something.
       // A named place counts even when the AI marked it "unknown": the map lookup decides.
       const unknown = !s.place_name;

@@ -81,13 +81,13 @@ describe("publishProblems", () => {
     expect(publishProblems(ev, [src({}), src({ origin: "ai_suggestion" })])).toEqual([]);
   });
   it("needs at least one source", () => {
-    expect(publishProblems(ev, [])).toContain("অন্তত একটি সূত্র লাগবে");
+    expect(publishProblems(ev, [])).toContain("At least one source is required");
   });
   it("needs a summary and a place inside the map's region (Bangladesh); the full text is optional", () => {
     const p = publishProblems({ ...ev, summary: null, narrative: null, lat: 48.85, lng: 2.35 } as HistoricalEvent, [src({})]);
-    expect(p).toContain("সংক্ষিপ্ত বিবরণ নেই");
-    expect(p).not.toContain("পূর্ণ বিবরণ নেই");
-    expect(p).toContain("মূল স্থান বর্তমান মানচিত্রের এলাকার (বাংলাদেশ) বাইরে");
+    expect(p).toContain("Summary is missing");
+    expect(p).not.toContain("Full description is missing");
+    expect(p).toContain("Main place is outside the current map area (Bangladesh)");
   });
 });
 
@@ -173,11 +173,11 @@ describe("publishProblems with a timeline", () => {
   });
   it("a step that should show a place but has none blocks publishing, by number", () => {
     const p = publishProblems(ev, src, [good, { ...good, lat: null, lng: null } as unknown as TimelineStep]);
-    expect(p).toEqual(["ধাপ ২: স্থানের স্থানাঙ্ক নেই"]);
+    expect(p).toEqual(["Step 2: place has no coordinates"]);
   });
   it("a step's place (or a route's start) outside the map's region blocks publishing", () => {
     const p = publishProblems(ev, src, [{ ...good, map_type: "route", from_lat: 22.57, from_lng: 88.36 } as TimelineStep]);
-    expect(p).toContain("ধাপ ১: শুরুর স্থান মানচিত্রের এলাকার (বাংলাদেশ) বাইরে");
+    expect(p).toContain("Step 1: start place is outside the map area (Bangladesh)");
   });
   it("a step with an unknown location doesn't need coordinates", () => {
     expect(publishProblems(ev, src, [{ ...good, location_precision: "unknown", lat: null, lng: null } as unknown as TimelineStep])).toEqual([]);

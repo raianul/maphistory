@@ -11,12 +11,12 @@ export type { EventListRow };
 
 /** The tables don't exist until the historical_events migration has been run. */
 const missingTable = (code?: string) => code === "42P01" || code === "PGRST205";
-export const MIGRATION_MISSING = "ঐতিহাসিক ঘটনার টেবিল এখনো তৈরি হয়নি: historical_events মাইগ্রেশনটি Supabase-এ চালান।";
+export const MIGRATION_MISSING = "The historical events table doesn't exist yet: run the historical_events migration in Supabase.";
 
 function fail(error: { code?: string; message: string }): never {
   if (missingTable(error.code)) throw new Error(MIGRATION_MISSING);
-  if (error.code === "23505") throw new Error("এই স্লাগ আগে থেকেই আছে, অন্য একটি দিন।");
-  if (error.code === "23514") throw new Error(`তথ্য নিয়ম মানছে না (${error.message})`);
+  if (error.code === "23505") throw new Error("This slug already exists; choose another.");
+  if (error.code === "23514") throw new Error(`Data breaks a database rule (${error.message})`);
   throw new Error(`Database: ${error.message}`);
 }
 
@@ -100,7 +100,7 @@ export async function updateEvent(id: string, fields: EventFieldsT, userId: stri
     .select("*")
     .maybeSingle();
   if (error) fail(error);
-  if (!data) throw new Error("ঘটনাটি পাওয়া যায়নি");
+  if (!data) throw new Error("Event not found");
   return data as HistoricalEvent;
 }
 
@@ -148,7 +148,7 @@ export async function updateSource(eventId: string, sourceId: string, fields: So
     .select("*")
     .maybeSingle();
   if (error) fail(error);
-  if (!data) throw new Error("সূত্রটি পাওয়া যায়নি");
+  if (!data) throw new Error("Source not found");
   return data as EventSource;
 }
 
@@ -165,7 +165,7 @@ export async function touchEvent(id: string, userId: string): Promise<void> {
 
 // ── Phases and timeline steps (Phase 2) ───────────────────────────────────────────────────
 
-export const TIMELINE_MIGRATION_MISSING = "টাইমলাইনের টেবিল এখনো তৈরি হয়নি: event_timeline মাইগ্রেশনটি Supabase-এ চালান।";
+export const TIMELINE_MIGRATION_MISSING = "The timeline table doesn't exist yet: run the event_timeline migration in Supabase.";
 
 function failTimeline(error: { code?: string; message: string }): never {
   if (missingTable(error.code) || error.code === "42703" || error.code === "PGRST204") throw new Error(TIMELINE_MIGRATION_MISSING);
@@ -199,7 +199,7 @@ async function setStepSources(eventId: string, stepId: string, sourceIds: string
     .from("historical_event_step_sources")
     .insert([...new Set(sourceIds)].map((source_id) => ({ step_id: stepId, source_id, event_id: eventId })));
   if (ins.error) {
-    if (ins.error.code === "23503") throw new Error("এই ঘটনার নয় এমন সূত্র যুক্ত করা যায় না");
+    if (ins.error.code === "23503") throw new Error("Can't attach a source that doesn't belong to this event");
     failTimeline(ins.error);
   }
 }
@@ -233,7 +233,7 @@ export async function updateStep(eventId: string, stepId: string, fields: StepFi
     .select("id")
     .maybeSingle();
   if (error) failTimeline(error);
-  if (!data) throw new Error("ধাপটি পাওয়া যায়নি");
+  if (!data) throw new Error("Step not found");
 }
 
 /** Deletes a step and closes the gap in the order (positions stay 0..n-1). */
@@ -249,7 +249,7 @@ export async function deleteStep(eventId: string, stepId: string): Promise<void>
 export async function reorderSteps(eventId: string, stepIds: string[]): Promise<void> {
   const { error } = await db().rpc("reorder_event_steps", { p_event_id: eventId, p_step_ids: stepIds });
   if (error) {
-    if (error.code === "22023") throw new Error("ধাপের তালিকা মেলেনি; পাতাটি আবার খুলে চেষ্টা করুন");
+    if (error.code === "22023") throw new Error("The step list is out of date; reload the page and try again");
     failTimeline(error);
   }
 }

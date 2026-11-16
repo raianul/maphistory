@@ -175,7 +175,7 @@ export async function listMapPins(b: Bounds, limit = PINS_PER_TILE): Promise<Map
   const query = (status: "verified" | "ai", n: number) =>
     db()
       .from("stories")
-      .select("name_bn,lat,lng,kind,status,label:story->>name_bn")
+      .select("name_bn,name_en,lat,lng,kind,status,label:story->>name_bn")
       .eq("show_on_map", true)
       .eq("status", status)
       // Edges: south/west inclusive, north/east exclusive, so a pin on a border is in exactly one square.
@@ -195,9 +195,10 @@ export async function listMapPins(b: Bounds, limit = PINS_PER_TILE): Promise<Map
   const ai = room > 0 ? await query("ai", room) : { data: [], error: null };
   if (ai.error) throw new Error(`Database: ${ai.error.message}`);
 
-  type PinRow = { name_bn: string; lat: number; lng: number; kind: string | null; status: string; label: string | null };
+  type PinRow = { name_bn: string; name_en: string | null; lat: number; lng: number; kind: string | null; status: string; label: string | null };
   return ([...verified.data, ...ai.data] as PinRow[]).map((r) => ({
     label: r.label?.trim() || r.name_bn,
+    label_en: r.name_en?.trim() || undefined,
     name: r.name_bn,
     lat: r.lat,
     lng: r.lng,
@@ -222,7 +223,7 @@ export async function updateStory(id: string, patch: Record<string, unknown>) {
   // Before the "global countries" migration only BD/IN/PK fit the country column (see saveStory).
   if (error?.code === "23514" && patch.country) ({ data, error } = await update({ ...patch, country: null }));
   if (missingColumn(error?.code) && "show_on_map" in patch) {
-    throw new Error("ম্যাপে দেখানোর কলাম এখনো তৈরি হয়নি: show_on_map মাইগ্রেশনটি Supabase-এ চালান।");
+    throw new Error("The show_on_map column doesn't exist yet: run the show_on_map migration in Supabase.");
   }
   if (error) throw new Error(`Database: ${error.message}`);
   return data;
@@ -327,8 +328,8 @@ export async function addVideo(storyId: string, v: NewVideo): Promise<PlaceVideo
     .select(VIDEO_COLUMNS)
     .single();
   if (error) {
-    if (missingTable(error.code)) throw new Error("ভিডিওর টেবিল এখনো তৈরি হয়নি: place_videos মাইগ্রেশনটি Supabase-এ চালান।");
-    if (error.code === "23505") throw new Error("এই ভিডিওটি এই জায়গায় আগেই যোগ করা আছে।");
+    if (missingTable(error.code)) throw new Error("The videos table doesn't exist yet: run the place_videos migration in Supabase.");
+    if (error.code === "23505") throw new Error("This video is already added to this place.");
     throw new Error(`Database: ${error.message}`);
   }
   return toVideo(data as VideoRow);

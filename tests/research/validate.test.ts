@@ -48,8 +48,8 @@ describe("validateReport (fake Gemini answers)", () => {
     const r = validateReport(base({ overview: { ...base().overview, summary: claim("x", [{ source_id: "S1", quote: "Sheikh Mujib personally led the march on that day" }], "strong") } }), SOURCES)!;
     expect(r.overview.summary.evidence).toBe("unverified");
     expect(r.overview.summary.citations[0].found).toBe(false);
-    expect(r.overview.summary.note).toMatch(/মেলেনি/);
-    expect(r.validation.join(" ")).toMatch(/উদ্ধৃতিটি পাওয়া যায়নি/);
+    expect(r.overview.summary.note).toMatch(/didn't match/);
+    expect(r.validation.join(" ")).toMatch(/quote not found/);
   });
 
   it("drops citations to invented sources (unknown id) and downgrades", () => {
@@ -61,7 +61,7 @@ describe("validateReport (fake Gemini answers)", () => {
   it("never counts a source that could not be retrieved as evidence", () => {
     const r = validateReport(base({ overview: { ...base().overview, summary: claim("x", [{ source_id: "S3", quote: "students of the University of Dhaka defied Section 144" }]) } }), SOURCES)!;
     expect(r.overview.summary.evidence).toBe("unverified");
-    expect(r.validation.join(" ")).toMatch(/সংগ্রহ করা যায়নি/);
+    expect(r.validation.join(" ")).toMatch(/could not be retrieved/);
   });
 
   it("caps 'strong' at 'moderate' with only one source; keeps it with two independent sources", () => {

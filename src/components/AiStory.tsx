@@ -313,7 +313,12 @@ export function AiStory({
           ) : (
             <p className="mt-1">উৎস: AI মডেলের নিজস্ব জ্ঞান; কোনো বাইরের সূত্র মিলিয়ে দেখা হয়নি।</p>
           )}
-          {model && <p className="mt-1">মডেল: {model}</p>}
+          <p className="mt-2 font-semibold text-ink-2">
+            এই গল্পটি AI (Google Gemini{model ? `, ${model}` : ""}) লিখেছে; কেউ যাচাই করেনি, ভুল থাকতে পারে।{" "}
+            <a href="/about" className="font-normal text-accent underline">
+              আরও জানুন
+            </a>
+          </p>
         </footer>
       )}
     </article>

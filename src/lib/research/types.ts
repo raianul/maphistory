@@ -12,6 +12,15 @@
 export const AI_EVIDENCE = ["strong", "moderate", "weak", "conflicting", "unverified"] as const;
 export type AiEvidence = (typeof AI_EVIDENCE)[number];
 
+/** The admin interface's English names for the AI's ratings. */
+export const AI_EVIDENCE_EN: Record<AiEvidence, string> = {
+  strong: "Strong support",
+  moderate: "Moderate support",
+  weak: "Weak support",
+  conflicting: "Sources disagree",
+  unverified: "No support found",
+};
+
 export const AI_EVIDENCE_BN: Record<AiEvidence, string> = {
   strong: "দৃঢ় সমর্থন",
   moderate: "মাঝারি সমর্থন",

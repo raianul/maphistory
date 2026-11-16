@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import type { EventSource, HistoricalEvent, TimelineStep } from "@/lib/events/schema";
-import { EVIDENCE_BN, EVIDENCE_LEVELS, LOCATION_PRECISION_BN, MAP_TYPE_BN } from "@/lib/events/schema";
-import { AI_EVIDENCE_BN, SUGGESTED_PUBLIC_EVIDENCE, type AiEvidence, type Claim, type ResearchRun, type SuggestedStep } from "@/lib/research/types";
+import { EVIDENCE_EN, EVIDENCE_LEVELS, LOCATION_PRECISION_EN, MAP_TYPE_EN } from "@/lib/events/schema";
+import { AI_EVIDENCE_EN, SUGGESTED_PUBLIC_EVIDENCE, type AiEvidence, type Claim, type ResearchRun, type SuggestedStep } from "@/lib/research/types";
 import { adminFetch } from "@/lib/supabase-browser";
 
 type Loaded = { event: HistoricalEvent; sources: EventSource[]; steps: TimelineStep[]; problems: string[] };
@@ -12,7 +12,6 @@ const section = "rounded-2xl bg-card p-4 shadow-float md:p-5";
 const field =
   "w-full rounded-control border border-line-strong bg-card px-3 py-2 text-meta outline-none transition-shadow focus:border-accent focus:ring-2 focus:ring-accent-ring";
 const btn = "h-9 rounded-full px-3.5 text-meta font-semibold transition-colors disabled:opacity-50";
-const bn = (n: number) => n.toLocaleString("bn-BD");
 
 /** The AI's own rating: muted tones only, so it never reads as an editor's verification. */
 const EVIDENCE_TONE: Record<AiEvidence, string> = {
@@ -23,9 +22,9 @@ const EVIDENCE_TONE: Record<AiEvidence, string> = {
   unverified: "bg-warning-soft text-warning",
 };
 
-/** "✦ AI-প্রস্তাব": marks AI-written content. Deliberately not a check mark. */
+/** "✦ AI suggestion": marks AI-written content. Deliberately not a check mark. */
 function AiBadge() {
-  return <span className="rounded-full border border-dashed border-accent/50 px-2 py-0.5 text-micro font-semibold text-accent">✦ AI-প্রস্তাব</span>;
+  return <span className="rounded-full border border-dashed border-accent/50 px-2 py-0.5 text-micro font-semibold text-accent">✦ AI suggestion</span>;
 }
 
 /**
@@ -53,14 +52,14 @@ export function ResearchPanel({ data, onChange }: { data: Loaded; onChange: (d: 
   const upsert = (run: ResearchRun) => setRuns((rs) => [run, ...(rs ?? []).filter((x) => x.id !== run.id)].sort((a, b) => b.created_at.localeCompare(a.created_at)));
 
   return (
-    <section className={`${section} mt-5`} aria-label="AI গবেষণা">
+    <section className={`${section} mt-5`} aria-label="AI research">
       <div className="flex flex-wrap items-center gap-2">
-        <h2 className="font-semibold">AI গবেষণা</h2>
-        <span className="text-micro text-muted">শুধু অ্যাডমিন দেখেন · কিছুই নিজে থেকে যাচাই বা প্রকাশ হয় না</span>
+        <h2 className="font-semibold">AI research</h2>
+        <span className="text-micro text-muted">Admins only · nothing is verified or published automatically</span>
       </div>
       <p className="mt-1 text-meta text-muted">
-        উইকিপিডিয়া, উইকিডেটা ও আপনার দেওয়া লিংক থেকে লেখা সংগ্রহ করে AI একটি খসড়া প্রতিবেদন বানায়। প্রতিটি দাবির পাশে সূত্রের হুবহু উদ্ধৃতি থাকে; মেলেনি এমন দাবি
-        &ldquo;সমর্থন মেলেনি&rdquo; হিসেবে দেখানো হয়। যা গ্রহণ করবেন তা যাচাই-না-করা খসড়া হিসেবে যোগ হবে।
+        The AI collects text from Wikipedia, Wikidata and any links you give, then drafts a report. Each claim shows exact quotes from its sources; claims
+        without support are marked &ldquo;unsupported&rdquo;. Anything you accept is added as an unverified draft.
       </p>
       <StartForm
         event={data.event}
@@ -73,7 +72,7 @@ export function ResearchPanel({ data, onChange }: { data: Loaded; onChange: (d: 
       {error && <p className="mt-3 rounded-control bg-warning-soft px-3 py-2 text-meta text-warning">{error}</p>}
 
       {runs && runs.length > 0 && (
-        <div className="mt-4 flex flex-wrap gap-1.5" role="tablist" aria-label="আগের গবেষণা">
+        <div className="mt-4 flex flex-wrap gap-1.5" role="tablist" aria-label="Past research runs">
           {runs.map((r, i) => (
             <button
               key={r.id}
@@ -83,8 +82,8 @@ export function ResearchPanel({ data, onChange }: { data: Loaded; onChange: (d: 
               onClick={() => setOpenId(r.id)}
               className={`h-8 rounded-full px-3 text-micro transition-colors ${r.id === openId ? "bg-accent text-on-accent" : "bg-hover text-ink-2 hover:bg-pressed"}`}
             >
-              গবেষণা {bn(runs.length - i)} · {new Date(r.created_at).toLocaleString("bn-BD", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}
-              {r.status === "failed" ? " · ব্যর্থ" : r.status !== "ready" ? " · চলছে" : ""}
+              Run {runs.length - i} · {new Date(r.created_at).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}
+              {r.status === "failed" ? " · failed" : r.status !== "ready" ? " · running" : ""}
             </button>
           ))}
         </div>
@@ -106,7 +105,7 @@ function StartForm({ event, onStarted, onProgressRun }: { event: HistoricalEvent
   async function start(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    setStage("শুরু হচ্ছে…");
+    setStage("Starting…");
     const list = urls
       .split(/\s+/)
       .map((u) => u.trim())
@@ -115,7 +114,7 @@ function StartForm({ event, onStarted, onProgressRun }: { event: HistoricalEvent
     if (!res || !res.ok || !res.body) {
       const d = res ? await res.json().catch(() => ({})) : {};
       setStage(null);
-      return setError(d.error ?? "গবেষণা শুরু করা যায়নি");
+      return setError(d.error ?? "Couldn’t start research");
     }
     const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
     let buffer = "";
@@ -146,21 +145,21 @@ function StartForm({ event, onStarted, onProgressRun }: { event: HistoricalEvent
     <form onSubmit={start} className="mt-3 grid gap-2 rounded-control border border-line p-3">
       <div className="grid gap-2 md:grid-cols-2">
         <label className="grid gap-1 text-meta font-semibold text-ink-2">
-          কী নিয়ে গবেষণা
+          Research topic
           <input value={title} onChange={(e) => setTitle(e.target.value)} required className={field} />
         </label>
         <label className="grid gap-1 text-meta font-semibold text-ink-2">
-          প্রসঙ্গ (ঐচ্ছিক, ইংরেজিতে খোঁজা ভালো কাজ করে)
+          Context (optional; searching in English works best)
           <input value={context} onChange={(e) => setContext(e.target.value)} className={field} placeholder="Bengali language movement 1952 Dhaka" />
         </label>
       </div>
       <label className="grid gap-1 text-meta font-semibold text-ink-2">
-        আরও সূত্রের লিংক (ঐচ্ছিক, সর্বোচ্চ ৫টি; জাদুঘর, আর্কাইভ, গবেষণা প্রতিষ্ঠান…)
-        <textarea rows={2} value={urls} onChange={(e) => setUrls(e.target.value)} className={field} placeholder="https://… (প্রতিটি আলাদা লাইনে)" />
+        More source links (optional, up to 5: museums, archives, research institutes…)
+        <textarea rows={2} value={urls} onChange={(e) => setUrls(e.target.value)} className={field} placeholder="https://… (one per line)" />
       </label>
       <div className="flex flex-wrap items-center gap-3">
         <button type="submit" disabled={!!stage} className={`${btn} h-10 bg-accent px-4 text-on-accent hover:bg-accent-hover`}>
-          {stage ? "চলছে…" : "AI দিয়ে গবেষণা করুন"}
+          {stage ? "Running…" : "Research with AI"}
         </button>
         {stage && (
           <span className="flex items-center gap-2 text-meta text-accent" role="status" aria-live="polite">
@@ -200,7 +199,7 @@ function RunView({ run, data, onRun, onEvent }: { run: ResearchRun; data: Loaded
 
   return (
     <div className="mt-4 grid gap-4">
-      {published && <p className="rounded-control bg-warning-soft px-3 py-2 text-meta text-warning">ঘটনাটি প্রকাশিত। খসড়া যোগ করতে আগে অপ্রকাশিত করুন।</p>}
+      {published && <p className="rounded-control bg-warning-soft px-3 py-2 text-meta text-warning">This event is published. Unpublish it before adding drafts.</p>}
       {run.error && <p className="rounded-control bg-warning-soft px-3 py-2 text-meta text-warning">{run.error}</p>}
       {error && (
         <p role="alert" className="rounded-control bg-warning-soft px-3 py-2 text-meta text-warning">
@@ -210,7 +209,7 @@ function RunView({ run, data, onRun, onEvent }: { run: ResearchRun; data: Loaded
 
       {/* Retrieved sources */}
       <div>
-        <h3 className="text-meta font-semibold text-ink-2">সংগৃহীত সূত্র ({bn(run.sources.filter((s) => s.retrieval === "retrieved").length)}/{bn(run.sources.length)})</h3>
+        <h3 className="text-meta font-semibold text-ink-2">Collected sources ({run.sources.filter((s) => s.retrieval === "retrieved").length}/{run.sources.length})</h3>
         <ul className="mt-2 grid gap-1.5">
           {run.sources.map((s) => (
             <li key={s.id} className="flex flex-wrap items-start gap-2 rounded-control border border-line px-3 py-2 text-meta">
@@ -221,17 +220,17 @@ function RunView({ run, data, onRun, onEvent }: { run: ResearchRun; data: Loaded
                 </a>
                 <span className="block text-micro text-muted">
                   {[s.publisher, s.author, s.published_on].filter(Boolean).join(" · ")}
-                  {s.retrieval === "retrieved" ? ` · সংগ্রহের তারিখ ${s.retrieved_at.slice(0, 10)}` : ""}
+                  {s.retrieval === "retrieved" ? ` · retrieved ${s.retrieved_at.slice(0, 10)}` : ""}
                 </span>
                 {r?.source_notes[s.id] && <span className="block text-micro text-ink-2">{r.source_notes[s.id]}</span>}
-                {s.retrieval === "failed" && <span className="block text-micro text-warning">সংগ্রহ করা যায়নি: {s.reason}</span>}
+                {s.retrieval === "failed" && <span className="block text-micro text-warning">Couldn’t retrieve: {s.reason}</span>}
               </span>
               {s.retrieval === "retrieved" &&
                 (state(`source.${s.id}`) === "accepted" ? (
-                  <span className="text-micro text-muted">ঘটনায় যোগ হয়েছে (যাচাই হয়নি)</span>
+                  <span className="text-micro text-muted">Added to event (not verified)</span>
                 ) : (
                   <button type="button" disabled={!!busy || published} onClick={() => decide(`source.${s.id}`, { kind: "source", source_id: s.id })} className={`${btn} bg-accent-soft text-accent hover:bg-accent-soft-hover`}>
-                    {busy === `source.${s.id}` ? "…" : "সূত্র হিসেবে যোগ"}
+                    {busy === `source.${s.id}` ? "…" : "Add as source"}
                   </button>
                 ))}
             </li>
@@ -240,9 +239,9 @@ function RunView({ run, data, onRun, onEvent }: { run: ResearchRun; data: Loaded
         {run.leads.length > 0 && (
           <details className="mt-2 text-meta">
             <summary className="cursor-pointer text-muted select-none hover:text-ink">
-              আরও খোঁজার সূত্র ({bn(run.leads.length)}) — উইকিপিডিয়ার তথ্যসূত্র, <span className="font-semibold">সংগ্রহ করা হয়নি</span>
+              Further leads ({run.leads.length}) — Wikipedia references, <span className="font-semibold">not collected</span>
             </summary>
-            <p className="mt-1 text-micro text-muted">এগুলো যাচাই বা উদ্ধৃত হয়নি। প্রয়োজনীয়টি খুলে দেখুন; কাজে লাগলে লিংকটি ওপরের ঘরে দিয়ে আবার গবেষণা চালান।</p>
+            <p className="mt-1 text-micro text-muted">These haven’t been checked or quoted. Open the ones you need; if one helps, paste its link in the box above and run research again.</p>
             <ul className="mt-1 grid gap-0.5">
               {run.leads.map((l) => (
                 <li key={l.url} className="truncate text-micro">
@@ -260,7 +259,7 @@ function RunView({ run, data, onRun, onEvent }: { run: ResearchRun; data: Loaded
         <>
           {r.validation.length > 0 && (
             <details className="rounded-control bg-warning-soft px-3 py-2 text-meta text-warning">
-              <summary className="cursor-pointer font-semibold select-none">যাচাইয়ে {bn(r.validation.length)}টি সমস্যা ধরা পড়েছে (AI-এর ভুল উদ্ধৃতি বা অজানা সূত্র)</summary>
+              <summary className="cursor-pointer font-semibold select-none">Checks found {r.validation.length} {r.validation.length === 1 ? "problem" : "problems"} (misquotes by the AI or unknown sources)</summary>
               <ul className="mt-1 grid gap-0.5 text-micro">
                 {r.validation.map((v, i) => (
                   <li key={i}>• {v}</li>
@@ -272,14 +271,14 @@ function RunView({ run, data, onRun, onEvent }: { run: ResearchRun; data: Loaded
           {/* Overview */}
           <div className="grid gap-3">
             <h3 className="text-meta font-semibold text-ink-2">
-              সারসংক্ষেপ <AiBadge />
+              Overview <AiBadge />
             </h3>
             <p className="text-meta text-muted">
-              প্রস্তাবিত শিরোনাম: <span className="text-ink">{r.overview.title}</span> · তারিখ: <span className="text-ink">{r.overview.date_text ?? "অজানা"}</span> ({r.overview.date_precision === "day" ? "নির্দিষ্ট দিন" : r.overview.date_precision === "unknown" ? "অজানা" : r.overview.date_precision === "approximate" ? "আনুমানিক" : r.overview.date_precision === "month" ? "শুধু মাস" : "শুধু বছর"})
-              {r.overview.main_place && ` · স্থান: ${r.overview.main_place}`}
+              Suggested title: <span className="text-ink">{r.overview.title}</span> · Date: <span className="text-ink">{r.overview.date_text ?? "Unknown"}</span> ({r.overview.date_precision === "day" ? "exact day" : r.overview.date_precision === "unknown" ? "unknown" : r.overview.date_precision === "approximate" ? "approximate" : r.overview.date_precision === "month" ? "month only" : "year only"})
+              {r.overview.main_place && ` · Place: ${r.overview.main_place}`}
             </p>
             <OverviewChoice
-              label="সংক্ষিপ্ত বিবরণ"
+              label="Short summary"
               claim={r.overview.summary}
               current={data.event.summary ?? null}
               state={state("overview.summary")}
@@ -290,7 +289,7 @@ function RunView({ run, data, onRun, onEvent }: { run: ResearchRun; data: Loaded
               onReject={() => decide("overview.summary", { kind: "reject", key: "overview.summary" })}
             />
             <OverviewChoice
-              label="পূর্ণ বিবরণ (পটভূমি ও প্রসঙ্গ)"
+              label="Full account (background and context)"
               claim={{
                 id: "overview.narrative",
                 text: [r.overview.background?.text, r.overview.context?.text].filter(Boolean).join("\n\n"),
@@ -311,17 +310,17 @@ function RunView({ run, data, onRun, onEvent }: { run: ResearchRun; data: Loaded
           {/* Phases */}
           {r.phases.length > 0 && (
             <div className="flex flex-wrap items-center gap-2 text-meta">
-              <span className="font-semibold text-ink-2">প্রস্তাবিত পর্ব:</span>
+              <span className="font-semibold text-ink-2">Suggested phases:</span>
               {r.phases.map((p) => (
                 <span key={p.id} className="rounded-full bg-hover px-2.5 py-0.5 text-ink-2">
                   {p.label}
                 </span>
               ))}
               {state("phases") === "accepted" ? (
-                <span className="text-micro text-muted">যোগ হয়েছে</span>
+                <span className="text-micro text-muted">Added</span>
               ) : (
                 <button type="button" disabled={!!busy || published} onClick={() => decide("phases", { kind: "phases" })} className={`${btn} bg-accent-soft text-accent hover:bg-accent-soft-hover`}>
-                  {busy === "phases" ? "…" : "পর্বগুলো যোগ করুন"}
+                  {busy === "phases" ? "…" : "Add phases"}
                 </button>
               )}
             </div>
@@ -330,9 +329,9 @@ function RunView({ run, data, onRun, onEvent }: { run: ResearchRun; data: Loaded
           {/* Chronology */}
           <div>
             <h3 className="text-meta font-semibold text-ink-2">
-              প্রস্তাবিত সময়রেখা ({bn(r.steps.length)} ধাপ) <AiBadge />
+              Suggested timeline ({r.steps.length} {r.steps.length === 1 ? "step" : "steps"}) <AiBadge />
             </h3>
-            <p className="mt-1 text-micro text-muted">প্রতিটি ধাপ সম্পাদনা করে আলাদাভাবে যোগ করুন। যোগ হলে তা যাচাই-না-করা খসড়া; স্থান মানচিত্রে নিজে বেছে নিন, প্রমাণের ধরন নিজে ঠিক করুন।</p>
+            <p className="mt-1 text-micro text-muted">Edit and add each step separately. Added steps are unverified drafts: pick the place on the map and set the evidence level yourself.</p>
             <ol className="mt-2 grid gap-2">
               {r.steps.map((s, i) => (
                 <SuggestedStepCard
@@ -347,14 +346,14 @@ function RunView({ run, data, onRun, onEvent }: { run: ResearchRun; data: Loaded
                   onReject={() => decide(`step.${i}`, { kind: "reject", key: `step.${i}` })}
                 />
               ))}
-              {!r.steps.length && <li className="text-meta text-muted">সংগৃহীত লেখা থেকে কোনো সময়রেখা প্রস্তাব করা যায়নি।</li>}
+              {!r.steps.length && <li className="text-meta text-muted">No timeline could be suggested from the collected text.</li>}
             </ol>
           </div>
 
           {/* Disagreements and gaps */}
           {r.disagreements.length > 0 && (
             <div>
-              <h3 className="text-meta font-semibold text-warning">মতভেদ ও অনিশ্চয়তা ({bn(r.disagreements.length)})</h3>
+              <h3 className="text-meta font-semibold text-warning">Disagreements and uncertainties ({r.disagreements.length})</h3>
               <ul className="mt-2 grid gap-2">
                 {r.disagreements.map((d, i) => (
                   <li key={i} className="rounded-control border border-dashed border-warning/40 bg-warning-soft/40 p-3">
@@ -367,7 +366,7 @@ function RunView({ run, data, onRun, onEvent }: { run: ResearchRun; data: Loaded
           )}
           {r.gaps.length > 0 && (
             <div>
-              <h3 className="text-meta font-semibold text-ink-2">যা সংগৃহীত সূত্রে পাওয়া যায়নি</h3>
+              <h3 className="text-meta font-semibold text-ink-2">Not found in the collected sources</h3>
               <ul className="mt-1 grid gap-0.5 text-meta text-muted">
                 {r.gaps.map((g, i) => (
                   <li key={i}>• {g}</li>
@@ -375,7 +374,7 @@ function RunView({ run, data, onRun, onEvent }: { run: ResearchRun; data: Loaded
               </ul>
             </div>
           )}
-          <p className="text-micro text-muted">মডেল: {run.model} · এসব AI-এর প্রস্তাব; সম্পাদকের যাচাই নয়।</p>
+          <p className="text-micro text-muted">Model: {run.model} · These are AI suggestions, not an editor’s verification.</p>
         </>
       )}
     </div>
@@ -394,7 +393,7 @@ function ClaimBody({ claim, sources }: { claim: Claim; sources: ResearchRun["sou
     <>
       <p className="mt-1 text-body whitespace-pre-line text-ink-2">{claim.text}</p>
       <p className="mt-1.5 flex flex-wrap items-center gap-1.5">
-        <span className={`rounded px-1.5 py-0.5 text-micro ${EVIDENCE_TONE[claim.evidence]}`}>AI-এর মূল্যায়ন: {AI_EVIDENCE_BN[claim.evidence]}</span>
+        <span className={`rounded px-1.5 py-0.5 text-micro ${EVIDENCE_TONE[claim.evidence]}`}>AI’s rating: {AI_EVIDENCE_EN[claim.evidence]}</span>
         {claim.note && <span className="text-micro text-muted">{claim.note}</span>}
       </p>
       {claim.citations.length > 0 && (
@@ -404,7 +403,7 @@ function ClaimBody({ claim, sources }: { claim: Claim; sources: ResearchRun["sou
             return (
               <li key={i} className={`border-s-2 ps-2 text-micro ${c.found ? "border-line-strong text-ink-2" : "border-warning text-warning"}`}>
                 <span className="font-mono">{c.source_id}</span> {s && <span className="text-muted">({s.title})</span>}: &ldquo;{c.quote}&rdquo;
-                {!c.found && <span className="ms-1 font-semibold">— সূত্রে পাওয়া যায়নি</span>}
+                {!c.found && <span className="ms-1 font-semibold">— not found in source</span>}
               </li>
             );
           })}
@@ -444,33 +443,33 @@ function OverviewChoice({
     <div className={`rounded-control border border-dashed p-3 ${state ? "border-line opacity-70" : "border-accent/40"}`}>
       <p className="text-meta font-semibold">{label}</p>
       {state ? (
-        <p className="mt-1 text-micro text-muted">{state === "accepted" ? "গ্রহণ করা হয়েছে (খসড়া হিসেবে)" : "বাদ দেওয়া হয়েছে"}</p>
+        <p className="mt-1 text-micro text-muted">{state === "accepted" ? "Accepted (as a draft)" : "Rejected"}</p>
       ) : (
         <>
           <ClaimBody claim={claim} sources={sources} />
-          <textarea rows={label.startsWith("পূর্ণ") ? 5 : 2} value={text} onChange={(e) => setText(e.target.value)} className={`${field} mt-2`} aria-label={`${label} (সম্পাদনাযোগ্য)`} />
+          <textarea rows={label.startsWith("Full") ? 5 : 2} value={text} onChange={(e) => setText(e.target.value)} className={`${field} mt-2`} aria-label={`${label} (editable)`} />
           {comparing && has && (
             <div className="mt-2 rounded-control bg-paper p-2 text-micro">
-              <p className="font-semibold text-ink-2">এখনকার লেখা (প্রতিস্থাপন হবে):</p>
+              <p className="font-semibold text-ink-2">Current text (will be replaced):</p>
               <p className="mt-0.5 whitespace-pre-line text-muted">{current}</p>
             </div>
           )}
           <div className="mt-2 flex flex-wrap gap-2">
             {!has ? (
               <button type="button" disabled={busy || disabled} onClick={() => onAccept(text, false)} className={`${btn} bg-accent text-on-accent hover:bg-accent-hover`}>
-                {busy ? "…" : "খসড়া হিসেবে যোগ করুন"}
+                {busy ? "…" : "Add as draft"}
               </button>
             ) : !comparing ? (
               <button type="button" disabled={busy || disabled} onClick={() => setComparing(true)} className={`${btn} bg-accent-soft text-accent hover:bg-accent-soft-hover`}>
-                এখনকার লেখার সঙ্গে মিলিয়ে দেখুন
+                Compare with current text
               </button>
             ) : (
               <button type="button" disabled={busy || disabled} onClick={() => onAccept(text, true)} className={`${btn} bg-warning-soft text-warning hover:bg-warning-soft-hover`}>
-                {busy ? "…" : "এখনকার লেখা প্রতিস্থাপন করুন"}
+                {busy ? "…" : "Replace current text"}
               </button>
             )}
             <button type="button" disabled={busy} onClick={onReject} className={`${btn} text-muted hover:text-ink`}>
-              বাদ দিন
+              Reject
             </button>
           </div>
         </>
@@ -516,48 +515,48 @@ function SuggestedStepCard({
   return (
     <li className={`rounded-control border border-dashed p-3 ${decided ? "border-line opacity-70" : "border-accent/40"}`}>
       <div className="flex flex-wrap items-start gap-2">
-        <span className="grid size-6 shrink-0 place-items-center rounded-full bg-accent-soft text-micro font-semibold text-accent">{bn(index + 1)}</span>
+        <span className="grid size-6 shrink-0 place-items-center rounded-full bg-accent-soft text-micro font-semibold text-accent">{index + 1}</span>
         <div className="min-w-0 flex-1">
           <p className="font-semibold">{s.title}</p>
           <p className="text-micro text-muted">
-            {[s.date_label, s.place_name ? `${s.from_place_name ? `${s.from_place_name} → ` : ""}${s.place_name}` : "স্থান অজানা", LOCATION_PRECISION_BN[s.location_precision], MAP_TYPE_BN[s.map_type]].filter(Boolean).join(" · ")}
+            {[s.date_label, s.place_name ? `${s.from_place_name ? `${s.from_place_name} → ` : ""}${s.place_name}` : "Location unknown", LOCATION_PRECISION_EN[s.location_precision], MAP_TYPE_EN[s.map_type]].filter(Boolean).join(" · ")}
           </p>
         </div>
-        {decided && <span className="text-micro text-muted">{decided === "accepted" ? "সময়রেখায় যোগ হয়েছে (যাচাই হয়নি)" : "বাদ দেওয়া হয়েছে"}</span>}
+        {decided && <span className="text-micro text-muted">{decided === "accepted" ? "Added to timeline (not verified)" : "Rejected"}</span>}
       </div>
       {!decided && (
         <>
           <ClaimBody claim={s} sources={run.sources} />
-          {s.uncertainty && <p className="mt-1 text-micro text-warning">অনিশ্চয়তা: {s.uncertainty}</p>}
-          {!found && <p className="mt-1 text-micro text-warning">সংগৃহীত কোনো সূত্রে এর সমর্থন মেলেনি; যোগ করলে কোনো সূত্র যুক্ত হবে না।</p>}
-          {duplicate && <p className="mt-1 text-micro text-warning">এই শিরোনামে একটি ধাপ আগেই আছে।</p>}
+          {s.uncertainty && <p className="mt-1 text-micro text-warning">Uncertainty: {s.uncertainty}</p>}
+          {!found && <p className="mt-1 text-micro text-warning">None of the collected sources support this; if added, no source will be linked.</p>}
+          {duplicate && <p className="mt-1 text-micro text-warning">A step with this title already exists.</p>}
           {editing ? (
             <div className="mt-2 grid gap-2 rounded-control bg-paper p-3">
               <label className="grid gap-1 text-micro font-semibold text-ink-2">
-                শিরোনাম
+                Title
                 <input value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} className={field} />
               </label>
               <label className="grid gap-1 text-micro font-semibold text-ink-2">
-                বিবরণ
+                Narrative
                 <textarea rows={4} value={f.narrative} onChange={(e) => setF({ ...f, narrative: e.target.value })} className={field} />
               </label>
               <div className="grid gap-2 md:grid-cols-3">
                 <label className="grid gap-1 text-micro font-semibold text-ink-2">
-                  সময়ের বর্ণনা
+                  Time description
                   <input value={f.date_label} onChange={(e) => setF({ ...f, date_label: e.target.value })} className={field} />
                 </label>
                 <label className="grid gap-1 text-micro font-semibold text-ink-2">
-                  প্রমাণের ধরন (আপনার সিদ্ধান্ত)
+                  Evidence (your call)
                   <select value={f.evidence} onChange={(e) => setF({ ...f, evidence: e.target.value as typeof f.evidence })} className={field}>
                     {EVIDENCE_LEVELS.map((x) => (
                       <option key={x} value={x}>
-                        {EVIDENCE_BN[x]}
+                        {EVIDENCE_EN[x]}
                       </option>
                     ))}
                   </select>
                 </label>
                 <label className="grid gap-1 text-micro font-semibold text-ink-2">
-                  পর্ব
+                  Phase
                   <select value={f.phase_id} onChange={(e) => setF({ ...f, phase_id: e.target.value })} className={field}>
                     <option value="">—</option>
                     {(data.event.phases ?? []).map((p) => (
@@ -569,7 +568,7 @@ function SuggestedStepCard({
                 </label>
               </div>
               <p className="text-micro text-muted">
-                স্থান: {s.place_name ?? "অজানা"}। যোগ করার পর ধাপটি &ldquo;সম্পাদনা&rdquo; করে মানচিত্রে স্থান বেছে নিন; AI কোনো স্থানাঙ্ক দেয় না। ধাপটি যাচাই-না-করা অবস্থায় যোগ হবে।
+                Place: {s.place_name ?? "unknown"}. After adding, &ldquo;Edit&rdquo; the step to pick the place on the map; the AI never gives coordinates. The step is added unverified.
               </p>
               <div className="flex flex-wrap gap-2">
                 <button
@@ -591,10 +590,10 @@ function SuggestedStepCard({
                   }}
                   className={`${btn} bg-accent text-on-accent hover:bg-accent-hover`}
                 >
-                  {busy ? "…" : "সময়রেখায় খসড়া হিসেবে যোগ করুন"}
+                  {busy ? "…" : "Add to timeline as draft"}
                 </button>
                 <button type="button" onClick={() => setEditing(false)} className={`${btn} text-muted hover:text-ink`}>
-                  বাতিল
+                  Cancel
                 </button>
               </div>
             </div>
@@ -605,10 +604,10 @@ function SuggestedStepCard({
                   setEditing(true);
                 }}
                 className={`${btn} bg-accent-soft text-accent hover:bg-accent-soft-hover`}>
-                সম্পাদনা করে যোগ করুন
+                Edit and add
               </button>
               <button type="button" disabled={busy} onClick={onReject} className={`${btn} text-muted hover:text-ink`}>
-                বাদ দিন
+                Reject
               </button>
             </div>
           )}

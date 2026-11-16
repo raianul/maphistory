@@ -9,7 +9,7 @@ export async function POST(req: Request, { params }: RouteContext<"/api/admin/st
   if (admin instanceof Response) return admin;
   const { id } = await params;
   const current = await getStoryForAdmin(id);
-  if (!current) return Response.json({ error: "পাওয়া যায়নি" }, { status: 404 });
+  if (!current) return Response.json({ error: "Not found" }, { status: 404 });
   try {
     const place = await generatePlace({
       name: current.story?.name_bn ?? current.name_bn,

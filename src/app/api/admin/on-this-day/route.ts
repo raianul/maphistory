@@ -26,9 +26,9 @@ export async function GET(req: Request) {
   if (admin instanceof Response) return admin;
   const params = Object.fromEntries(new URL(req.url).searchParams);
   const parsed = Query.safeParse(params);
-  if (!parsed.success) return Response.json({ error: "তারিখ বা দেশ ঠিক নেই" }, { status: 400 });
+  if (!parsed.success) return Response.json({ error: "Invalid date or country" }, { status: 400 });
   const { day, month, country } = parsed.data;
-  if (day > new Date(Date.UTC(2000, month, 0)).getUTCDate()) return Response.json({ error: "এই মাসে এত দিন নেই" }, { status: 400 });
+  if (day > new Date(Date.UTC(2000, month, 0)).getUTCDate()) return Response.json({ error: "This month doesn't have that many days" }, { status: 400 });
   const fresh = params.fresh === "1";
   /** Only a saved list was asked for (opening the page): never start an AI search for it. */
   const savedOnly = params.saved === "1";
@@ -43,7 +43,7 @@ export async function GET(req: Request) {
       // Same daily budget as research and generation (each search is one AI call).
       const since = new Date(Date.now() - 86_400_000).toISOString();
       const { count } = await db().from("generation_log").select("id", { count: "exact", head: true }).eq("visitor", `admin:${admin.userId}`).like("place_key", "research:%").gte("created_at", since);
-      if ((count ?? 0) >= RESEARCH_PER_DAY * 2) return Response.json({ error: `আজকের সীমা শেষ। কাল আবার চেষ্টা করুন।` }, { status: 429 });
+      if ((count ?? 0) >= RESEARCH_PER_DAY * 2) return Response.json({ error: `Today's limit reached. Try again tomorrow.` }, { status: 429 });
       await db().from("generation_log").insert({ visitor: `admin:${admin.userId}`, place_key: `research:discover-${month}-${day}` });
       const found = await discoverEvents(day, month, country);
       const searched_at = await saveSearch(country, month, day, found.candidates, found.dropped, admin.userId);
@@ -53,7 +53,7 @@ export async function GET(req: Request) {
   } catch (e) {
     console.error("on-this-day discover:", e);
     const quota = /RESOURCE_EXHAUSTED|429|quota/i.test(String(e));
-    return Response.json({ error: quota ? "AI-এর আজকের সীমা শেষ। পরে আবার চেষ্টা করুন।" : "ঘটনা খোঁজা যায়নি। আবার চেষ্টা করুন।" }, { status: 502 });
+    return Response.json({ error: quota ? "The AI's daily limit is reached. Try again later." : "Could not find events. Please try again." }, { status: 502 });
   }
 }
 

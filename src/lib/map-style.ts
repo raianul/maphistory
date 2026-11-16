@@ -2,7 +2,7 @@
  * Shared map setup for the public map and the admin maps: the base style (OpenFreeMap "bright",
  * OpenStreetMap data) with Bangla labels. Runs in the browser.
  */
-import type { StyleSpecification } from "maplibre-gl";
+import type { ExpressionSpecification, StyleSpecification } from "maplibre-gl";
 
 // Free OpenStreetMap vector tiles, no API key. "bright": the familiar map colours (blue water,
 // green parks and forests, yellow main roads) in soft tones, so pins still stand out.
@@ -22,7 +22,7 @@ export const MIN_ZOOM = 1.5;
  * local name) drawn with Hind Siliguri. MapLibre's `font-faces` lets the
  * browser shape the text, which keeps Bangla conjuncts intact.
  */
-export async function loadStyle(): Promise<StyleSpecification> {
+export async function loadStyle(lang: MapLang = "bn"): Promise<StyleSpecification> {
   const style: StyleSpecification = await (await fetch(STYLE_URL)).json();
   // Attach Hind Siliguri to the base style's own font names, for Bangla
   // codepoints only: Latin still comes from the tile server's glyphs.
@@ -43,11 +43,55 @@ export async function loadStyle(): Promise<StyleSpecification> {
   for (const layer of style.layers) {
     if (layer.type !== "symbol" || !layer.layout?.["text-field"]) continue;
     if (layer.id.includes("shield")) continue;
-    layer.layout["text-field"] = ["coalesce", ["get", "name:bn"], ["get", "name"]];
+    layer.layout["text-field"] = labelField(lang);
     // Spaced-out letters break up Bangla words.
     layer.layout["text-letter-spacing"] = 0;
   }
   return style;
+}
+
+// ── Map label language ─────────────────────────────────────────────────────────────────
+
+/** The language of the base map's place names. Content stays Bangla (browsers translate it). */
+export type MapLang = "bn" | "en";
+const MAP_LANG_KEY = "ondor-map-lang";
+
+/** The label expression: names in that language, else the local name. */
+export function labelField(lang: MapLang): ExpressionSpecification {
+  return lang === "en" ? ["coalesce", ["get", "name:en"], ["get", "name_en"], ["get", "name:latin"], ["get", "name"]] : ["coalesce", ["get", "name:bn"], ["get", "name"]];
+}
+
+/**
+ * The visitor's map language: their saved choice, else English for browsers not set to Bangla
+ * (foreign visitors), else Bangla. Server side and before the browser is known: Bangla.
+ */
+export function initialMapLang(fallback: MapLang = "bn"): MapLang {
+  if (typeof window === "undefined") return fallback;
+  try {
+    const saved = localStorage.getItem(MAP_LANG_KEY);
+    if (saved === "bn" || saved === "en") return saved;
+  } catch {
+    // storage blocked
+  }
+  if (fallback === "en") return "en";
+  const langs = navigator.languages?.length ? navigator.languages : [navigator.language];
+  return langs.some((l) => /^bn\b/i.test(l)) || !langs.some((l) => /^en\b/i.test(l)) ? "bn" : "en";
+}
+
+export function saveMapLang(lang: MapLang): void {
+  try {
+    localStorage.setItem(MAP_LANG_KEY, lang);
+  } catch {
+    // storage blocked: the choice lasts for this visit
+  }
+}
+
+/** Switches a loaded map's place names to another language (no reload). Our own layers are left alone. */
+export function setMapLang(map: { getStyle(): { layers: { id: string; type: string; layout?: Record<string, unknown> }[] }; setLayoutProperty(id: string, k: string, v: unknown): void }, lang: MapLang, skip: (id: string) => boolean): void {
+  for (const l of map.getStyle().layers) {
+    if (l.type !== "symbol" || !l.layout?.["text-field"] || l.id.includes("shield") || skip(l.id)) continue;
+    map.setLayoutProperty(l.id, "text-field", labelField(lang));
+  }
 }
 
 /**

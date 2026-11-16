@@ -28,7 +28,7 @@ export async function POST(req: Request) {
   const admin = await requireAdmin(req);
   if (admin instanceof Response) return admin;
   const parsed = EventFields.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) return Response.json({ error: "তথ্য ঠিক নেই", issues: parsed.error.issues }, { status: 400 });
+  if (!parsed.success) return Response.json({ error: "Invalid data", issues: parsed.error.issues }, { status: 400 });
   try {
     return Response.json({ event: await createEvent(parsed.data, admin.userId) }, { status: 201 });
   } catch (e) {

@@ -9,7 +9,7 @@ export async function PUT(req: Request, { params }: RouteContext<"/api/admin/eve
   if (admin instanceof Response) return admin;
   const { id } = await params;
   const parsed = Phases.safeParse((await req.json().catch(() => null))?.phases);
-  if (!parsed.success) return badRequest(parsed.error.issues[0]?.message ?? "পর্ব ঠিক নেই", parsed.error.issues);
+  if (!parsed.success) return badRequest(parsed.error.issues[0]?.message ?? "Invalid phases", parsed.error.issues);
   const kept = new Set(parsed.data.map((p) => p.id));
   return applyChange(
     id,

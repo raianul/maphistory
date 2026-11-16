@@ -21,17 +21,17 @@ export async function POST(req: Request, { params }: RouteContext<"/api/admin/st
   const body = (await req.json().catch(() => null)) as { url?: unknown; language?: unknown; duration?: unknown } | null;
 
   const parsed = typeof body?.url === "string" ? parseVideoUrl(body.url) : undefined;
-  if (!parsed) return Response.json({ error: "এটি সমর্থিত ভিডিও লিংক নয় (এখন শুধু YouTube)।" }, { status: 400 });
+  if (!parsed) return Response.json({ error: "Not a supported video link (only YouTube for now)." }, { status: 400 });
   const language = typeof body?.language === "string" && /^[a-z]{2}$/.test(body.language) ? body.language : "bn";
   let durationSeconds: number | undefined;
   if (typeof body?.duration === "string" && body.duration.trim()) {
     durationSeconds = parseDuration(body.duration);
-    if (!durationSeconds) return Response.json({ error: "সময়কাল এভাবে লিখুন: ১২:৩৪ বা 1:02:05" }, { status: 400 });
+    if (!durationSeconds) return Response.json({ error: "Write the duration like 12:34 or 1:02:05" }, { status: 400 });
   }
-  if (!(await getStoryForAdmin(id))) return Response.json({ error: "জায়গাটি পাওয়া যায়নি" }, { status: 404 });
+  if (!(await getStoryForAdmin(id))) return Response.json({ error: "Place not found" }, { status: 404 });
 
   const info = await fetchVideoInfo(parsed.provider, parsed.providerVideoId);
-  if (!info) return Response.json({ error: "ভিডিওটি পাওয়া যায়নি বা এম্বেড করা যায় না (মুছে ফেলা, প্রাইভেট বা ভুল লিংক)।" }, { status: 422 });
+  if (!info) return Response.json({ error: "Video not found or can't be embedded (deleted, private or wrong link)." }, { status: 422 });
 
   try {
     const video = await addVideo(id, { ...parsed, title: info.title, thumbnailUrl: info.thumbnailUrl, language, durationSeconds });

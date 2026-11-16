@@ -13,7 +13,7 @@ import { validateReport } from "./validate";
 /** Research runs allowed per admin per day (each is a few Wikipedia requests and one AI call). */
 export const RESEARCH_PER_DAY = Number(process.env.AI_RESEARCH_PER_DAY || 20);
 
-export const RESEARCH_MIGRATION_MISSING = "গবেষণার টেবিল এখনো তৈরি হয়নি: event_research মাইগ্রেশনটি Supabase-এ চালান।";
+export const RESEARCH_MIGRATION_MISSING = "The research table doesn't exist yet: run the event_research migration in Supabase.";
 const missing = (code?: string) => code === "42P01" || code === "PGRST205";
 
 function fail(error: { code?: string; message: string }): never {
@@ -67,7 +67,7 @@ export async function runResearch(
   deps: NetDeps & { analyse?: typeof realAnalyse; wikidata?: Parameters<typeof collectMaterial>[1] extends infer D ? (D extends { wikidata?: infer W } ? W : never) : never; signal?: AbortSignal } = {},
 ): Promise<void> {
   if ((await runsToday(userId)) >= RESEARCH_PER_DAY) {
-    onProgress({ type: "error", message: `আজকের গবেষণার সীমা (${RESEARCH_PER_DAY}টি) শেষ। কাল আবার চেষ্টা করুন।` });
+    onProgress({ type: "error", message: `Today's research limit (${RESEARCH_PER_DAY}) reached. Try again tomorrow.` });
     return;
   }
   const { data: created, error } = await db()
@@ -80,28 +80,28 @@ export async function runResearch(
   await db().from("generation_log").insert({ visitor: `admin:${userId}`, place_key: `research:${eventId}` });
 
   // 1. Sources (each provider may fail on its own; the run keeps what it got).
-  onProgress({ type: "stage", stage: "collecting", message: "সূত্র সংগ্রহ করা হচ্ছে: উইকিপিডিয়া, উইকিডেটা ও আপনার দেওয়া লিংক…" });
+  onProgress({ type: "stage", stage: "collecting", message: "Collecting sources: Wikipedia, Wikidata and your links…" });
   const material = await collectMaterial(input, deps);
   await update(run.id, { sources: material.sources, leads: material.leads, status: "analysing", error: material.problems.join(" · ") || null });
   const withSources = { ...run, sources: material.sources, leads: material.leads, status: "analysing" as const };
   onProgress({ type: "sources", run: withSources });
 
   if (!material.sources.some((s) => s.retrieval === "retrieved")) {
-    const message = "কোনো সূত্র থেকে লেখা আনা যায়নি, তাই বিশ্লেষণ করা হয়নি। অন্য শিরোনাম বা নিজের লিংক দিয়ে আবার চেষ্টা করুন।";
+    const message = "Couldn't get text from any source, so nothing was analysed. Try another title or your own links.";
     await update(run.id, { status: "failed", error: message });
     onProgress({ type: "error", message, run: { ...withSources, status: "failed", error: message } });
     return;
   }
 
   // 2. AI analysis.
-  onProgress({ type: "stage", stage: "analysing", message: "AI সংগৃহীত লেখা বিশ্লেষণ করছে…" });
+  onProgress({ type: "stage", stage: "analysing", message: "AI is analysing the collected text…" });
   let raw: { text: string; model: string };
   try {
     raw = await (deps.analyse ?? realAnalyse)(researchPrompt(input, material.sources, material.wikidata), deps.signal);
   } catch (e) {
     const message = /RESOURCE_EXHAUSTED|429|quota/i.test(String(e))
-      ? "AI-এর আজকের সীমা শেষ। সংগৃহীত সূত্রগুলো সংরক্ষিত আছে; পরে আবার চালান।"
-      : "AI বিশ্লেষণ করতে পারেনি। সংগৃহীত সূত্রগুলো সংরক্ষিত আছে; আবার চেষ্টা করুন।";
+      ? "The AI's daily limit is reached. The collected sources are saved; run it again later."
+      : "The AI couldn't analyse it. The collected sources are saved; please try again.";
     console.error("research analyse:", e);
     await update(run.id, { status: "failed", error: message });
     onProgress({ type: "error", message, run: { ...withSources, status: "failed", error: message } });
@@ -109,7 +109,7 @@ export async function runResearch(
   }
 
   // 3. Check the answer.
-  onProgress({ type: "stage", stage: "checking", message: "উদ্ধৃতি ও সূত্র মিলিয়ে দেখা হচ্ছে…" });
+  onProgress({ type: "stage", stage: "checking", message: "Checking quotes against sources…" });
   let parsed: unknown = null;
   try {
     parsed = JSON.parse(raw.text);
@@ -118,7 +118,7 @@ export async function runResearch(
   }
   const report = validateReport(parsed, material.sources);
   if (!report) {
-    const message = "AI-এর উত্তর গবেষণা প্রতিবেদনের আকারে ছিল না। সংগৃহীত সূত্রগুলো সংরক্ষিত আছে; আবার চেষ্টা করুন।";
+    const message = "The AI's answer wasn't in research report form. The collected sources are saved; please try again.";
     await update(run.id, { status: "failed", error: message, model: raw.model });
     onProgress({ type: "error", message, run: { ...withSources, status: "failed", error: message, model: raw.model } });
     return;

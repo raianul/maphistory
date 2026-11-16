@@ -57,7 +57,7 @@ export async function GET(req: Request) {
       // this service is down or slow: try the next
     }
   }
-  if (found === null) return Response.json({ error: "স্থান খোঁজার সেবা এখন সাড়া দিচ্ছে না", results: [] }, { status: 502 });
+  if (found === null) return Response.json({ error: "The place search service is not responding", results: [] }, { status: 502 });
   const results = found.filter((r) => r.name && inRegion(r.lat, r.lng));
   return Response.json({ results });
 }

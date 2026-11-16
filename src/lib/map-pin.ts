@@ -4,6 +4,8 @@
 export type MapPin = {
   /** Shown on the map: the story's own Bangla name. */
   label: string;
+  /** The story's English name, for English map labels (shown instead when the visitor picks EN). */
+  label_en?: string;
   /** What the story is saved under (the map name as clicked): opening the pin finds the saved story by it. */
   name: string;
   lat: number;

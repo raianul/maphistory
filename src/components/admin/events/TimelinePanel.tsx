@@ -3,11 +3,11 @@
 import { useState } from "react";
 import { drawsOnMap, stepColor } from "@/lib/events/draw";
 import {
-  EVIDENCE_BN,
+  EVIDENCE_EN,
   EVIDENCE_LEVELS,
-  LOCATION_PRECISION_BN,
+  LOCATION_PRECISION_EN,
   LOCATION_PRECISIONS,
-  MAP_TYPE_BN,
+  MAP_TYPE_EN,
   MAP_TYPES,
   PHASE_COLORS,
   PHASE_PALETTE,
@@ -29,7 +29,6 @@ const field =
 const label = "grid gap-1 text-meta font-semibold text-ink-2";
 const section = "rounded-2xl bg-card p-4 shadow-float md:p-5";
 const btn = "h-10 rounded-full px-4 text-meta font-semibold transition-colors disabled:opacity-50";
-const bn = (n: number) => n.toLocaleString("bn-BD");
 
 /** Phases, the step list (ordering, edit), and the interactive preview. */
 export function TimelinePanel({ data, onChange }: { data: Loaded; onChange: (d: Loaded) => void }) {
@@ -52,16 +51,16 @@ export function TimelinePanel({ data, onChange }: { data: Loaded; onChange: (d: 
     <>
       <PhasesEditor phases={data.event.phases ?? []} onSave={(phases) => call("/phases", "PUT", { phases })} />
 
-      <section className={`${section} mt-5`} aria-label="টাইমলাইন">
+      <section className={`${section} mt-5`} aria-label="Timeline">
         <div className="flex items-center gap-3">
-          <h2 className="font-semibold">টাইমলাইন ({bn(data.steps.length)} ধাপ)</h2>
+          <h2 className="font-semibold">Timeline ({data.steps.length} {data.steps.length === 1 ? "step" : "steps"})</h2>
           {editing === null && (
             <button type="button" onClick={() => setEditing("new")} className={`${btn} ms-auto bg-accent-soft text-accent hover:bg-accent-soft-hover`}>
-              + ধাপ যোগ করুন
+              + Add step
             </button>
           )}
         </div>
-        <p className="mt-1 text-meta text-muted">টেনে বা ↑ ↓ দিয়ে ক্রম বদলান। প্রতিটি ধাপে অন্তত একটি সূত্র যুক্ত করে তবেই যাচাই করা চিহ্ন দিন।</p>
+        <p className="mt-1 text-meta text-muted">Drag, or use ↑ ↓, to reorder. Mark a step verified only after linking at least one source.</p>
         {error && (
           <div role="alert" className="mt-3 rounded-control bg-warning-soft px-3 py-2 text-meta text-warning">
             <p className="font-semibold">{error.message}</p>
@@ -84,9 +83,9 @@ export function TimelinePanel({ data, onChange }: { data: Loaded; onChange: (d: 
         )}
       </section>
 
-      <section className={`${section} mt-5`} aria-label="প্রিভিউ">
-        <h2 className="font-semibold">প্রিভিউ</h2>
-        <p className="mt-1 text-meta text-muted">দর্শকেরা যেমন দেখবেন: ধাপে ধাপে এগিয়ে দেখুন।</p>
+      <section className={`${section} mt-5`} aria-label="Preview">
+        <h2 className="font-semibold">Preview</h2>
+        <p className="mt-1 text-meta text-muted">As visitors will see it: step through it.</p>
         <div className="mt-3">
           <TimelinePreview event={data.event} steps={data.steps} />
         </div>
@@ -112,9 +111,9 @@ function PhasesEditor({ phases, onSave }: { phases: PhaseT[]; onSave: (p: PhaseT
       .replace(/^-|-$/g, "") || `phase-${i + 1}`;
 
   return (
-    <section className={`${section} mt-5`} aria-label="পর্ব">
-      <h2 className="font-semibold">পর্ব ও রং ({bn(list.length)}/৪)</h2>
-      <p className="mt-1 text-meta text-muted">ঘটনার ধাপগুলোকে ১–৪টি পর্বে ভাগ করুন (যেমন: অভিযান, হামলা, দাফন)। প্রতিটি পর্বের একটি নির্দিষ্ট রং।</p>
+    <section className={`${section} mt-5`} aria-label="Phases">
+      <h2 className="font-semibold">Phases and colours ({list.length}/4)</h2>
+      <p className="mt-1 text-meta text-muted">Group the steps into 1–4 phases (e.g. অভিযান, হামলা, দাফন). Each phase has its own colour.</p>
       <ul className="mt-3 grid gap-2">
         {list.map((p, i) => (
           <li key={i} className="flex flex-wrap items-center gap-2">
@@ -122,26 +121,26 @@ function PhasesEditor({ phases, onSave }: { phases: PhaseT[]; onSave: (p: PhaseT
             <input
               value={p.label}
               onChange={(e) => setList((l) => l.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))}
-              placeholder="পর্বের নাম"
+              placeholder="Phase name, e.g. অভিযান"
               className={`${field} min-w-40 flex-1`}
-              aria-label="পর্বের নাম"
+              aria-label="Phase name"
             />
             <input
               value={p.id}
               onChange={(e) => setList((l) => l.map((x, j) => (j === i ? { ...x, id: slug(e.target.value, j) } : x)))}
               className={`${field} w-32 font-mono`}
-              aria-label="পর্বের আইডি (ইংরেজি)"
-              title="পর্বের আইডি (ইংরেজি)"
+              aria-label="Phase ID (English)"
+              title="Phase ID (English)"
             />
-            <div className="flex gap-1" role="radiogroup" aria-label="রং">
+            <div className="flex gap-1" role="radiogroup" aria-label="Colour">
               {PHASE_COLORS.map((c) => (
                 <button
                   key={c}
                   type="button"
                   role="radio"
                   aria-checked={p.color === c}
-                  aria-label={PHASE_PALETTE[c].bn}
-                  title={PHASE_PALETTE[c].bn}
+                  aria-label={PHASE_PALETTE[c].en}
+                  title={PHASE_PALETTE[c].en}
                   disabled={used.has(c) && p.color !== c}
                   onClick={() => setList((l) => l.map((x, j) => (j === i ? { ...x, color: c } : x)))}
                   className={`size-7 rounded-full transition-transform disabled:opacity-20 ${p.color === c ? "ring-2 ring-ink ring-offset-2" : "hover:scale-110"}`}
@@ -150,7 +149,7 @@ function PhasesEditor({ phases, onSave }: { phases: PhaseT[]; onSave: (p: PhaseT
               ))}
             </div>
             <button type="button" onClick={() => setList((l) => l.filter((_, j) => j !== i))} className="text-meta text-danger hover:underline">
-              সরান
+              Remove
             </button>
           </li>
         ))}
@@ -166,7 +165,7 @@ function PhasesEditor({ phases, onSave }: { phases: PhaseT[]; onSave: (p: PhaseT
             }}
             className={`${btn} bg-hover text-ink-2 hover:bg-pressed`}
           >
-            + পর্ব
+            + Phase
           </button>
         )}
         <button
@@ -180,9 +179,9 @@ function PhasesEditor({ phases, onSave }: { phases: PhaseT[]; onSave: (p: PhaseT
           }}
           className={`${btn} bg-accent text-on-accent hover:bg-accent-hover`}
         >
-          {busy ? "…" : "পর্ব সংরক্ষণ"}
+          {busy ? "…" : "Save phases"}
         </button>
-        {saved && !dirty && <span className="text-meta text-success">✓ সংরক্ষিত</span>}
+        {saved && !dirty && <span className="text-meta text-success">✓ Saved</span>}
       </div>
     </section>
   );
@@ -218,7 +217,7 @@ function StepList({
     commit(next);
   };
 
-  if (!ids.length) return <p className="mt-3 text-meta text-muted">এখনো কোনো ধাপ নেই। ধাপ ছাড়াও ঘটনা প্রকাশ করা যায় (শুধু গল্প হিসেবে)।</p>;
+  if (!ids.length) return <p className="mt-3 text-meta text-muted">No steps yet. An event can be published without steps (as a story only).</p>;
 
   return (
     <ol className="mt-3 grid gap-1.5">
@@ -248,39 +247,39 @@ function StepList({
             }}
             className={`flex flex-wrap items-center gap-x-2 gap-y-1 rounded-control border bg-card px-2 py-2 transition-shadow sm:flex-nowrap ${editing === id ? "border-accent" : "border-line"} ${dragId === id ? "opacity-50 shadow-menu" : ""}`}
           >
-            <span className="cursor-grab px-1 text-subtle select-none active:cursor-grabbing" aria-hidden title="টেনে সরান">
+            <span className="cursor-grab px-1 text-subtle select-none active:cursor-grabbing" aria-hidden title="Drag to move">
               ⠿
             </span>
             <span className="grid size-6 shrink-0 place-items-center rounded-full text-micro font-semibold text-white" style={{ background: color }}>
-              {bn(i + 1)}
+              {i + 1}
             </span>
             <span className="min-w-0 flex-1 basis-40">
               <span className="block truncate font-semibold">{s.title}</span>
               <span className="block truncate text-micro text-muted">
-                {[s.date_label, MAP_TYPE_BN[s.map_type], s.location_precision !== "exact" && LOCATION_PRECISION_BN[s.location_precision], s.place_name].filter(Boolean).join(" · ")}
+                {[s.date_label, MAP_TYPE_EN[s.map_type], s.location_precision !== "exact" && LOCATION_PRECISION_EN[s.location_precision], s.place_name].filter(Boolean).join(" · ")}
               </span>
             </span>
             {/* On a phone these move to a second line (the row wraps). */}
             <span className="ms-auto flex shrink-0 gap-1 sm:ms-0">
-              <span className={`rounded-full px-2 py-0.5 text-micro ${s.source_ids.length ? "bg-hover text-ink-2" : "bg-warning-soft text-warning"}`}>সূত্র {bn(s.source_ids.length)}</span>
-              <span className={`rounded-full px-2 py-0.5 text-micro ${s.verified ? "bg-success-soft text-success" : "bg-warning-soft text-warning"}`}>{s.verified ? "✓ যাচাই" : "যাচাই হয়নি"}</span>
+              <span className={`rounded-full px-2 py-0.5 text-micro ${s.source_ids.length ? "bg-hover text-ink-2" : "bg-warning-soft text-warning"}`}>{s.source_ids.length} {s.source_ids.length === 1 ? "source" : "sources"}</span>
+              <span className={`rounded-full px-2 py-0.5 text-micro ${s.verified ? "bg-success-soft text-success" : "bg-warning-soft text-warning"}`}>{s.verified ? "✓ Verified" : "Not verified"}</span>
             </span>
             <span className="flex shrink-0">
-              <button type="button" disabled={i === 0} onClick={() => move(i, -1)} aria-label={`ধাপ ${bn(i + 1)} ওপরে`} className="grid size-8 place-items-center rounded-full text-ink-2 hover:bg-hover disabled:opacity-25">
+              <button type="button" disabled={i === 0} onClick={() => move(i, -1)} aria-label={`Move step ${i + 1} up`} className="grid size-8 place-items-center rounded-full text-ink-2 hover:bg-hover disabled:opacity-25">
                 ↑
               </button>
               <button
                 type="button"
                 disabled={i === ids.length - 1}
                 onClick={() => move(i, 1)}
-                aria-label={`ধাপ ${bn(i + 1)} নিচে`}
+                aria-label={`Move step ${i + 1} down`}
                 className="grid size-8 place-items-center rounded-full text-ink-2 hover:bg-hover disabled:opacity-25"
               >
                 ↓
               </button>
             </span>
             <button type="button" onClick={() => onEdit(id)} className="text-meta font-semibold text-accent hover:underline">
-              সম্পাদনা
+              Edit
             </button>
           </li>
         );
@@ -376,17 +375,17 @@ function StepForm({
   }
 
   return (
-    <form onSubmit={save} className="mt-4 grid gap-4 rounded-2xl border border-accent/40 bg-paper p-4" aria-label={step ? "ধাপ সম্পাদনা" : "নতুন ধাপ"}>
-      <h3 className="font-semibold">{step ? `ধাপ ${bn(step.position + 1)} সম্পাদনা` : "নতুন ধাপ"}</h3>
+    <form onSubmit={save} className="mt-4 grid gap-4 rounded-2xl border border-accent/40 bg-paper p-4" aria-label={step ? "Edit step" : "New step"}>
+      <h3 className="font-semibold">{step ? `Edit step ${step.position + 1}` : "New step"}</h3>
       <div className="grid gap-3 md:grid-cols-[2fr_1fr]">
         <label className={label}>
-          শিরোনাম
-          <input required value={d.title} onChange={(e) => set("title", e.target.value)} className={field} placeholder="যেমন: সেনাবাহিনী রাজারবাগের দিকে" />
+          Title
+          <input required value={d.title} onChange={(e) => set("title", e.target.value)} className={field} placeholder="e.g. সেনাবাহিনী রাজারবাগের দিকে" />
         </label>
         <label className={label}>
-          পর্ব
+          Phase
           <select value={d.phase_id} onChange={(e) => set("phase_id", e.target.value)} className={field}>
-            {!phases.length && <option value="">আগে পর্ব যোগ করুন</option>}
+            {!phases.length && <option value="">Add a phase first</option>}
             {phases.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.label || p.id}
@@ -396,36 +395,36 @@ function StepForm({
         </label>
       </div>
       <label className={label}>
-        বিবরণ
+        Narrative
         <textarea rows={3} value={d.narrative} onChange={(e) => set("narrative", e.target.value)} className={field} />
       </label>
       <div className="grid gap-3 md:grid-cols-2">
         <label className={label}>
-          সময়ের বর্ণনা (যেমন সূত্রে আছে)
-          <input value={d.date_label} onChange={(e) => set("date_label", e.target.value)} className={field} placeholder="রাত সাড়ে ১১টা নাগাদ" />
+          Time description (as in the source)
+          <input value={d.date_label} onChange={(e) => set("date_label", e.target.value)} className={field} placeholder="e.g. রাত সাড়ে ১১টা নাগাদ" />
         </label>
         <label className={label}>
-          স্লাইডারের সময় (মিনিট, ঐচ্ছিক)
-          <input type="number" value={d.sort_minutes} onChange={(e) => set("sort_minutes", e.target.value)} className={field} placeholder="সময় জানা না থাকলে খালি রাখুন" />
+          Slider time (minutes, optional)
+          <input type="number" value={d.sort_minutes} onChange={(e) => set("sort_minutes", e.target.value)} className={field} placeholder="Leave empty if the time is unknown" />
         </label>
       </div>
 
       <fieldset className="grid gap-3 rounded-control border border-line p-3">
-        <legend className="px-1 text-meta font-semibold text-ink-2">মানচিত্রে</legend>
+        <legend className="px-1 text-meta font-semibold text-ink-2">On the map</legend>
         <div className="grid gap-3 md:grid-cols-2">
           <label className={label}>
-            কী দেখাবে
+            What to show
             <select value={d.map_type} onChange={(e) => set("map_type", e.target.value as Draft["map_type"])} className={field}>
               {MAP_TYPES.map((t) => (
                 <option key={t} value={t}>
-                  {MAP_TYPE_BN[t]}
+                  {MAP_TYPE_EN[t]}
                 </option>
               ))}
             </select>
           </label>
           <div className={label}>
-            স্থান কতটা নিশ্চিত
-            <div className="flex gap-1 rounded-full bg-hover p-1" role="radiogroup" aria-label="স্থান কতটা নিশ্চিত">
+            Location precision
+            <div className="flex gap-1 rounded-full bg-hover p-1" role="radiogroup" aria-label="Location precision">
               {LOCATION_PRECISIONS.map((p) => (
                 <button
                   key={p}
@@ -435,25 +434,25 @@ function StepForm({
                   onClick={() => set("location_precision", p)}
                   className={`h-8 flex-1 rounded-full text-meta font-normal transition-colors ${d.location_precision === p ? "bg-card font-semibold text-accent shadow-float" : "text-ink-2"}`}
                 >
-                  {LOCATION_PRECISION_BN[p]}
+                  {LOCATION_PRECISION_EN[p]}
                 </button>
               ))}
             </div>
           </div>
         </div>
-        {d.location_precision === "unknown" && <p className="text-meta text-muted">অজানা স্থান: মানচিত্রে কোনো চিহ্ন দেখাবে না, মানচিত্রও সরবে না।</p>}
-        {d.location_precision === "approximate" && <p className="text-meta text-muted">আনুমানিক স্থান: নির্দিষ্ট বিন্দুর বদলে একটি ঝাপসা বৃত্ত দেখাবে।</p>}
+        {d.location_precision === "unknown" && <p className="text-meta text-muted">Unknown location: nothing is shown on the map, and the map doesn’t move.</p>}
+        {d.location_precision === "approximate" && <p className="text-meta text-muted">Approximate location: a soft circle is shown instead of an exact point.</p>}
         {/* The names visitors read (also for unknown places, as text): typed here, or filled from the map once. */}
         <div className={`grid gap-3 ${d.map_type === "route" && showsMap ? "md:grid-cols-2" : ""}`}>
           {d.map_type === "route" && showsMap && (
             <label className={label}>
-              শুরুর স্থানের নাম
-              <input value={d.from_place_name} onChange={(e) => set("from_place_name", e.target.value)} className={field} placeholder="যেমন: চট্টগ্রাম সেনানিবাস" />
+              Start place name
+              <input value={d.from_place_name} onChange={(e) => set("from_place_name", e.target.value)} className={field} placeholder="e.g. চট্টগ্রাম সেনানিবাস" />
             </label>
           )}
           <label className={label}>
-            {d.map_type === "route" && showsMap ? "গন্তব্যের নাম" : "স্থানের নাম"} <span className="font-normal text-muted">(দর্শকেরা যা দেখবেন)</span>
-            <input value={d.place_name} onChange={(e) => set("place_name", e.target.value)} className={field} placeholder="যেমন: প্যারেড স্কয়ার, চট্টগ্রাম" />
+            {d.map_type === "route" && showsMap ? "End place name" : "Place name"} <span className="font-normal text-muted">(what visitors see)</span>
+            <input value={d.place_name} onChange={(e) => set("place_name", e.target.value)} className={field} placeholder="e.g. প্যারেড স্কয়ার, চট্টগ্রাম" />
           </label>
         </div>
         {showsMap && (
@@ -482,13 +481,13 @@ function StepForm({
       </fieldset>
 
       <div className={label}>
-        ছবি (ঐচ্ছিক)
+        Image (optional)
         <ImagePicker value={d.image} near={d.to} onChange={(v) => set("image", v)} />
       </div>
 
       <fieldset className="grid gap-2 rounded-control border border-line p-3">
-        <legend className="px-1 text-meta font-semibold text-ink-2">সূত্র ও যাচাই</legend>
-        {!data.sources.length && <p className="text-meta text-warning">এই ঘটনায় এখনো কোনো সূত্র নেই। ওপরে &ldquo;সূত্র&rdquo; অংশে আগে সূত্র যোগ করুন।</p>}
+        <legend className="px-1 text-meta font-semibold text-ink-2">Sources and verification</legend>
+        {!data.sources.length && <p className="text-meta text-warning">This event has no sources yet. Add them first in the &ldquo;Sources&rdquo; section above.</p>}
         {data.sources.map((s) => (
           <label key={s.id} className="flex items-start gap-2 text-meta">
             <input
@@ -502,16 +501,16 @@ function StepForm({
             />
             <span>
               {s.title}
-              {!s.verified && <span className="ms-1 text-micro text-warning">(সূত্রটি নিজেই এখনো যাচাই হয়নি)</span>}
+              {!s.verified && <span className="ms-1 text-micro text-warning">(this source isn’t verified yet)</span>}
             </span>
           </label>
         ))}
         <label className={label}>
-          প্রমাণের ধরন
+          Evidence
           <select value={d.evidence} onChange={(e) => set("evidence", e.target.value as Draft["evidence"])} className={`${field} md:w-64`}>
             {EVIDENCE_LEVELS.map((x) => (
               <option key={x} value={x}>
-                {EVIDENCE_BN[x]}
+                {EVIDENCE_EN[x]}
               </option>
             ))}
           </select>
@@ -525,32 +524,32 @@ function StepForm({
             onChange={(e) => set("verified", e.target.checked)}
           />
           <span>
-            <span className="font-semibold">যাচাই করা</span>
-            <span className="block text-muted">{d.source_ids.length ? "যুক্ত সূত্রের সঙ্গে মিলিয়ে দেখেছি" : "আগে অন্তত একটি সূত্র যুক্ত করুন"}</span>
+            <span className="font-semibold">Verified</span>
+            <span className="block text-muted">{d.source_ids.length ? "I checked it against the linked sources" : "Link at least one source first"}</span>
           </span>
         </label>
       </fieldset>
 
       <div className="flex flex-wrap items-center gap-2">
         <button type="submit" disabled={busy} className={`${btn} bg-accent text-on-accent hover:bg-accent-hover`}>
-          {busy ? "…" : step ? "ধাপ সংরক্ষণ" : "ধাপ যোগ করুন"}
+          {busy ? "…" : step ? "Save step" : "Add step"}
         </button>
         <button type="button" onClick={onCancel} className={`${btn} text-muted hover:text-ink`}>
-          বাতিল
+          Cancel
         </button>
         {onDelete &&
           (confirmDelete ? (
             <button type="button" onClick={onDelete} className={`${btn} ms-auto bg-danger text-white`}>
-              নিশ্চিতভাবে মুছুন
+              Yes, delete
             </button>
           ) : (
             <button type="button" onClick={() => setConfirmDelete(true)} className={`${btn} ms-auto text-danger hover:bg-hover`}>
-              ধাপ মুছুন
+              Delete step
             </button>
           ))}
       </div>
       {!drawsOnMap({ map_type: d.map_type, location_precision: d.location_precision, lat: d.to?.lat ?? null }) && d.map_type !== "none" && d.location_precision !== "unknown" && (
-        <p className="text-meta text-warning">স্থান এখনো বেছে নেওয়া হয়নি।</p>
+        <p className="text-meta text-warning">No location picked yet.</p>
       )}
     </form>
   );

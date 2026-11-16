@@ -10,10 +10,10 @@ export async function GET(req: Request, { params }: RouteContext<"/api/admin/eve
   const admin = await requireAdmin(req);
   if (admin instanceof Response) return admin;
   const { id } = await params;
-  if (!isId(id)) return Response.json({ error: "পাওয়া যায়নি" }, { status: 404 });
+  if (!isId(id)) return Response.json({ error: "Not found" }, { status: 404 });
   try {
     const found = await getEvent(id);
-    if (!found) return Response.json({ error: "পাওয়া যায়নি" }, { status: 404 });
+    if (!found) return Response.json({ error: "Not found" }, { status: 404 });
     return Response.json(withProblems(found));
   } catch (e) {
     return Response.json({ error: (e as Error).message }, { status: 500 });
@@ -25,17 +25,17 @@ export async function PUT(req: Request, { params }: RouteContext<"/api/admin/eve
   const admin = await requireAdmin(req);
   if (admin instanceof Response) return admin;
   const { id } = await params;
-  if (!isId(id)) return Response.json({ error: "পাওয়া যায়নি" }, { status: 404 });
+  if (!isId(id)) return Response.json({ error: "Not found" }, { status: 404 });
   const parsed = EventFields.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) return Response.json({ error: "তথ্য ঠিক নেই", issues: parsed.error.issues }, { status: 400 });
+  if (!parsed.success) return Response.json({ error: "Invalid data", issues: parsed.error.issues }, { status: 400 });
   try {
     const current = await getEvent(id);
-    if (!current) return Response.json({ error: "পাওয়া যায়নি" }, { status: 404 });
+    if (!current) return Response.json({ error: "Not found" }, { status: 404 });
     // A published event must stay publishable: an edit that breaks the checklist is refused.
     if (current.event.status === "published") {
       const problems = publishProblems({ ...current.event, ...parsed.data }, current.sources, current.steps);
       if (problems.length) {
-        return Response.json({ error: "প্রকাশিত ঘটনায় এই পরিবর্তন করা যায় না; আগে অপ্রকাশিত করুন", problems }, { status: 409 });
+        return Response.json({ error: "This change isn't allowed on a published event; unpublish it first", problems }, { status: 409 });
       }
     }
     const event = await updateEvent(id, parsed.data, admin.userId);
@@ -52,12 +52,12 @@ export async function DELETE(req: Request, { params }: RouteContext<"/api/admin/
   const admin = await requireAdmin(req);
   if (admin instanceof Response) return admin;
   const { id } = await params;
-  if (!isId(id)) return Response.json({ error: "পাওয়া যায়নি" }, { status: 404 });
+  if (!isId(id)) return Response.json({ error: "Not found" }, { status: 404 });
   try {
     const current = await getEvent(id);
-    if (!current) return Response.json({ error: "পাওয়া যায়নি" }, { status: 404 });
+    if (!current) return Response.json({ error: "Not found" }, { status: 404 });
     if (!["draft", "archived"].includes(current.event.status)) {
-      return Response.json({ error: "শুধু খসড়া বা আর্কাইভ করা ঘটনা মোছা যায়। আগে আর্কাইভ করুন।" }, { status: 409 });
+      return Response.json({ error: "Only draft or archived events can be deleted. Archive it first." }, { status: 409 });
     }
     await deleteEvent(id);
     return Response.json({ ok: true });

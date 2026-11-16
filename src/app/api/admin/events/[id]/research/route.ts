@@ -18,9 +18,9 @@ export async function GET(req: Request, { params }: RouteContext<"/api/admin/eve
 }
 
 const Start = z.object({
-  title: z.string().trim().min(2, "শিরোনাম দিন").max(200),
+  title: z.string().trim().min(2, "Enter a title").max(200),
   context: z.string().trim().max(1000).optional(),
-  urls: z.array(z.string().trim().max(2000)).max(5, "সর্বোচ্চ ৫টি লিংক").default([]),
+  urls: z.array(z.string().trim().max(2000)).max(5, "At most 5 links").default([]),
 });
 
 /**
@@ -34,7 +34,7 @@ export async function POST(req: Request, { params }: RouteContext<"/api/admin/ev
   const { id } = await params;
   if (!isId(id)) return notFound();
   const parsed = Start.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) return Response.json({ error: parsed.error.issues[0]?.message ?? "তথ্য ঠিক নেই" }, { status: 400 });
+  if (!parsed.success) return Response.json({ error: parsed.error.issues[0]?.message ?? "Invalid data" }, { status: 400 });
   const event = await getEvent(id).catch(() => undefined);
   if (!event) return notFound();
 
@@ -53,7 +53,7 @@ export async function POST(req: Request, { params }: RouteContext<"/api/admin/ev
       } catch (e) {
         console.error("research:", e);
         // Never the raw error (it may name internals): a plain message.
-        send({ type: "error", message: /মাইগ্রেশন/.test((e as Error).message) ? (e as Error).message : "গবেষণা চালানো যায়নি। একটু পরে আবার চেষ্টা করুন।" });
+        send({ type: "error", message: /migration/i.test((e as Error).message) ? (e as Error).message : "Could not run the research. Please try again shortly." });
       } finally {
         controller.close();
       }

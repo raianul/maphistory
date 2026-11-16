@@ -11,10 +11,10 @@ export async function PUT(req: Request, { params }: Ctx) {
   if (admin instanceof Response) return admin;
   const { id, sourceId } = await params;
   const parsed = SourceFields.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) return Response.json({ error: "সূত্রের তথ্য ঠিক নেই", issues: parsed.error.issues }, { status: 400 });
+  if (!parsed.success) return Response.json({ error: "Invalid source data", issues: parsed.error.issues }, { status: 400 });
   try {
     const found = await getEvent(id);
-    if (!found) return Response.json({ error: "পাওয়া যায়নি" }, { status: 404 });
+    if (!found) return Response.json({ error: "Not found" }, { status: 404 });
     await updateSource(id, sourceId, parsed.data);
     await touchEvent(id, admin.userId);
     if (found.event.status === "published") invalidatePublicEvents();
@@ -32,19 +32,19 @@ export async function DELETE(req: Request, { params }: Ctx) {
   const { id, sourceId } = await params;
   try {
     const found = await getEvent(id);
-    if (!found) return Response.json({ error: "পাওয়া যায়নি" }, { status: 404 });
+    if (!found) return Response.json({ error: "Not found" }, { status: 404 });
     // A verified step must keep at least one source: removing its last one would leave it unbacked.
     const stranded = found.steps.findIndex((st) => st.verified && st.source_ids.length === 1 && st.source_ids[0] === sourceId);
     if (stranded >= 0) {
       return Response.json(
-        { error: `ধাপ ${(stranded + 1).toLocaleString("bn-BD")} শুধু এই সূত্রের ওপর নির্ভর করে। আগে ধাপটিতে অন্য সূত্র যোগ করুন বা যাচাই চিহ্ন তুলে নিন।` },
+        { error: `Step ${stranded + 1} relies only on this source. Add another source to that step or untick "verified" first.` },
         { status: 409 },
       );
     }
     if (found.event.status === "published") {
       const left = found.sources.filter((s) => s.id !== sourceId);
       if (!left.some((s) => s.verified)) {
-        return Response.json({ error: "প্রকাশিত ঘটনার শেষ যাচাই করা সূত্র মোছা যায় না। আগে অপ্রকাশিত করুন বা আরেকটি সূত্র যোগ করুন।" }, { status: 409 });
+        return Response.json({ error: "Can't delete the last verified source of a published event. Unpublish it or add another source first." }, { status: 409 });
       }
     }
     await deleteSource(id, sourceId);

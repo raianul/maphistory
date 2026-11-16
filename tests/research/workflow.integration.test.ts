@@ -159,9 +159,9 @@ describe.skipIf(!ON)("research workflow (database)", () => {
   });
 
   it("refuses duplicates: the same suggestion twice, or a step with an existing title", async () => {
-    expect(await reason(accepting(eventId, runId, { kind: "step", index: 0, fields: stepFields }))).toMatch(/^409: .*আগেই যোগ/);
+    expect(await reason(accepting(eventId, runId, { kind: "step", index: 0, fields: stepFields }))).toMatch(/^409: .*already added/);
     const other = (await listRuns(eventId)).find((r) => r.id !== runId && r.status === "ready")!;
-    expect(await reason(accepting(eventId, other.id, { kind: "step", index: 0, fields: { ...stepFields, title: "  ১৪৪ ধারা  ভঙ্গ " } }))).toMatch(/^409: .*আগেই আছে/);
+    expect(await reason(accepting(eventId, other.id, { kind: "step", index: 0, fields: { ...stepFields, title: "  ১৪৪ ধারা  ভঙ্গ " } }))).toMatch(/^409: .*already exists/);
     expect((await getEvent(eventId))!.steps).toHaveLength(1);
   });
 
@@ -211,7 +211,7 @@ describe.skipIf(!ON)("research workflow (database)", () => {
     const run = (await listRuns(pub.id))[0];
     // Force it published directly (the checklist isn't the subject here).
     await db().from("historical_events").update({ status: "published", published_at: new Date().toISOString() }).eq("id", pub.id);
-    expect(await reason(accepting(pub.id, run.id, { kind: "step", index: 0, fields: stepFields }))).toMatch(/^409: .*প্রকাশিত/);
+    expect(await reason(accepting(pub.id, run.id, { kind: "step", index: 0, fields: stepFields }))).toMatch(/^409: .*published/);
     expect(await reason(accepting(pub.id, run.id, { kind: "source", source_id: "S1" }))).toMatch(/^409/);
     expect((await getEvent(pub.id))!.steps).toHaveLength(0);
     void setEventStatus; // status changes go through the normal workflow in the app
@@ -222,7 +222,7 @@ describe.skipIf(!ON)("research workflow (database)", () => {
     const ev = await newEvent(`${slug}-limit`);
     await db().from("generation_log").insert(Array.from({ length: RESEARCH_PER_DAY }, () => ({ visitor: `admin:${ADMIN}`, place_key: "research:x" })));
     const events = await research(ev.id, MALICIOUS);
-    expect(events).toEqual([{ type: "error", message: expect.stringMatching(/সীমা/) }]);
+    expect(events).toEqual([{ type: "error", message: expect.stringMatching(/limit/) }]);
     expect(await listRuns(ev.id)).toHaveLength(0);
     await resetLimit();
   });
@@ -356,7 +356,7 @@ describe.skipIf(!ON)("on this day: generate and publish (database)", () => {
 
   it("an unconfirmed suggestion still generates, with a warning to check the source", async () => {
     const events = await generate(MALICIOUS, { ...candidate, title_bn: `${candidate.title_bn} ৩`, check: { confirmed: false, reason: "404", page_title: null } });
-    expect(events.at(-1)).toMatchObject({ type: "done", warnings: expect.arrayContaining([expect.stringMatching(/নিশ্চিত করা যায়নি/)]) });
+    expect(events.at(-1)).toMatchObject({ type: "done", warnings: expect.arrayContaining([expect.stringMatching(/could not be confirmed/)]) });
   });
 
   it("a non-report answer saves nothing", async () => {

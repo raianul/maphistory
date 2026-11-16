@@ -7,15 +7,15 @@ import { periodDisplay, periodStart } from "@/lib/format";
 type Confidence = "high" | "medium" | "low";
 type Evidence = "documented" | "scholarly" | "tradition" | "legend" | "disputed";
 const EVIDENCE_LABEL: Record<Evidence, string> = {
-  documented: "নথিভুক্ত",
-  scholarly: "গবেষকদের ব্যাখ্যা",
-  tradition: "লোকঐতিহ্য",
-  legend: "কিংবদন্তি",
-  disputed: "বিতর্কিত",
+  documented: "Documented",
+  scholarly: "Scholars' interpretation",
+  tradition: "Tradition / folklore",
+  legend: "Legend",
+  disputed: "Disputed",
 };
 
 const input = "w-full rounded-lg border border-line bg-card px-2.5 py-1.5 text-sm outline-none focus:border-accent";
-const CONF_LABEL: Record<Confidence, string> = { high: "নিশ্চিত", medium: "সম্ভবত", low: "অনিশ্চিত" };
+const CONF_LABEL: Record<Confidence, string> = { high: "Certain", medium: "Likely", low: "Uncertain" };
 
 /**
  * Edit a saved story: the text fields an editor usually fixes, period by
@@ -56,15 +56,15 @@ export function StoryEditor({
                 setJsonError(null);
                 onSave(JSON.parse(json));
               } catch (e) {
-                setJsonError("JSON ঠিক নেই: " + (e as Error).message);
+                setJsonError("Invalid JSON: " + (e as Error).message);
               }
             }}
             className="rounded-full bg-accent px-4 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
           >
-            {saving ? "সংরক্ষণ হচ্ছে…" : "সংরক্ষণ করুন"}
+            {saving ? "Saving…" : "Save"}
           </button>
           <button type="button" onClick={() => setJson(null)} className="text-sm text-muted underline">
-            ফর্মে ফিরুন
+            Back to the form
           </button>
         </div>
       </div>
@@ -76,16 +76,16 @@ export function StoryEditor({
 
   return (
     <div className="mt-4 grid gap-5 pb-24">
-      <Field label="নাম (বাংলা)">
+      <Field label="Name (Bangla)">
         <input className={input} value={s.name_bn} onChange={(e) => edit((d) => void (d.name_bn = e.target.value))} />
       </Field>
       <Field label="Name (English)">
         <input className={input} value={s.name_en} onChange={(e) => edit((d) => void (d.name_en = e.target.value))} />
       </Field>
-      <Field label="সারসংক্ষেপ">
+      <Field label="Summary">
         <textarea className={input} rows={4} value={s.summary_bn} onChange={(e) => edit((d) => void (d.summary_bn = e.target.value))} />
       </Field>
-      <Field label="নামের গল্প">
+      <Field label="Story of the name">
         <textarea
           className={input}
           rows={3}
@@ -93,7 +93,7 @@ export function StoryEditor({
           onChange={(e) => edit((d) => void (d.name_story_bn = e.target.value || undefined))}
         />
       </Field>
-      <Field label="ইতিহাসে গুরুত্ব">
+      <Field label="Historical significance">
         <textarea
           className={input}
           rows={2}
@@ -120,28 +120,28 @@ export function StoryEditor({
                 onClick={() => edit((d) => void d.periods.splice(pi, 1))}
                 className="shrink-0 text-xs text-red-800 underline"
               >
-                পুরো আমল মুছুন
+                Delete whole period
               </button>
             </div>
             <div className="mt-1.5 flex gap-2">
               <input
                 className={input}
-                placeholder={meta.range || "সময়কাল, যেমন ১৫৭৬–১৭৫৭"}
+                placeholder={meta.range || "Period, e.g. ১৫৭৬–১৭৫৭"}
                 value={p.range_bn ?? ""}
                 onChange={(e) => edit((d) => void (d.periods[pi].range_bn = e.target.value || undefined))}
               />
               <input
                 type="number"
-                title="শুরুর সাল (সাজানোর জন্য; খ্রিস্টপূর্ব হলে ঋণাত্মক)"
-                placeholder="শুরু"
+                title="Start year (for sorting; negative for BC)"
+                placeholder="Start"
                 className={`${input} w-24`}
                 value={p.start_year ?? ""}
                 onChange={(e) => edit((d) => void (d.periods[pi].start_year = e.target.value === "" ? undefined : Number(e.target.value)))}
               />
               <input
                 type="number"
-                title="শেষের সাল (চলমান হলে খালি)"
-                placeholder="শেষ"
+                title="End year (empty if ongoing)"
+                placeholder="End"
                 className={`${input} w-24`}
                 value={p.end_year ?? ""}
                 onChange={(e) => edit((d) => void (d.periods[pi].end_year = e.target.value === "" ? undefined : Number(e.target.value)))}
@@ -154,7 +154,7 @@ export function StoryEditor({
               onChange={(e) => edit((d) => void (d.periods[pi].intro_bn = e.target.value))}
             />
 
-            <p className="mt-3 text-xs font-semibold text-muted">ঘটনা</p>
+            <p className="mt-3 text-xs font-semibold text-muted">Events</p>
             {(p.events ?? []).map((ev, i) => (
               <Item
                 key={i}
@@ -172,7 +172,7 @@ export function StoryEditor({
                   />
                   <input
                     type="number"
-                    title="সাজানোর জন্য সাল"
+                    title="Year, for sorting"
                     className={`${input} w-24`}
                     value={ev.sort_year}
                     onChange={(e) => edit((d) => void (d.periods[pi].events![i].sort_year = Number(e.target.value)))}
@@ -188,13 +188,13 @@ export function StoryEditor({
               </Item>
             ))}
             <AddButton
-              label="ঘটনা"
+              label="Event"
               onClick={() =>
                 edit((d) => void (d.periods[pi].events ??= []).push({ when_bn: "", sort_year: 0, title_bn: "", body_bn: "", confidence: "high" }))
               }
             />
 
-            <p className="mt-3 text-xs font-semibold text-muted">ব্যক্তি</p>
+            <p className="mt-3 text-xs font-semibold text-muted">People</p>
             {(p.people ?? []).map((x, i) => (
               <Item
                 key={i}
@@ -217,11 +217,11 @@ export function StoryEditor({
               </Item>
             ))}
             <AddButton
-              label="ব্যক্তি"
+              label="Person"
               onClick={() => edit((d) => void (d.periods[pi].people ??= []).push({ name_bn: "", role_bn: "", body_bn: "", confidence: "high" }))}
             />
 
-            <p className="mt-3 text-xs font-semibold text-muted">জানেন কি?</p>
+            <p className="mt-3 text-xs font-semibold text-muted">Did you know?</p>
             {(p.facts ?? []).map((f, i) => (
               <Item
                 key={i}
@@ -240,7 +240,7 @@ export function StoryEditor({
                 />
               </Item>
             ))}
-            <AddButton label="তথ্য" onClick={() => edit((d) => void (d.periods[pi].facts ??= []).push({ title_bn: "", body_bn: "", confidence: "high" }))} />
+            <AddButton label="Fact" onClick={() => edit((d) => void (d.periods[pi].facts ??= []).push({ title_bn: "", body_bn: "", confidence: "high" }))} />
           </section>
         );
       })}
@@ -255,23 +255,23 @@ export function StoryEditor({
         }
         className="justify-self-start rounded-full border border-line bg-card px-3 py-1 text-sm"
       >
-        + নতুন আমল
+        + New period
       </button>
 
-      <Field label="এখানে যা আছে">
+      <Field label="What's here">
         {(s.places_here ?? []).map((x, i) => (
           <div key={i} className="mb-1.5 flex gap-2">
             <input className={input} value={x.name_bn} onChange={(e) => edit((d) => void (d.places_here![i].name_bn = e.target.value))} />
             <input className={input} value={x.what_bn} onChange={(e) => edit((d) => void (d.places_here![i].what_bn = e.target.value))} />
-            <button type="button" onClick={() => edit((d) => void d.places_here!.splice(i, 1))} className="text-red-800" aria-label="মুছুন">
+            <button type="button" onClick={() => edit((d) => void d.places_here!.splice(i, 1))} className="text-red-800" aria-label="Delete">
               ×
             </button>
           </div>
         ))}
-        <AddButton label="জায়গা" onClick={() => edit((d) => void (d.places_here ??= []).push({ name_bn: "", what_bn: "" }))} />
+        <AddButton label="Place" onClick={() => edit((d) => void (d.places_here ??= []).push({ name_bn: "", what_bn: "" }))} />
       </Field>
 
-      <Field label="যা নিয়ে নিশ্চিত নয়">
+      <Field label="What's uncertain">
         <textarea
           className={input}
           rows={2}
@@ -287,10 +287,10 @@ export function StoryEditor({
           onClick={save}
           className="rounded-full bg-accent px-5 py-2 text-sm font-semibold text-white disabled:opacity-50"
         >
-          {saving ? "সংরক্ষণ হচ্ছে…" : "সংরক্ষণ করুন"}
+          {saving ? "Saving…" : "Save"}
         </button>
         <button type="button" onClick={() => setJson(JSON.stringify(s, null, 2))} className="text-sm text-muted underline">
-          JSON সরাসরি
+          Edit raw JSON
         </button>
       </div>
     </div>
@@ -341,18 +341,18 @@ function Item({
           value={evidence ?? ""}
           onChange={(e) => onEvidence((e.target.value || undefined) as Evidence | undefined)}
           className="rounded border border-line bg-card px-1"
-          title="তথ্যটা কীসের ওপর দাঁড়িয়ে"
+          title="What this is based on"
         >
-          <option value="">ভিত্তি: —</option>
+          <option value="">Basis: —</option>
           {(Object.keys(EVIDENCE_LABEL) as Evidence[]).map((v) => (
             <option key={v} value={v}>
               {EVIDENCE_LABEL[v]}
             </option>
           ))}
         </select>
-        {confidence !== "high" && <span className="text-amber-800">যাচাই করে &ldquo;নিশ্চিত&rdquo; করুন বা মুছুন</span>}
+        {confidence !== "high" && <span className="text-amber-800">Check it, then mark &ldquo;Certain&rdquo; or delete</span>}
         <button type="button" onClick={onDelete} className="ms-auto text-red-800 underline">
-          মুছুন
+          Delete
         </button>
       </div>
     </div>

@@ -57,14 +57,14 @@ export function urlProblem(raw: string): string | null {
   try {
     u = new URL(raw);
   } catch {
-    return "অবৈধ লিংক";
+    return "Invalid link";
   }
-  if (u.protocol !== "https:" && u.protocol !== "http:") return "শুধু http/https লিংক";
-  if (u.username || u.password) return "লিংকে ইউজারনেম/পাসওয়ার্ড চলবে না";
-  if (u.port && !["80", "443"].includes(u.port)) return "অস্বাভাবিক পোর্ট";
+  if (u.protocol !== "https:" && u.protocol !== "http:") return "Only http/https links";
+  if (u.username || u.password) return "Links can't contain a username/password";
+  if (u.port && !["80", "443"].includes(u.port)) return "Unusual port";
   const host = u.hostname.replace(/^\[|\]$/g, "");
-  if (!host || host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal")) return "অভ্যন্তরীণ ঠিকানা";
-  if (isIP(host) && !isPublicAddress(host)) return "অভ্যন্তরীণ ঠিকানা";
+  if (!host || host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal")) return "Internal address";
+  if (isIP(host) && !isPublicAddress(host)) return "Internal address";
   return null;
 }
 
@@ -72,11 +72,11 @@ export function urlProblem(raw: string): string | null {
 async function assertPublicHost(hostname: string, resolve = lookup): Promise<void> {
   const host = hostname.replace(/^\[|\]$/g, "");
   if (isIP(host)) {
-    if (!isPublicAddress(host)) throw new Error("অভ্যন্তরীণ ঠিকানা");
+    if (!isPublicAddress(host)) throw new Error("Internal address");
     return;
   }
   const addrs = await resolve(host, { all: true, verbatim: true });
-  if (!addrs.length || addrs.some((a) => !isPublicAddress(a.address))) throw new Error("অভ্যন্তরীণ ঠিকানা");
+  if (!addrs.length || addrs.some((a) => !isPublicAddress(a.address))) throw new Error("Internal address");
 }
 
 /** HTML → readable plain text (no scripts/styles; block tags become line breaks; entities decoded). */
@@ -138,24 +138,24 @@ export async function safeFetch(raw: string, deps: { fetch?: typeof fetch; resol
       });
       if (res.status >= 300 && res.status < 400) {
         const next = res.headers.get("location");
-        if (!next) return { ok: false, url, reason: `রিডাইরেক্ট (${res.status}) কিন্তু গন্তব্য নেই` };
+        if (!next) return { ok: false, url, reason: `Redirect (${res.status}) without a destination` };
         url = new URL(next, url).toString();
         const p = urlProblem(url);
-        if (p) return { ok: false, url, reason: `রিডাইরেক্ট বাতিল: ${p}` };
+        if (p) return { ok: false, url, reason: `Redirect blocked: ${p}` };
         continue;
       }
-      if (!res.ok) return { ok: false, url, reason: `পাওয়া যায়নি (HTTP ${res.status})` };
+      if (!res.ok) return { ok: false, url, reason: `Not found (HTTP ${res.status})` };
       const type = res.headers.get("content-type") ?? "";
-      if (!TEXT_TYPES.test(type)) return { ok: false, url, reason: `পড়া যায় এমন লেখা নয় (${type.split(";")[0] || "অজানা ধরন"})` };
+      if (!TEXT_TYPES.test(type)) return { ok: false, url, reason: `Not readable text (${type.split(";")[0] || "unknown type"})` };
       const body = await readLimited(res);
-      if (body === null) return { ok: false, url, reason: "পাতাটি খুব বড়" };
+      if (body === null) return { ok: false, url, reason: "Page is too large" };
       const { title, text } = /html|xml/i.test(type) ? htmlToText(body) : { title: null, text: body };
-      if (text.length < 200) return { ok: false, url, reason: "পাতায় পড়ার মতো লেখা প্রায় নেই" };
+      if (text.length < 200) return { ok: false, url, reason: "Page has almost no readable text" };
       return { ok: true, url, title, text, contentType: type.split(";")[0] };
     }
-    return { ok: false, url, reason: "অনেকবার রিডাইরেক্ট" };
+    return { ok: false, url, reason: "Too many redirects" };
   } catch (e) {
     const msg = (e as Error).message;
-    return { ok: false, url, reason: /অভ্যন্তরীণ/.test(msg) ? msg : /timeout|abort/i.test(msg) ? "সময় শেষ (সাড়া দেয়নি)" : "পাতাটি আনা যায়নি" };
+    return { ok: false, url, reason: /Internal address/.test(msg) ? msg : /timeout|abort/i.test(msg) ? "Timed out (no response)" : "Could not fetch the page" };
   }
 }

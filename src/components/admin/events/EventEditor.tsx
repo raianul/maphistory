@@ -5,9 +5,9 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
   DATE_PRECISIONS,
-  SOURCE_TYPE_BN,
+  SOURCE_TYPE_EN,
   SOURCE_TYPES,
-  STATUS_BN,
+  STATUS_EN,
   TRANSITIONS,
   type EventSource,
   type EventStatus,
@@ -29,20 +29,20 @@ const label = "grid gap-1 text-meta font-semibold text-ink-2";
 const section = "rounded-2xl bg-card p-4 shadow-float md:p-5";
 const btn = "h-10 rounded-full px-4 text-meta font-semibold transition-colors disabled:opacity-50";
 
-const PRECISION_BN: Record<(typeof DATE_PRECISIONS)[number], string> = {
-  day: "নির্দিষ্ট দিন",
-  month: "শুধু মাস ও বছর",
-  year: "শুধু বছর",
-  approximate: "আনুমানিক",
+const PRECISION_EN: Record<(typeof DATE_PRECISIONS)[number], string> = {
+  day: "Exact day",
+  month: "Month and year only",
+  year: "Year only",
+  approximate: "Approximate",
 };
 
 /** Words for each move between statuses, as buttons. */
-const MOVE_BN: Partial<Record<EventStatus, string>> = {
-  draft: "খসড়ায় ফেরান",
-  research: "গবেষণায় পাঠান",
-  review: "পর্যালোচনায় পাঠান",
-  published: "যাচাই করে প্রকাশ করুন",
-  archived: "আর্কাইভ করুন",
+const MOVE_EN: Partial<Record<EventStatus, string>> = {
+  draft: "Back to draft",
+  research: "Send to research",
+  review: "Send to review",
+  published: "Verify and publish",
+  archived: "Archive",
 };
 
 /** /admin/events/[id]: an event's basic information, its sources, and its status. */
@@ -58,17 +58,17 @@ export function EventEditor({ id }: { id: string }) {
     });
   }, [id]);
 
-  if (!data) return <p className="p-8 text-muted">{error ?? "লোড হচ্ছে…"}</p>;
+  if (!data) return <p className="p-8 text-muted">{error ?? "Loading…"}</p>;
   const { event } = data;
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-6 md:px-6">
       <div className="flex flex-wrap gap-3 text-meta">
         <Link href={`/admin/events/${id}/preview`} className="font-semibold text-accent hover:underline">
-          ← প্রিভিউ ও প্রকাশ
+          ← Preview and publish
         </Link>
         <Link href="/admin/events" className="text-muted hover:text-ink">
-          সব ঘটনা
+          All events
         </Link>
       </div>
       <header className="mt-2 flex flex-wrap items-start gap-3">
@@ -76,7 +76,7 @@ export function EventEditor({ id }: { id: string }) {
           <h1 className="text-display font-bold tracking-tight">{event.title}</h1>
           <p className="mt-1 text-meta text-muted">
             {dateBn(event)} · /{event.slug}
-            {event.published_at && ` · প্রথম প্রকাশ ${new Date(event.published_at).toLocaleDateString("bn-BD")}`}
+            {event.published_at && ` · First published ${new Date(event.published_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}`}
           </p>
         </div>
         <StatusBadge status={event.status} />
@@ -89,7 +89,7 @@ export function EventEditor({ id }: { id: string }) {
       <TimelinePanel data={data} onChange={setData} />
       {/* Detailed AI research (claim by claim): rarely needed now that drafts are generated. */}
       <details className="mt-5 rounded-2xl bg-card shadow-float">
-        <summary className="cursor-pointer p-4 text-meta font-semibold text-ink-2 select-none md:px-5">উন্নত: বিস্তারিত AI গবেষণা</summary>
+        <summary className="cursor-pointer p-4 text-meta font-semibold text-ink-2 select-none md:px-5">Advanced: detailed AI research</summary>
         <div className="px-0 pb-1 [&>section]:mt-0 [&>section]:shadow-none">
           <ResearchPanel data={data} onChange={setData} />
         </div>
@@ -126,15 +126,15 @@ function StatusPanel({ data, onChange }: { data: Loaded; onChange: (d: Loaded) =
 
   const moves = TRANSITIONS[event.status];
   return (
-    <section className={`${section} mt-5`} aria-label="অবস্থা">
-      <h2 className="font-semibold">অবস্থা: {STATUS_BN[event.status]}</h2>
+    <section className={`${section} mt-5`} aria-label="Status">
+      <h2 className="font-semibold">Status: {STATUS_EN[event.status]}</h2>
       <p className="mt-1 text-meta text-muted">
-        শুধু প্রকাশিত ঘটনা দর্শকেরা দেখেন। প্রকাশ করা মানে আপনি দেখে নিশ্চিত করেছেন: সব সূত্র ও ধাপ যাচাই করা হিসেবে চিহ্নিত হবে। অপ্রকাশ করলে সঙ্গে সঙ্গে সরে যায়।
+        Visitors only see published events. Publishing means you have checked it: all sources and steps will be marked as verified. Unpublishing removes it right away.
       </p>
 
       {event.status !== "published" && (
         <div className="mt-3 rounded-control bg-paper p-3">
-          <p className="text-meta font-semibold">{problems.length ? "প্রকাশের আগে বাকি:" : "✓ প্রকাশের জন্য প্রস্তুত"}</p>
+          <p className="text-meta font-semibold">{problems.length ? "Before publishing:" : "✓ Ready to publish"}</p>
           {problems.length > 0 && (
             <ul className="mt-1 grid gap-0.5 text-meta text-warning">
               {problems.map((p) => (
@@ -155,10 +155,10 @@ function StatusPanel({ data, onChange }: { data: Loaded; onChange: (d: Loaded) =
               type="button"
               disabled={!!busy || blocked}
               onClick={() => move(to)}
-              title={blocked ? "চেকলিস্ট পূরণ হয়নি" : undefined}
+              title={blocked ? "The checklist isn’t complete" : undefined}
               className={`${btn} ${primary ? "bg-accent text-on-accent hover:bg-accent-hover" : event.status === "published" && to === "review" ? "bg-warning-soft text-warning hover:bg-warning-soft-hover" : "bg-hover text-ink-2 hover:bg-pressed"}`}
             >
-              {busy === to ? "…" : event.status === "published" && to === "review" ? "অপ্রকাশিত করুন" : MOVE_BN[to]}
+              {busy === to ? "…" : event.status === "published" && to === "review" ? "Unpublish" : MOVE_EN[to]}
             </button>
           );
         })}
@@ -166,15 +166,15 @@ function StatusPanel({ data, onChange }: { data: Loaded; onChange: (d: Loaded) =
           (confirmDelete ? (
             <span className="flex items-center gap-2">
               <button type="button" onClick={remove} className={`${btn} bg-danger text-white`}>
-                নিশ্চিতভাবে মুছুন
+                Yes, delete
               </button>
               <button type="button" onClick={() => setConfirmDelete(false)} className={`${btn} text-muted`}>
-                বাতিল
+                Cancel
               </button>
             </span>
           ) : (
             <button type="button" onClick={() => setConfirmDelete(true)} className={`${btn} ms-auto text-danger hover:bg-hover`}>
-              মুছে ফেলুন
+              Delete
             </button>
           ))}
       </div>
@@ -247,51 +247,51 @@ function BasicsForm({ event, onSaved }: { event: HistoricalEvent; onSaved: (d: L
   const issueFor = (k: string) => error?.issues?.find((i) => i.path[0] === k)?.message;
 
   return (
-    <form onSubmit={save} className={`${section} mt-5 grid gap-4`} aria-label="মূল তথ্য">
-      <h2 className="font-semibold">মূল তথ্য</h2>
+    <form onSubmit={save} className={`${section} mt-5 grid gap-4`} aria-label="Basic information">
+      <h2 className="font-semibold">Basic information</h2>
 
       <div className="grid gap-4 md:grid-cols-2">
         <label className={label}>
-          শিরোনাম
+          Title
           <input required value={f.title} onChange={(e) => set("title", e.target.value)} className={field} />
           <FieldError message={issueFor("title")} />
         </label>
         <label className={label}>
-          স্লাগ
+          Slug
           <input required value={f.slug} onChange={(e) => set("slug", e.target.value.toLowerCase())} className={field} />
           <FieldError message={issueFor("slug")} />
         </label>
       </div>
 
       <label className={label}>
-        সংক্ষিপ্ত বিবরণ (তালিকায় দেখাবে, ৬০০ অক্ষরের মধ্যে)
+        Short summary (shown in lists, up to 600 characters)
         <textarea rows={2} maxLength={600} value={f.summary ?? ""} onChange={(e) => set("summary", text(e.target.value))} className={field} />
       </label>
       <label className={label}>
-        পূর্ণ ঐতিহাসিক বিবরণ
+        Full historical account
         <textarea rows={8} maxLength={20000} value={f.narrative ?? ""} onChange={(e) => set("narrative", text(e.target.value))} className={field} />
       </label>
 
       <fieldset className="grid gap-3 rounded-control border border-line p-3">
-        <legend className="px-1 text-meta font-semibold text-ink-2">ঘটনার তারিখ (প্রকাশের তারিখ থেকে আলাদা)</legend>
+        <legend className="px-1 text-meta font-semibold text-ink-2">Event date (not the publishing date)</legend>
         <div className="grid gap-3 md:grid-cols-4">
           <label className={label}>
-            কতটা নিশ্চিত
+            Precision
             <select value={f.date_precision} onChange={(e) => set("date_precision", e.target.value as HistoricalEvent["date_precision"])} className={field}>
               {DATE_PRECISIONS.map((p) => (
                 <option key={p} value={p}>
-                  {PRECISION_BN[p]}
+                  {PRECISION_EN[p]}
                 </option>
               ))}
             </select>
           </label>
           <label className={label}>
-            বছর
+            Year
             <input type="number" value={f.event_year ?? ""} onChange={(e) => set("event_year", num(e.target.value))} className={field} placeholder="1952" />
             <FieldError message={issueFor("event_year")} />
           </label>
           <label className={label}>
-            মাস (১–১২)
+            Month (1–12)
             <input
               type="number"
               min={1}
@@ -304,7 +304,7 @@ function BasicsForm({ event, onSaved }: { event: HistoricalEvent; onSaved: (d: L
             <FieldError message={issueFor("event_month")} />
           </label>
           <label className={label}>
-            দিন
+            Day
             <input
               type="number"
               min={1}
@@ -318,8 +318,8 @@ function BasicsForm({ event, onSaved }: { event: HistoricalEvent; onSaved: (d: L
           </label>
         </div>
         <label className={label}>
-          তারিখের বর্ণনা {f.date_precision === "approximate" ? "(আবশ্যক)" : "(ঐচ্ছিক, যেমন: ভোররাতে)"}
-          <input value={f.date_label ?? ""} onChange={(e) => set("date_label", text(e.target.value))} className={field} placeholder="আনুমানিক ১৭৫৭" />
+          Date description {f.date_precision === "approximate" ? "(required)" : "(optional, e.g. ভোররাতে)"}
+          <input value={f.date_label ?? ""} onChange={(e) => set("date_label", text(e.target.value))} className={field} placeholder="e.g. আনুমানিক ১৭৫৭" />
           <FieldError message={issueFor("date_label")} />
         </label>
         <label className="flex items-start gap-2 text-meta">
@@ -331,27 +331,27 @@ function BasicsForm({ event, onSaved }: { event: HistoricalEvent; onSaved: (d: L
             onChange={(e) => set("recurring", e.target.checked)}
           />
           <span>
-            <span className="font-semibold">প্রতি বছর &ldquo;আজকের দিনে&rdquo; দেখান</span>
+            <span className="font-semibold">Show every year in &ldquo;On this day&rdquo;</span>
             <span className="block text-muted">
-              {f.date_precision === "day" ? "বন্ধ থাকলে শুধু ঘটনার নিজের বছরের সেই দিনেই দেখাবে।" : "শুধু নির্দিষ্ট দিন জানা থাকলে প্রতি বছর দেখানো যায়।"}
+              {f.date_precision === "day" ? "When off, it shows only on that day in the event’s own year." : "Only events with an exact day can show every year."}
             </span>
           </span>
         </label>
       </fieldset>
 
       <fieldset className="grid gap-3 rounded-control border border-line p-3">
-        <legend className="px-1 text-meta font-semibold text-ink-2">মূল স্থান</legend>
+        <legend className="px-1 text-meta font-semibold text-ink-2">Main place</legend>
         <div className="grid gap-3 md:grid-cols-3">
           <label className={label}>
-            স্থানের নাম
-            <input value={f.place_name ?? ""} onChange={(e) => set("place_name", text(e.target.value))} className={field} placeholder="ঢাকা মেডিকেল কলেজ" />
+            Place name
+            <input value={f.place_name ?? ""} onChange={(e) => set("place_name", text(e.target.value))} className={field} placeholder="e.g. ঢাকা মেডিকেল কলেজ" />
           </label>
           <label className={label}>
-            শহর
-            <input value={f.city ?? ""} onChange={(e) => set("city", text(e.target.value))} className={field} placeholder="ঢাকা" />
+            City
+            <input value={f.city ?? ""} onChange={(e) => set("city", text(e.target.value))} className={field} placeholder="e.g. ঢাকা" />
           </label>
           <label className={label}>
-            দেশ (কোড)
+            Country (code)
             <input value={f.country ?? ""} maxLength={2} onChange={(e) => set("country", text(e.target.value.toUpperCase()))} className={`${field} uppercase`} placeholder="BD" />
             <FieldError message={issueFor("country")} />
           </label>
@@ -372,7 +372,7 @@ function BasicsForm({ event, onSaved }: { event: HistoricalEvent; onSaved: (d: L
       </fieldset>
 
       <div className={label}>
-        প্রচ্ছদের ছবি (ঐচ্ছিক, শুধু উইকিমিডিয়া কমন্স)
+        Cover image (optional, Wikimedia Commons only)
         <ImagePicker
           value={f.cover_image}
           near={f.lat !== null && f.lat !== undefined ? { lat: f.lat, lng: f.lng! } : null}
@@ -382,9 +382,9 @@ function BasicsForm({ event, onSaved }: { event: HistoricalEvent; onSaved: (d: L
 
       <div className="flex flex-wrap items-center gap-3">
         <button type="submit" disabled={saving} className={`${btn} bg-accent text-on-accent hover:bg-accent-hover`}>
-          {saving ? "সংরক্ষণ হচ্ছে…" : "সংরক্ষণ করুন"}
+          {saving ? "Saving…" : "Save"}
         </button>
-        {saved && <span className="text-meta text-success">✓ সংরক্ষিত</span>}
+        {saved && <span className="text-meta text-success">✓ Saved</span>}
         {error && (
           <span role="alert" className="text-meta text-danger">
             {error.message}
@@ -406,22 +406,22 @@ function FieldError({ message }: { message?: string }) {
 function SourcesPanel({ data, onChange }: { data: Loaded; onChange: (d: Loaded) => void }) {
   const [adding, setAdding] = useState(false);
   return (
-    <section className={`${section} mt-5`} aria-label="সূত্র">
+    <section className={`${section} mt-5`} aria-label="Sources">
       <div className="flex items-center gap-3">
-        <h2 className="font-semibold">সূত্র ({data.sources.length})</h2>
+        <h2 className="font-semibold">Sources ({data.sources.length})</h2>
         {!adding && (
           <button type="button" onClick={() => setAdding(true)} className={`${btn} ms-auto bg-accent-soft text-accent hover:bg-accent-soft-hover`}>
-            + সূত্র যোগ করুন
+            + Add source
           </button>
         )}
       </div>
-      <p className="mt-1 text-meta text-muted">প্রতিটি তথ্যের পেছনে অন্তত একটি সূত্র রাখুন। নিজে মিলিয়ে দেখার পরই &ldquo;যাচাই করা&rdquo; চিহ্ন দিন।</p>
+      <p className="mt-1 text-meta text-muted">Back every fact with at least one source. Mark it &ldquo;verified&rdquo; only after you have checked it yourself.</p>
       {adding && <SourceForm eventId={data.event.id} onDone={(d) => (d && onChange(d), setAdding(false))} />}
       <ul className="mt-3 grid gap-2">
         {data.sources.map((s) => (
           <SourceRow key={s.id} eventId={data.event.id} source={s} onChange={onChange} />
         ))}
-        {!data.sources.length && !adding && <li className="text-meta text-muted">এখনো কোনো সূত্র নেই।</li>}
+        {!data.sources.length && !adding && <li className="text-meta text-muted">No sources yet.</li>}
       </ul>
     </section>
   );
@@ -453,24 +453,24 @@ function SourceRow({ eventId, source: s, onChange }: { eventId: string; source: 
             )}
           </p>
           <p className="text-meta text-muted">
-            {[SOURCE_TYPE_BN[s.source_type], s.author_or_publisher, s.published_on].filter(Boolean).join(" · ")}
+            {[SOURCE_TYPE_EN[s.source_type], s.author_or_publisher, s.published_on].filter(Boolean).join(" · ")}
           </p>
           {s.notes && <p className="mt-1 text-meta text-ink-2">{s.notes}</p>}
           {s.evidence_quote && <blockquote className="mt-1 border-s-2 border-line-strong ps-2 text-meta text-ink-2">{s.evidence_quote}</blockquote>}
         </div>
         <span className="flex shrink-0 flex-wrap gap-1">
-          {s.origin === "ai_suggestion" && <span className="rounded-full bg-accent-soft px-2 py-0.5 text-micro text-accent">AI-প্রস্তাবিত</span>}
+          {s.origin === "ai_suggestion" && <span className="rounded-full bg-accent-soft px-2 py-0.5 text-micro text-accent">AI-suggested</span>}
           <span className={`rounded-full px-2 py-0.5 text-micro ${s.verified ? "bg-success-soft text-success" : "bg-warning-soft text-warning"}`}>
-            {s.verified ? "✓ যাচাই করা" : "যাচাই হয়নি"}
+            {s.verified ? "✓ Verified" : "Not verified"}
           </span>
         </span>
       </div>
       <div className="mt-2 flex gap-3 text-meta">
         <button type="button" onClick={() => setEditing(true)} className="font-semibold text-accent hover:underline">
-          সম্পাদনা
+          Edit
         </button>
         <button type="button" onClick={remove} className="text-danger hover:underline">
-          মুছুন
+          Delete
         </button>
         {error && <span className="text-danger">{error}</span>}
       </div>
@@ -509,28 +509,28 @@ function SourceForm({ eventId, source, onDone }: { eventId: string; source?: Eve
     <form onSubmit={submit} className="mt-3 grid gap-3 rounded-control border border-accent/40 bg-paper p-3">
       <div className="grid gap-3 md:grid-cols-2">
         <label className={label}>
-          সূত্রের নাম
+          Source title
           <input required value={f.title} onChange={(e) => set("title", e.target.value)} className={field} placeholder="Language Movement — Banglapedia" />
         </label>
         <label className={label}>
-          লিংক (ঐচ্ছিক)
+          Link (optional)
           <input type="url" value={f.url} onChange={(e) => set("url", e.target.value)} className={field} placeholder="https://…" />
         </label>
         <label className={label}>
-          লেখক বা প্রকাশক
+          Author or publisher
           <input value={f.author_or_publisher} onChange={(e) => set("author_or_publisher", e.target.value)} className={field} />
         </label>
         <div className="grid grid-cols-2 gap-3">
           <label className={label}>
-            প্রকাশকাল
+            Published
             <input value={f.published_on} onChange={(e) => set("published_on", e.target.value)} className={field} placeholder="2003" />
           </label>
           <label className={label}>
-            ধরন
+            Type
             <select value={f.source_type} onChange={(e) => set("source_type", e.target.value as typeof f.source_type)} className={field}>
               {SOURCE_TYPES.map((t) => (
                 <option key={t} value={t}>
-                  {SOURCE_TYPE_BN[t]}
+                  {SOURCE_TYPE_EN[t]}
                 </option>
               ))}
             </select>
@@ -538,23 +538,23 @@ function SourceForm({ eventId, source, onDone }: { eventId: string; source?: Eve
         </div>
       </div>
       <label className={label}>
-        নোট
-        <textarea rows={2} value={f.notes} onChange={(e) => set("notes", e.target.value)} className={field} placeholder="কোন অংশে কী আছে, পৃষ্ঠা নম্বর…" />
+        Notes
+        <textarea rows={2} value={f.notes} onChange={(e) => set("notes", e.target.value)} className={field} placeholder="What’s in which part, page numbers…" />
       </label>
       <label className={label}>
-        উদ্ধৃতি (সূত্রের যে অংশে তথ্যটি আছে, হুবহু)
+        Quote (the exact passage that supports the fact)
         <textarea rows={2} value={f.evidence_quote} onChange={(e) => set("evidence_quote", e.target.value)} className={field} />
       </label>
       <label className="flex items-center gap-2 text-meta">
         <input type="checkbox" className="size-4 accent-[var(--accent)]" checked={f.verified} onChange={(e) => set("verified", e.target.checked)} />
-        আমি সূত্রটি নিজে খুলে মিলিয়ে দেখেছি (যাচাই করা)
+        I opened and checked this source myself (verified)
       </label>
       <div className="flex items-center gap-2">
         <button type="submit" disabled={busy} className={`${btn} bg-accent text-on-accent hover:bg-accent-hover`}>
-          {busy ? "…" : source ? "সংরক্ষণ" : "যোগ করুন"}
+          {busy ? "…" : source ? "Save" : "Add"}
         </button>
         <button type="button" onClick={() => onDone()} className={`${btn} text-muted hover:text-ink`}>
-          বাতিল
+          Cancel
         </button>
         {error && <span className="text-meta text-danger">{error}</span>}
       </div>

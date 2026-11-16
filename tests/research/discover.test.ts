@@ -54,12 +54,12 @@ describe("discoverEvents (fake Gemini)", () => {
     });
     expect(dropped).toBe(0);
     const by = Object.fromEntries(candidates.map((c) => [c.title_bn, c.check]));
-    expect(by["শহীদ মিনার উদ্বোধন"]).toMatchObject({ confirmed: true, reason: expect.stringMatching(/উদ্ধৃতি ও তারিখ/) });
-    expect(by["একুশে বইমেলার সূচনা"]).toMatchObject({ confirmed: true, reason: expect.stringMatching(/হুবহু মেলেনি/) });
+    expect(by["শহীদ মিনার উদ্বোধন"]).toMatchObject({ confirmed: true, reason: expect.stringMatching(/quote and the date/) });
+    expect(by["একুশে বইমেলার সূচনা"]).toMatchObject({ confirmed: true, reason: expect.stringMatching(/not an exact match/) });
     expect(by["বানানো সূত্র"].confirmed).toBe(false);
     expect(by["ভুল দিন"].confirmed).toBe(false);
     expect(by["সাল নেই"].confirmed).toBe(false);
-    expect(by["ইন্টারনাল"]).toMatchObject({ confirmed: false, reason: expect.stringMatching(/খোলা যায়নি/) });
+    expect(by["ইন্টারনাল"]).toMatchObject({ confirmed: false, reason: expect.stringMatching(/Could not open/) });
     expect(candidates.map((c) => c.year)).toEqual([...candidates.map((c) => c.year)].sort((a, b) => a - b));
   });
 

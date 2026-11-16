@@ -9,10 +9,10 @@ export async function POST(req: Request, { params }: RouteContext<"/api/admin/ev
   if (admin instanceof Response) return admin;
   const { id } = await params;
   const parsed = SourceFields.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) return Response.json({ error: "সূত্রের তথ্য ঠিক নেই", issues: parsed.error.issues }, { status: 400 });
+  if (!parsed.success) return Response.json({ error: "Invalid source data", issues: parsed.error.issues }, { status: 400 });
   try {
     const found = await getEvent(id);
-    if (!found) return Response.json({ error: "পাওয়া যায়নি" }, { status: 404 });
+    if (!found) return Response.json({ error: "Not found" }, { status: 404 });
     await addSource(id, parsed.data, admin.userId);
     await touchEvent(id, admin.userId);
     if (found.event.status === "published") invalidatePublicEvents();
