@@ -1,7 +1,7 @@
 "use client";
 
-
 import { useState } from "react";
+import { slugOf, track } from "@/lib/analytics";
 
 /**
  * Share (phone share sheet, or copy the link) and directions (Google Maps)
@@ -32,6 +32,7 @@ export function ActionRow({
 
   async function share() {
     const full = new URL(link, window.location.origin).toString();
+    track("share_click", { slug: slugOf(full), method: typeof navigator.share === "function" ? "share_sheet" : "copy_link" });
     try {
       if (navigator.share) {
         await navigator.share({ title, text: `${title} — Ondor`, url: full });

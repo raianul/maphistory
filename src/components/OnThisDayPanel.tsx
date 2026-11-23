@@ -3,12 +3,25 @@
 import { useEffect, useState } from "react";
 import type { OnThisDay, PublicEvent, PublicEventCard } from "@/lib/events/public";
 import { EVIDENCE_BN, PHASE_PALETTE, SOURCE_TYPE_BN } from "@/lib/events/schema";
+import { PlaceLink } from "./PlaceLink";
 import { SidePanel } from "./SidePanel";
 
 const MONTHS_BN = ["জানুয়ারি", "ফেব্রুয়ারি", "মার্চ", "এপ্রিল", "মে", "জুন", "জুলাই", "আগস্ট", "সেপ্টেম্বর", "অক্টোবর", "নভেম্বর", "ডিসেম্বর"];
 const bn = (n: number) => n.toLocaleString("bn-BD", { useGrouping: false });
 /** "ঢাকা মেডিকেল কলেজ, ঢাকা", without repeating a city that is the place itself. */
 const where = (place?: string | null, city?: string | null) => [place, city && city !== place ? city : null].filter(Boolean).join(", ");
+
+/** "জাতীয় সংসদ ভবন, ঢাকা" with the place linked to its page. */
+function PlacePart({ name, slug, city }: { name: string; slug: string; city?: string | null }) {
+  return (
+    <>
+      <PlaceLink slug={slug} source="on_this_day">
+        {name}
+      </PlaceLink>
+      {city && city !== name && `, ${city}`}
+    </>
+  );
+}
 
 /** The map (a pin, or the popup's ‹ ›) asks the open event to show step `detail` (index). */
 export const STEP_REQUEST = "jg:event-step";
@@ -242,7 +255,11 @@ function EventBody({ e, onTimeline }: { e: PublicEvent; onTimeline: (t: { event:
         <p className="text-meta font-semibold text-accent">{when}</p>
         <h1 className="mt-1 text-display font-bold tracking-tight text-balance">{anniversary?.title ?? e.title}</h1>
         {anniversary && anniversary.title !== e.title && <p className="mt-0.5 text-lead font-semibold text-ink-2">{e.title}</p>}
-        {e.place_name && <p className="mt-1 text-meta text-muted">{where(e.place_name, e.city)}</p>}
+        {e.place_name && (
+          <p className="mt-1 text-meta text-muted">
+            {e.place_slug ? <PlacePart name={e.place_name} slug={e.place_slug} city={e.city} /> : where(e.place_name, e.city)}
+          </p>
+        )}
       </header>
       {/* Wide screens: the card is a popup on the map (PlaceMap); here, the steps to jump between. */}
       {/* Through STEP_REQUEST, so the map's popup also hears it (and reopens, even for the same step). */}
@@ -397,11 +414,21 @@ export function StepContent({ e, step, compact = false }: { e: PublicEvent; step
         <h2 className={`mt-1 font-bold leading-snug ${compact ? "text-body" : "text-lead"}`}>{s.title}</h2>
         {(s.place_name || s.location_precision !== "exact") && (
           <p className="mt-1 text-meta text-muted">
-            {s.location_precision === "unknown"
-              ? "স্থান অজানা"
-              : s.map_type === "route" && s.from_place_name
-                ? `${s.from_place_name} → ${s.place_name ?? ""}`
-                : s.place_name}
+            {s.location_precision === "unknown" ? (
+              "স্থান অজানা"
+            ) : (
+              <>
+                {s.map_type === "route" && s.from_place_name && `${s.from_place_name} → `}
+                {/* The place's own page, when it has one. */}
+                {s.place_name && s.place_slug ? (
+                  <PlaceLink slug={s.place_slug} source="on_this_day">
+                    {s.place_name}
+                  </PlaceLink>
+                ) : (
+                  s.place_name
+                )}
+              </>
+            )}
             {s.location_precision === "approximate" && " (আনুমানিক)"}
           </p>
         )}

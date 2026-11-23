@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { FALLBACK_MODEL, GEMINI_MODEL } from "@/lib/ai/model";
+import { CHANNEL, FACEBOOK_URL } from "@/lib/links";
 import { SITE } from "@/lib/places";
 
 export const metadata: Metadata = {
@@ -44,7 +45,7 @@ export default function AboutPage() {
       <h2 className={h2}>কীভাবে লেখা হয়, আর কে দেখে</h2>
       <ul className="mt-2 grid list-disc gap-2 ps-5 text-body text-ink-2">
         <li>
-          <span className="font-semibold">মানচিত্রের নামে চাপলে যে গল্প আসে:</span> AI তখনই লেখে, কেউ আগে থেকে যাচাই করেনি। প্রতিটি গল্পের নিচে মডেলের নাম ও সূত্র (থাকলে) দেওয়া থাকে।
+          <span className="font-semibold">মানচিত্রের নামে চাপলে যে গল্প আসে:</span> AI তখনই লেখে, কেউ আগে থেকে যাচাই করেনি। প্রতিটি গল্পের নিচে মডেলের নাম ও সূত্র (থাকলে) দেওয়া থাকে। যেসব গল্পে &ldquo;✓ যাচাইকৃত&rdquo; লেখা, সেগুলোর তথ্য একজন সম্পাদক সূত্রের সঙ্গে মিলিয়ে দেখেছেন; সূত্রগুলো গল্পের নিচে দেওয়া।
         </li>
         <li>
           <span className="font-semibold">&ldquo;আজকের দিনে&rdquo;-র ঘটনা:</span> AI উইকিপিডিয়া, বাংলাপিডিয়া ও অন্যান্য ওয়েবসাইট পড়ে খসড়া লেখে; প্রতিটি দাবির পাশে সূত্রের উদ্ধৃতি মিলিয়ে দেখা হয়।
@@ -57,6 +58,22 @@ export default function AboutPage() {
 
       <h2 className={h2}>ভুল দেখলে</h2>
       <p className={p}>প্রতিটি গল্পের নিচে &ldquo;ভুল জানান&rdquo; বোতাম আছে। জানালে আমরা দেখে ঠিক করি বা লেখাটি সরিয়ে দিই।</p>
+
+      <h2 className={h2}>আমাদের খুঁজে পাবেন</h2>
+      <ul className="mt-2 grid list-disc gap-1 ps-5 text-body text-ink-2">
+        <li>
+          Facebook:{" "}
+          <a href={FACEBOOK_URL} target="_blank" rel="noreferrer" className="font-semibold text-accent underline hover:text-accent-hover">
+            {SITE.name}
+          </a>
+        </li>
+        <li>
+          জায়গার ইতিহাস নিয়ে ভিডিও (YouTube):{" "}
+          <a href={CHANNEL.url} target="_blank" rel="noreferrer" className="font-semibold text-accent underline hover:text-accent-hover">
+            {CHANNEL.name}
+          </a>
+        </li>
+      </ul>
 
       <h2 className={h2}>তথ্য ও কৃতজ্ঞতা</h2>
       <ul className="mt-2 grid list-disc gap-1 ps-5 text-body text-ink-2">
@@ -76,7 +93,10 @@ export default function AboutPage() {
       </ul>
 
       <p className="mt-10 border-t border-line pt-4 text-micro text-muted">
-        {SITE.name} · {SITE.domain}
+        {SITE.name} · {SITE.domain} ·{" "}
+        <a href={FACEBOOK_URL} target="_blank" rel="noreferrer" className="underline hover:text-ink">
+          Facebook
+        </a>
       </p>
     </article>
   );

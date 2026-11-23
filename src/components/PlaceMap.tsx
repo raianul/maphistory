@@ -13,6 +13,8 @@ import { searchPlaces, type GeoResult } from "@/lib/geo-search";
 import { AiPanel, aiShareUrl, type AiTarget } from "./AiPanel";
 import type { AiPlace } from "@/lib/ai/types";
 import { OnThisDayPanel, STEP_REQUEST } from "./OnThisDayPanel";
+import { OPEN_PLACE, type PlaceSource } from "./PlaceLink";
+import { slugOf, track, withCampaign } from "@/lib/analytics";
 import { StepPopup } from "./StepPopup";
 import { SHEET_EVENT, SHEET_REQUEST } from "./SidePanel";
 import { SearchBox } from "./SearchBox";
@@ -222,7 +224,8 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
   }
 
   /** EXPERIMENT: opens a live AI story for any named place on the base map. */
-  function openAi(target: AiTarget, zoom?: number) {
+  function openAi(target: AiTarget, zoom?: number, source: PlaceSource = "map") {
+    track("place_open", { slug: target.slug, place_name: target.name, source });
     // A place with a hand-written page (e.g. Ahsan Manzil): that page, in its own panel.
     if (target.slug && curated.includes(target.slug)) {
       dismissTip();
@@ -238,7 +241,7 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
     // phone's Back button closes it; switching places replaces it.
     const url = aiShareUrl(target);
     if (aiTarget || selected || window.location.pathname.startsWith("/place/") || new URLSearchParams(window.location.search).has("place")) {
-      window.history.replaceState(window.history.state, "", url);
+      window.history.replaceState(window.history.state, "", withCampaign(url));
     } else {
       window.history.pushState(window.history.state, "", url);
       openedHere.current = true;
@@ -265,7 +268,7 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
     const p = new URLSearchParams(window.location.search);
     // From the plain map: a new history entry (Back closes it). Inside the panel or a story: replace.
     if (otd || aiTarget || p.has("event") || p.has("day") || p.has("place")) {
-      window.history.replaceState(window.history.state, "", url);
+      window.history.replaceState(window.history.state, "", withCampaign(url));
     } else {
       window.history.pushState(window.history.state, "", url);
       openedHere.current = true;
@@ -281,7 +284,7 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
     setTimeline(null);
     focusPoint.current = null;
     if (openedHere.current) window.history.back();
-    else window.history.replaceState(window.history.state, "", "/");
+    else window.history.replaceState(window.history.state, "", withCampaign("/"));
     openedHere.current = false;
   }
 
@@ -290,7 +293,7 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
     focusPoint.current = null;
     // Opened from the map: step back to the map's own entry. Opened from a shared link: just clear the URL.
     if (openedHere.current) window.history.back();
-    else window.history.replaceState(window.history.state, "", "/");
+    else window.history.replaceState(window.history.state, "", withCampaign("/"));
     openedHere.current = false;
   }
 
@@ -338,17 +341,50 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
   }, []);
 
   /** A search result: fly there and tell its story. */
-  function openGeo(r: GeoResult) {
-    openAi({ name: r.name, lat: r.lat, lng: r.lng, kind: r.kind, nearby: r.context ? [r.context] : undefined }, r.zoom);
+  function openGeo(r: GeoResult, source: PlaceSource = "search") {
+    openAi({ name: r.name, lat: r.lat, lng: r.lng, kind: r.kind, nearby: r.context ? [r.context] : undefined }, r.zoom, source);
   }
+
+  /**
+   * A place's page, opened in the map (a link to /place/<slug> from "On this day"): a hand-written
+   * page is its own route; a map story is loaded and opened like a click on it.
+   */
+  async function openPlacePage(slug: string, source: PlaceSource) {
+    if (curatedRef.current.includes(slug)) return openAi({ name: slug, lat: 0, lng: 0, slug }, undefined, source);
+    const d = await fetch(`/api/place/${slug}`)
+      .then((r) => (r.ok ? (r.json() as Promise<{ target?: AiTarget; place?: AiPlace }>) : null))
+      .catch(() => null);
+    if (!d?.target || !d.place) return router.push(`/place/${slug}`);
+    setPreload({ key: `${d.target.name}@${d.target.lat},${d.target.lng}`, place: d.place });
+    openAi(d.target, 15, source);
+  }
+  const openPlaceRef = useRef(openPlacePage);
+  useEffect(() => {
+    openPlaceRef.current = openPlacePage;
+  });
+  useEffect(() => {
+    const onOpen = (e: Event) => {
+      const { slug, source } = (e as CustomEvent<{ slug: string; source: PlaceSource }>).detail;
+      void openPlaceRef.current(slug, source);
+    };
+    window.addEventListener(OPEN_PLACE, onOpen);
+    return () => window.removeEventListener(OPEN_PLACE, onOpen);
+  }, []);
+
+  // A place page opened directly (a shared link, a search result): counted once.
+  useEffect(() => {
+    const t = initialAiRef.current?.target;
+    const slug = t?.slug ?? slugOf(window.location.pathname);
+    if (slug) track("place_open", { slug, place_name: t?.name, source: "link" });
+  }, []);
 
   /** A place named inside a story ("এখানে যা আছে"): find it near the current one and open it. */
   async function exploreByName(name: string) {
     const near = aiTarget ?? (mapRef.current ? { lat: mapRef.current.getCenter().lat, lng: mapRef.current.getCenter().lng } : undefined);
     const results = await searchPlaces(name, { near, limit: 3 }).catch(() => [] as GeoResult[]);
     const hit = near ? results.find((r) => haversine(near, r) < 10_000) : results[0];
-    if (hit) openGeo(hit);
-    else if (near) openAi({ name, lat: near.lat, lng: near.lng, nearby: aiTarget ? [aiTarget.name] : undefined });
+    if (hit) openGeo(hit, "explore");
+    else if (near) openAi({ name, lat: near.lat, lng: near.lng, nearby: aiTarget ? [aiTarget.name] : undefined }, undefined, "explore");
   }
 
   // The map's click handlers are registered once; this ref always points at the latest openAi.
@@ -471,7 +507,7 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
           if (!f || f.geometry.type !== "Point") return;
           const [lng, lat] = f.geometry.coordinates as [number, number];
           const { name, kind, label, verified, slug } = f.properties as { name: string; kind: string; label: string; verified: boolean; slug?: string };
-          aiRef.current(pinTarget({ name, lat, lng, kind: kind || undefined, label, verified, slug: slug || undefined }));
+          aiRef.current(pinTarget({ name, lat, lng, kind: kind || undefined, label, verified, slug: slug || undefined }), undefined, "pin");
         });
         // Squares of pins: fetched for what is on screen, after every move (and once now).
         map.on("moveend", () => loadPinsRef.current());
@@ -600,7 +636,7 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
           return;
         }
         if (shared && at?.length === 2 && at.every(Number.isFinite) && inRegion(at[0], at[1])) {
-          aiRef.current({ name: shared, lat: at[0], lng: at[1], kind: params.get("kind") ?? undefined }, 15);
+          aiRef.current({ name: shared, lat: at[0], lng: at[1], kind: params.get("kind") ?? undefined }, 15, "link");
           return;
         }
 
@@ -846,7 +882,7 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
                 <li key={`${p.name}@${p.lat},${p.lng}`}>
                   <button
                     type="button"
-                    onClick={() => openAi(pinTarget(p), Math.max(mapRef.current?.getZoom() ?? 15, 15))}
+                    onClick={() => openAi(pinTarget(p), Math.max(mapRef.current?.getZoom() ?? 15, 15), "nearby")}
                     className="flex min-h-11 w-full items-center justify-between gap-2 rounded-xl px-2 text-start transition-colors hover:bg-hover active:bg-pressed"
                   >
                     <span className="flex items-center gap-2.5">
@@ -874,7 +910,7 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
           onExplore={exploreByName}
           // A story saved just now gets its page address: put it in the address bar (same history entry).
           onSlug={(slug) => {
-            if (window.location.pathname !== `/place/${slug}`) window.history.replaceState(window.history.state, "", `/place/${slug}${window.location.hash}`);
+            if (window.location.pathname !== `/place/${slug}`) window.history.replaceState(window.history.state, "", withCampaign(`/place/${slug}${window.location.hash}`));
           }}
         />
       )}

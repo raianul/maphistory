@@ -5,7 +5,8 @@
  * from cache. Server-side only.
  */
 import { unstable_cache } from "next/cache";
-import { db } from "../db";
+import { db, listPageCandidates } from "../db";
+import { findPlacePage } from "../place-links";
 import { inRegion } from "../region";
 import { EVENTS_CACHE_TAG } from "./cache";
 import type { EventSource, HistoricalEvent, PhaseT, TimelineStep } from "./schema";
@@ -56,8 +57,15 @@ export type PublicEvent = Pick<
   dates: { md: string; year: number; title: string; summary: string | null; step: number | null }[];
   phases: PhaseT[];
   sources: Pick<EventSource, "id" | "title" | "url" | "author_or_publisher" | "published_on" | "source_type">[];
-  steps: Omit<TimelineStep, "event_id" | "created_at" | "updated_at" | "verified">[];
+  steps: (Omit<TimelineStep, "event_id" | "created_at" | "updated_at" | "verified"> & {
+    /** The place's own page (/place/<slug>), when it has one. */
+    place_slug?: string;
+  })[];
+  /** The story's main place's page, when it has one. */
+  place_slug?: string;
 };
+
+const withPage = (slug: string | undefined) => (slug ? { place_slug: slug } : {});
 
 const pad = (n: number) => String(n).padStart(2, "0");
 const md = (m: number, d: number) => `${pad(m)}-${pad(d)}`;
@@ -148,10 +156,11 @@ async function loadEvent(slug: string): Promise<PublicEvent | null> {
   const { data: e, error } = await db().from("historical_events").select("*").eq("slug", slug).eq("status", "published").maybeSingle();
   if (error) throw new Error(`Database: ${error.message}`);
   if (!e || !visible(e)) return null;
-  const [src, steps, dates] = await Promise.all([
+  const [src, steps, dates, pages] = await Promise.all([
     db().from("historical_event_sources").select("id,title,url,author_or_publisher,published_on,source_type").eq("event_id", e.id).order("position"),
     db().from("historical_event_timeline_steps").select("*, historical_event_step_sources(source_id)").eq("event_id", e.id).order("position"),
     db().from("historical_event_dates").select("year,month,day,title,summary,step_id").eq("event_id", e.id).eq("status", "published").order("month").order("day"),
+    listPageCandidates().catch(() => []),
   ]);
   if (src.error) throw new Error(`Database: ${src.error.message}`);
   type RawStep = TimelineStep & { historical_event_step_sources: { source_id: string }[] };
@@ -178,6 +187,7 @@ async function loadEvent(slug: string): Promise<PublicEvent | null> {
     lat: e.lat,
     lng: e.lng,
     cover_image: e.cover_image,
+    ...withPage(findPlacePage(pages, { name: e.place_name, lat: e.lat, lng: e.lng })),
     phases: e.phases ?? [],
     sources: src.data ?? [],
     // Only what visitors need, field by field (never admin ids or the internal "verified" flag).
@@ -204,6 +214,7 @@ async function loadEvent(slug: string): Promise<PublicEvent | null> {
       step_month: r.step_month ?? null,
       step_day: r.step_day ?? null,
       source_ids: r.historical_event_step_sources.map((l) => l.source_id),
+      ...withPage(findPlacePage(pages, { name: r.place_name, lat: r.lat, lng: r.lng })),
     })),
   };
 }

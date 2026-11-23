@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { withCampaign } from "@/lib/analytics";
 import { SidePanel } from "./SidePanel";
 
 /**
@@ -15,7 +16,7 @@ export function PagePanel({ title, children }: { title: string; children: React.
       title={title}
       onClose={() => {
         setOpen(false);
-        window.history.replaceState(window.history.state, "", "/");
+        window.history.replaceState(window.history.state, "", withCampaign("/"));
       }}
     >
       {children}

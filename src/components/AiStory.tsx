@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment } from "react";
+import { FACEBOOK_URL } from "@/lib/links";
 import { ERA_META, periodDisplay, periodStart, readableText } from "@/lib/format";
 import type { AiPlace, PartialStory } from "@/lib/ai/types";
 import { ERAS, type Era } from "@/lib/schema";
@@ -358,6 +359,11 @@ export function AiStory({
               </p>
             </>
           )}
+          <p className="mt-3">
+            <a href={FACEBOOK_URL} target="_blank" rel="noreferrer" className="font-semibold text-ink-2 underline hover:text-accent">
+              Facebook-এ Ondor ↗
+            </a>
+          </p>
         </footer>
       )}
     </article>

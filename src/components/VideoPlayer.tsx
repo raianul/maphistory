@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { slugOf, track } from "@/lib/analytics";
+import { CHANNEL } from "@/lib/links";
 import { formatDuration, PROVIDERS, type PlaceVideo } from "@/lib/video";
 
 const LANGUAGE: Record<string, string> = { bn: "বাংলা", en: "English", hi: "हिन्दी", ur: "اردو" };
@@ -35,7 +37,10 @@ export function VideoPlayer({ videos }: { videos: PlaceVideo[] }) {
         ) : (
           <button
             type="button"
-            onClick={() => setPlaying(true)}
+            onClick={() => {
+              setPlaying(true);
+              track("video_play", { slug: slugOf(window.location.pathname), video_id: video.providerVideoId, video_title: video.title });
+            }}
             className="group absolute inset-0 size-full"
             aria-label={`ভিডিও চালান: ${video.title}`}
           >
@@ -62,6 +67,12 @@ export function VideoPlayer({ videos }: { videos: PlaceVideo[] }) {
         {video.language && <span>{LANGUAGE[video.language] ?? video.language}</span>}
         <a href={video.url} target="_blank" rel="noreferrer" className="underline hover:text-accent">
           YouTube-এ দেখুন ↗
+        </a>
+      </p>
+      <p className="mt-1.5 text-xs text-muted">
+        আরও ভিডিও:{" "}
+        <a href={CHANNEL.url} target="_blank" rel="noreferrer" className="font-semibold text-ink-2 underline hover:text-accent">
+          {CHANNEL.name}
         </a>
       </p>
 

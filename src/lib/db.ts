@@ -8,6 +8,7 @@ import type { AiPlace } from "./ai/types";
 import type { StoryTarget } from "./ai/place-story";
 import type { MapPin } from "./map-pin";
 import { getPlaces } from "./places";
+import type { PageCandidate } from "./place-links";
 import { freeSlug } from "./slug";
 import { PINS_PER_TILE, type Bounds } from "./tiles";
 import type { PlaceVideo, VideoProvider } from "./video";
@@ -314,6 +315,29 @@ export async function listPlacePages(): Promise<{ slug: string; updated_at: stri
   const { data, error } = await db().from("stories").select("slug,updated_at,show_on_map").not("slug", "is", null).neq("status", "hidden");
   if (error) return [];
   return (data ?? []) as { slug: string; updated_at: string; show_on_map: boolean }[];
+}
+
+/**
+ * Every place with a page, for linking to it from other content (On this day): hand-written pages
+ * and saved map stories, with the names they go by. Server-side only.
+ */
+export async function listPageCandidates(): Promise<PageCandidate[]> {
+  const curated: PageCandidate[] = getPlaces().map((p) => ({ slug: p.slug, names: [p.name.bn, p.name.en].filter((n): n is string => !!n), lat: p.location.lat, lng: p.location.lng }));
+  const { data, error } = await db()
+    .from("stories")
+    .select("slug,name_bn,name_en,lat,lng,label:story->>name_bn")
+    .not("slug", "is", null)
+    .neq("status", "hidden");
+  if (error) return curated;
+  const stories = (data ?? []).map((r) => ({
+    slug: r.slug as string,
+    names: [r.label, r.name_bn, r.name_en].filter((n): n is string => !!n),
+    lat: r.lat as number,
+    lng: r.lng as number,
+  }));
+  // A hand-written page comes first: an AI story sharing its address is the same place.
+  const seen = new Set(curated.map((c) => c.slug));
+  return [...curated, ...stories.filter((s) => !seen.has(s.slug))];
 }
 
 export async function clearReports(id: string) {
