@@ -15,6 +15,8 @@ export type AiPlace = {
   slug?: string;
   /** "ai" until the admin checks it, then "verified". */
   status?: "ai" | "verified" | "hidden";
+  /** When the admin verified it (ISO), for verified stories. */
+  verifiedAt?: string;
   /** Historical videos about this place, main one first (saved places only; separate from the story). */
   videos?: PlaceVideo[];
 };

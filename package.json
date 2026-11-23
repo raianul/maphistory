@@ -18,10 +18,12 @@
     "@google/genai": "^3.3.0",
     "@next/third-parties": "16.4.6",
     "@supabase/supabase-js": "^2.119.0",
+    "harfbuzzjs": "0.4.7",
     "maplibre-gl": "^6.18.0",
     "next": "16.4.6",
     "react": "19.3.0",
     "react-dom": "19.3.0",
+    "sharp": "0.35.5",
     "zod": "^4.6.7"
   },
   "devDependencies": {

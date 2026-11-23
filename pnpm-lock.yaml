@@ -17,6 +17,9 @@ importers:
       '@supabase/supabase-js':
         specifier: ^2.119.0
         version: 2.119.0
+      harfbuzzjs:
+        specifier: 0.4.7
+        version: 0.4.7
       maplibre-gl:
         specifier: ^6.18.0
         version: 6.18.0
@@ -29,6 +32,9 @@ importers:
       react-dom:
         specifier: 19.3.0
         version: 19.3.0(react@19.3.0)
+      sharp:
+        specifier: 0.35.5
+        version: 0.35.5(@types/node@20.19.43)
       zod:
         specifier: ^4.6.7
         version: 4.6.7
@@ -1736,6 +1742,9 @@ packages:
   graceful-fs@4.2.12:
     resolution: {integrity: sha512-iuyGF2E4oafQfPsRrG2wtY2ILupMhvtdrhzrxB+0VcjsPpSPttpfYdjnGFGsTi5MaJFjI1jOKHPQ6UTbTj9TAw==}
 
+  harfbuzzjs@0.4.7:
+    resolution: {integrity: sha512-fGrMB7gk+x1ye++cN+OgDnHLLz8wg6aW26VPb8Q14V6XeZKGC0BCALe+ZEnwASU/b+YprBnRTELMJAlwy9jrLw==}
+
   has-bigints@1.1.0:
     resolution: {integrity: sha512-R3pbpkcIqv2Pm3dUwgjclDRVmWpTJW2DcMzcIhEXEx1oh/CEMObMm3KLmRJOdvhM7o4uQBnwr8pzRK2sJWIqfg==}
     engines: {node: '>= 0.4'}
@@ -3090,8 +3099,7 @@ snapshots:
 
   '@humanwhocodes/retry@0.4.3': {}
 
-  '@img/colour@1.1.0':
-    optional: true
+  '@img/colour@1.1.0': {}
 
   '@img/sharp-darwin-arm64@0.35.5':
     optionalDependencies:
@@ -4471,6 +4479,8 @@ snapshots:
 
   graceful-fs@4.2.12: {}
 
+  harfbuzzjs@0.4.7: {}
+
   has-bigints@1.1.0: {}
 
   has-flag@4.0.0: {}
@@ -5233,7 +5243,6 @@ snapshots:
       '@img/sharp-win32-ia32': 0.35.5
       '@img/sharp-win32-x64': 0.35.5
       '@types/node': 20.19.43
-    optional: true
 
   shebang-command@2.0.0:
     dependencies:

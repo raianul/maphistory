@@ -1,5 +1,6 @@
 "use client";
 
+import { Fragment } from "react";
 import { ERA_META, periodDisplay, periodStart, readableText } from "@/lib/format";
 import type { AiPlace, PartialStory } from "@/lib/ai/types";
 import { ERAS, type Era } from "@/lib/schema";
@@ -43,6 +44,7 @@ export function AiStory({
   onExplore,
   id,
   status,
+  verifiedAt,
   videos = [],
   notice,
 }: {
@@ -60,6 +62,8 @@ export function AiStory({
   /** Saved story id (for reports) and whether the admin has checked it. */
   id?: string;
   status?: AiPlace["status"];
+  /** When the admin verified it (ISO). */
+  verifiedAt?: string;
   /** The place's historical videos, main one first. */
   videos?: PlaceVideo[];
   /** Shown under the header, e.g. a "stopped midway, retry" notice; what was written stays below it. */
@@ -79,6 +83,9 @@ export function AiStory({
   const oldNames = (s.historical_names ?? []).filter((n) => n?.name);
   const placesHere = (s.places_here ?? []).filter((p) => p?.name_bn);
   const keyNumbers = (s.key_numbers ?? []).filter((k) => k?.value_bn);
+  const keyDates = (s.key_dates ?? []).filter((k) => k?.date_bn && k.text_bn);
+  const sources = (s.sources ?? []).filter((src) => src?.title);
+  const verified = status === "verified";
   const name = s.name_bn || fallbackName;
   const meta = [s.kind_bn, eraLabel, s.origin_bn].filter(Boolean);
   // Supporting sections start open when the story is the main content, folded under a video.
@@ -119,7 +126,7 @@ export function AiStory({
 
       {notice}
 
-      <StatusLine streaming={streaming} status={status} />
+      <StatusLine streaming={streaming} status={status} verifiedAt={verifiedAt} />
 
       {/* Short introduction */}
       {s.summary_bn ? (
@@ -190,6 +197,21 @@ export function AiStory({
               {s.historical_significance_bn}
             </p>
           )}
+        </Disclosure>
+      )}
+
+      {/* Dates an editor checked against the sources. */}
+      {keyDates.length > 0 && (
+        <Disclosure title="মূল তারিখ" count={keyDates.length} open={open}>
+          {/* One grid for all rows, so the text column lines up. */}
+          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2.5 text-body">
+            {keyDates.map((k, i) => (
+              <Fragment key={i}>
+                <dt className="font-semibold text-ink-2 tabular-nums">{k.date_bn}</dt>
+                <dd>{k.text_bn}</dd>
+              </Fragment>
+            ))}
+          </dl>
         </Disclosure>
       )}
 
@@ -270,6 +292,26 @@ export function AiStory({
         </Disclosure>
       )}
 
+      {sources.length > 0 && (
+        <Disclosure title="সূত্র" count={sources.length} open={false}>
+          <ul className="grid gap-2 text-meta">
+            {sources.map((src, i) => (
+              <li key={i}>
+                {src.url ? (
+                  <a href={src.url} className="text-accent underline underline-offset-2 hover:text-accent-hover" target="_blank" rel="noreferrer">
+                    {src.title}
+                  </a>
+                ) : (
+                  src.title
+                )}
+                {src.author_or_institution && <span className="text-muted"> · {src.author_or_institution}</span>}
+                {src.year !== undefined && <span className="text-muted"> · {src.year}</span>}
+              </li>
+            ))}
+          </ul>
+        </Disclosure>
+      )}
+
       {/* While writing: a quiet marker where the next part will appear. */}
       {streaming && s.summary_bn && (
         <p className="mt-8 flex items-center gap-2 text-meta text-muted" aria-hidden>
@@ -289,36 +331,33 @@ export function AiStory({
             <span className="font-semibold">লোকঐতিহ্য / কিংবদন্তি</span> = মুখে মুখে চলে আসা কাহিনি ·{" "}
             <span className="font-semibold">বিতর্কিত</span> = ঐতিহাসিকরা একমত নন
           </p>
-          {s.sources && s.sources.length > 0 ? (
-            <div className="mt-2">
-              <p className="font-semibold">সূত্র</p>
-              <ul className="mt-1 grid gap-0.5">
-                {s.sources.map((src, i) =>
-                  src?.title ? (
-                    <li key={i}>
-                      {src.url ? (
-                        <a href={src.url} className="underline" target="_blank" rel="noreferrer">
-                          {src.title}
-                        </a>
-                      ) : (
-                        src.title
-                      )}
-                      {src.author_or_institution && ` · ${src.author_or_institution}`}
-                      {src.year !== undefined && ` · ${src.year}`}
-                    </li>
-                  ) : null,
-                )}
-              </ul>
-            </div>
+          {verified ? (
+            <>
+              {s.corrections_bn && (
+                <p className="mt-2">
+                  <span className="font-semibold">সংশোধন: </span>
+                  {s.corrections_bn}
+                </p>
+              )}
+              <p className="mt-2 font-semibold text-ink-2">
+                খসড়াটি AI (Google Gemini) লিখেছে; সম্পাদক তথ্যগুলো {sources.length > 0 ? "ওপরের সূত্রের সঙ্গে " : ""}মিলিয়ে দেখেছেন
+                {verifiedAt && bnDate(verifiedAt) ? ` (${bnDate(verifiedAt)})` : ""}।{" "}
+                <a href="/about" className="font-normal text-accent underline">
+                  আরও জানুন
+                </a>
+              </p>
+            </>
           ) : (
-            <p className="mt-1">উৎস: AI মডেলের নিজস্ব জ্ঞান; কোনো বাইরের সূত্র মিলিয়ে দেখা হয়নি।</p>
+            <>
+              {sources.length === 0 && <p className="mt-1">উৎস: AI মডেলের নিজস্ব জ্ঞান; কোনো বাইরের সূত্র মিলিয়ে দেখা হয়নি।</p>}
+              <p className="mt-2 font-semibold text-ink-2">
+                এই গল্পটি AI (Google Gemini{model ? `, ${model}` : ""}) লিখেছে; কেউ যাচাই করেনি, ভুল থাকতে পারে।{" "}
+                <a href="/about" className="font-normal text-accent underline">
+                  আরও জানুন
+                </a>
+              </p>
+            </>
           )}
-          <p className="mt-2 font-semibold text-ink-2">
-            এই গল্পটি AI (Google Gemini{model ? `, ${model}` : ""}) লিখেছে; কেউ যাচাই করেনি, ভুল থাকতে পারে।{" "}
-            <a href="/about" className="font-normal text-accent underline">
-              আরও জানুন
-            </a>
-          </p>
         </footer>
       )}
     </article>
@@ -326,7 +365,7 @@ export function AiStory({
 }
 
 /** One line under the header: being written, or how far the story can be trusted. */
-function StatusLine({ streaming, status }: { streaming: boolean; status?: AiPlace["status"] }) {
+function StatusLine({ streaming, status, verifiedAt }: { streaming: boolean; status?: AiPlace["status"]; verifiedAt?: string }) {
   // One fixed-height line in every state, so nothing below it moves when writing finishes.
   const line = "mt-3 flex min-h-5 items-center gap-2 text-meta";
   if (streaming) {
@@ -337,10 +376,13 @@ function StatusLine({ streaming, status }: { streaming: boolean; status?: AiPlac
       </p>
     );
   }
+  const date = verifiedAt ? bnDate(verifiedAt) : undefined;
   return status === "verified" ? (
     <p className={`${line} animate-[fadein_.3s_ease] text-muted`}>
-      <span className="font-semibold text-success">✓ যাচাই করা</span>
-      <span>· সম্পাদক তথ্যগুলো মিলিয়ে দেখেছেন</span>
+      <span className="font-semibold text-success" title={date ? `যাচাই করা হয়েছে ${date}` : undefined}>
+        ✓ যাচাইকৃত
+      </span>
+      <span className="truncate">· সম্পাদক তথ্যগুলো সূত্রের সঙ্গে মিলিয়ে দেখেছেন</span>
     </p>
   ) : (
     <p className={`${line} animate-[fadein_.3s_ease] text-muted`}>
@@ -348,6 +390,12 @@ function StatusLine({ streaming, status }: { streaming: boolean; status?: AiPlac
       <span className="truncate">· এখনো যাচাই করা হয়নি</span>
     </p>
   );
+}
+
+/** "২৩ নভেম্বর ২০২৬" (Dhaka time). */
+function bnDate(iso: string): string | undefined {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? undefined : d.toLocaleDateString("bn-BD", { day: "numeric", month: "long", year: "numeric", timeZone: "Asia/Dhaka" });
 }
 
 /** A section that folds: open by default when it is the main content, closed under a video. */

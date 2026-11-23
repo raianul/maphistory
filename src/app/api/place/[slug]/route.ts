@@ -19,7 +19,7 @@ export async function GET(_req: Request, { params }: RouteContext<"/api/place/[s
     return Response.json(
       {
         target: { name: p.name_bn, lat: p.lat, lng: p.lng, kind: p.kind ?? undefined, slug: p.slug },
-        place: { id: p.id, slug: p.slug, story: p.story, image: p.image, model: p.model, status: p.status, ...(videos.length ? { videos } : {}) },
+        place: { id: p.id, slug: p.slug, story: p.story, image: p.image, model: p.model, status: p.status, verifiedAt: p.verifiedAt, ...(videos.length ? { videos } : {}) },
       },
       { headers: { "Cache-Control": "public, max-age=60, s-maxage=300" } },
     );

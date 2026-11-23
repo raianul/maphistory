@@ -36,6 +36,7 @@ type Row = {
   image: AiPlace["image"] | null;
   model: string | null;
   views: number;
+  verified_at?: string | null;
 };
 
 const toStored = (r: Row): StoredStory => ({
@@ -46,6 +47,7 @@ const toStored = (r: Row): StoredStory => ({
   image: r.image ?? undefined,
   model: r.model ?? "",
   views: r.views,
+  ...(r.status === "verified" && r.verified_at ? { verifiedAt: r.verified_at } : {}),
 });
 
 /**
@@ -66,7 +68,7 @@ export async function findStory(t: StoryTarget): Promise<StoredStory | undefined
   const r = matchRadius(t.kind);
   const { data, error } = await db()
     .from("stories")
-    .select("id,slug,status,story,image,model,views,lat,lng")
+    .select("id,slug,status,story,image,model,views,verified_at,lat,lng")
     .eq("name_bn", norm(t.name))
     .gte("lat", t.lat - r)
     .lte("lat", t.lat + r)
@@ -97,7 +99,7 @@ export async function saveStory(t: StoryTarget, place: AiPlace): Promise<StoredS
     views: 1,
   };
   const insert = (r: typeof row) =>
-    db().from("stories").upsert(r, { onConflict: "place_key", ignoreDuplicates: true }).select("id,slug,status,story,image,model,views").maybeSingle();
+    db().from("stories").upsert(r, { onConflict: "place_key", ignoreDuplicates: true }).select("id,slug,status,story,image,model,views,verified_at").maybeSingle();
   let { data, error } = await insert(row);
   // A database that hasn't run the "global countries" migration yet only accepts BD/IN/PK
   // (check constraint, code 23514): save the story anyway, without the country column.

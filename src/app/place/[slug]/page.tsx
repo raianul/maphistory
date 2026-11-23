@@ -1,12 +1,12 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { cache } from "react";
 import { PagePanel } from "@/components/PagePanel";
 import { PlaceMap } from "@/components/PlaceMap";
 import { PlaceStory } from "@/components/PlaceStory";
 import { findStoryBySlug, listVideos } from "@/lib/db";
 import { getPlace, getPlaces, SITE } from "@/lib/places";
+import { curatedSeo, jsonLdText, placeJsonLd, seoTitle, shareImage, storySeo } from "@/lib/seo";
 import { isPlaceSlug } from "@/lib/slug";
 
 /*
@@ -26,46 +26,44 @@ export function generateStaticParams() {
 
 const curatedSlugs = () => getPlaces().map((p) => p.slug);
 
-/** Share images of hand-written places are pre-rendered by `pnpm og` (see scripts/og.ts). */
-function ogImage(slug: string) {
-  const file = `/og/${slug}.png`;
-  return existsSync(join(process.cwd(), "public", file)) ? file : undefined;
-}
-
-async function load(slug: string) {
+/** The place for a slug (once per request: the page and its metadata share it). */
+const load = cache(async (slug: string) => {
   if (!isPlaceSlug(slug)) return null;
   const curated = getPlace(slug);
-  if (curated) return { curated } as const;
+  if (curated) return { curated, seo: curatedSeo(curated) } as const;
   const story = await findStoryBySlug(slug).catch((e) => {
     console.error(e);
     return undefined;
   });
-  return story ? ({ story } as const) : null;
-}
+  if (!story) return null;
+  const videos = await listVideos(story.id).catch(() => []);
+  return { story, videos, seo: storySeo(story, videos) } as const;
+});
 
 export async function generateMetadata({ params }: PageProps<"/place/[slug]">): Promise<Metadata> {
   const { slug } = await params;
   const found = await load(slug);
   if (!found) return {};
-  if (found.curated) {
-    const place = found.curated;
-    const og = ogImage(slug);
-    return {
-      title: place.name.bn,
-      description: place.summary.bn,
-      alternates: { canonical: `/place/${slug}` },
-      robots: place.status === "published" ? undefined : { index: false },
-      openGraph: { title: `${place.name.bn} — ${SITE.name}`, description: place.summary.bn, url: `/place/${slug}`, images: og ? [{ url: og, width: 1200, height: 630 }] : undefined },
-    };
-  }
-  const s = found.story;
-  const name = s.story.name_bn || s.name_bn;
+  const { seo } = found;
+  const title = seoTitle(seo);
+  const url = `/place/${slug}`;
+  const image = await shareImage(seo);
   return {
-    title: name,
-    description: s.story.summary_bn?.slice(0, 155),
-    alternates: { canonical: `/place/${slug}` },
-    // Only the places pinned on the public map are on search engines; the rest stay shareable.
-    robots: s.show_on_map ? undefined : { index: false, follow: true },
+    title: { absolute: title },
+    description: seo.description,
+    alternates: { canonical: url, languages: { bn: url, "x-default": url } },
+    robots: seo.indexable ? undefined : { index: false, follow: true },
+    openGraph: {
+      type: "article",
+      locale: "bn_BD",
+      siteName: SITE.name,
+      url,
+      title,
+      description: seo.description,
+      images: [{ ...image, alt: seo.name }],
+      ...(seo.updated ? { modifiedTime: seo.updated } : {}),
+    },
+    twitter: { card: "summary_large_image", title, description: seo.description, images: [image.url] },
   };
 }
 
@@ -73,9 +71,11 @@ export default async function PlacePage({ params }: PageProps<"/place/[slug]">) 
   const { slug } = await params;
   const found = await load(slug);
   if (!found) notFound();
+  const jsonLd = <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdText(placeJsonLd(found.seo, await shareImage(found.seo))) }} />;
   if (found.curated) {
     return (
       <>
+        {jsonLd}
         <PlaceMap curated={curatedSlugs()} />
         <PagePanel title={found.curated.name.bn}>
           <PlaceStory place={found.curated} />
@@ -83,15 +83,17 @@ export default async function PlacePage({ params }: PageProps<"/place/[slug]">) 
       </>
     );
   }
-  const s = found.story;
-  const videos = await listVideos(s.id).catch(() => []);
+  const { story: s, videos } = found;
   return (
-    <PlaceMap
-      curated={curatedSlugs()}
-      initialAi={{
-        target: { name: s.name_bn, lat: s.lat, lng: s.lng, kind: s.kind ?? undefined, slug },
-        place: { id: s.id, slug, story: s.story, image: s.image, model: s.model, status: s.status, ...(videos.length ? { videos } : {}) },
-      }}
-    />
+    <>
+      {jsonLd}
+      <PlaceMap
+        curated={curatedSlugs()}
+        initialAi={{
+          target: { name: s.name_bn, lat: s.lat, lng: s.lng, kind: s.kind ?? undefined, slug },
+          place: { id: s.id, slug, story: s.story, image: s.image, model: s.model, status: s.status, verifiedAt: s.verifiedAt, ...(videos.length ? { videos } : {}) },
+        }}
+      />
+    </>
   );
 }

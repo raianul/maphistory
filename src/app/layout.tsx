@@ -16,7 +16,13 @@ export const metadata: Metadata = {
   metadataBase: new URL(SITE.url),
   title: { default: `${SITE.name} — ${SITE.tagline}`, template: `%s · ${SITE.name}` },
   description: "বাংলাদেশের ঐতিহাসিক স্থানের মানচিত্র। প্রতিটি পিনে সেই জায়গার ছবি-সহ গল্প।",
-  openGraph: { siteName: SITE.name, locale: "bn_BD", type: "website" },
+  openGraph: {
+    siteName: SITE.name,
+    locale: "bn_BD",
+    type: "website",
+    images: [{ url: "/og/home", width: 1200, height: 630, alt: "বাংলাদেশের প্রতিটি জায়গার ইতিহাস, মানচিত্রে" }],
+  },
+  twitter: { card: "summary_large_image", images: ["/og/home"] },
 };
 
 export const viewport: Viewport = {

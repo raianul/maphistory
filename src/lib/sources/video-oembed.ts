@@ -25,3 +25,25 @@ export async function fetchVideoInfo(provider: VideoProvider, providerVideoId: s
     return undefined;
   }
 }
+
+/**
+ * A YouTube video's upload date and length, from its public page (oEmbed has neither). Used for
+ * search engines' video results (schema.org VideoObject needs the upload date). Undefined when the
+ * page can't be read; never throws.
+ */
+export async function fetchYouTubeDetails(id: string): Promise<{ publishedAt?: string; durationSeconds?: number } | undefined> {
+  try {
+    const res = await fetch(`https://www.youtube.com/watch?v=${encodeURIComponent(id)}`, {
+      headers: { "Accept-Language": "en", "User-Agent": "Mozilla/5.0 (compatible; Ondor/0.1)" },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) return undefined;
+    const html = await res.text();
+    const date = /itemprop="uploadDate" content="([^"]+)"/.exec(html)?.[1] ?? /"uploadDate":"([^"]+)"/.exec(html)?.[1];
+    const secs = Number(/"lengthSeconds":"(\d+)"/.exec(html)?.[1]);
+    const out = { ...(date && !Number.isNaN(Date.parse(date)) ? { publishedAt: new Date(date).toISOString() } : {}), ...(secs > 0 ? { durationSeconds: secs } : {}) };
+    return Object.keys(out).length ? out : undefined;
+  } catch {
+    return undefined;
+  }
+}

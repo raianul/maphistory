@@ -1,6 +1,6 @@
 import { requireAdmin } from "@/lib/admin-auth";
 import { addVideo, getStoryForAdmin, listVideos, refreshPlacePage } from "@/lib/db";
-import { fetchVideoInfo } from "@/lib/sources/video-oembed";
+import { fetchVideoInfo, fetchYouTubeDetails } from "@/lib/sources/video-oembed";
 import { parseDuration, parseVideoUrl } from "@/lib/video";
 
 /** A place's videos. */
@@ -33,8 +33,17 @@ export async function POST(req: Request, { params }: RouteContext<"/api/admin/st
   const info = await fetchVideoInfo(parsed.provider, parsed.providerVideoId);
   if (!info) return Response.json({ error: "Video not found or can't be embedded (deleted, private or wrong link)." }, { status: 422 });
 
+  // Upload date and length for search engines' video results (the editor's duration wins).
+  const details = parsed.provider === "youtube" ? await fetchYouTubeDetails(parsed.providerVideoId) : undefined;
   try {
-    const video = await addVideo(id, { ...parsed, title: info.title, thumbnailUrl: info.thumbnailUrl, language, durationSeconds });
+    const video = await addVideo(id, {
+      ...parsed,
+      title: info.title,
+      thumbnailUrl: info.thumbnailUrl,
+      language,
+      durationSeconds: durationSeconds ?? details?.durationSeconds,
+      publishedAt: details?.publishedAt,
+    });
     await refreshPlacePage(id);
     return Response.json({ video, videos: await listVideos(id) });
   } catch (e) {

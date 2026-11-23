@@ -31,13 +31,22 @@ describe.skipIf(!ON)("place addresses (database)", () => {
 });
 
 describe.skipIf(!ON || !APP)("place pages (HTTP)", () => {
-  it("the page's HTML has the name, description, canonical address and story text", async () => {
+  it("the page's HTML has the name, description, canonical address, share tags and structured data", async () => {
     await saveStory({ name: `html place ${run}`, lat: 23.75, lng: 90.39 }, story(`Html Place ${run}`));
     const html = await (await fetch(`${APP}/place/html-place-${run}`)).text();
-    expect(html).toMatch(/<title>পরীক্ষা · Ondor<\/title>/);
+    expect(html).toMatch(/<title>পরীক্ষা( — [^<]+)? \| Ondor<\/title>/);
     expect(html).toContain('<meta name="description" content="পরীক্ষার জায়গা।"');
     expect(html).toContain(`/place/html-place-${run}"`);
     expect(html).toContain("noindex"); // not pinned on the map
+    expect(html).toContain('<meta property="og:type" content="article"/>');
+    expect(html).toContain('<meta property="og:locale" content="bn_BD"/>');
+    expect(html).toContain(`<meta property="og:image" content="${APP}/og/place/html-place-${run}"/>`); // no video: the card
+    expect(html).toContain('<meta name="twitter:card" content="summary_large_image"/>');
+    const ld = JSON.parse(html.match(/<script type="application\/ld\+json">([^<]*)<\/script>/)![1]);
+    expect(ld[0]).toMatchObject({ "@type": "TouristAttraction", name: "পরীক্ষা", geo: { latitude: 23.75, longitude: 90.39 } });
+    const card = await fetch(`${APP}/og/place/html-place-${run}`);
+    expect(card.status).toBe(200);
+    expect(card.headers.get("content-type")).toBe("image/png");
   });
   it("an old link moves permanently to the page, keeping campaign tags", async () => {
     const r = await fetch(`${APP}/?place=${encodeURIComponent(`html place ${run}`)}&at=23.75,90.39&utm_source=facebook&fbclid=x`, { redirect: "manual" });

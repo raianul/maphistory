@@ -25,6 +25,7 @@ type View = {
   model?: string;
   id?: string;
   status?: AiPlace["status"];
+  verifiedAt?: string;
   videos?: AiPlace["videos"];
   slug?: string;
   done: boolean;
@@ -71,7 +72,7 @@ export function AiPanel({
   const key = `${target.name}@${target.lat},${target.lng}`;
   const [view, setView] = useState<View | null>(() =>
     initial
-      ? { key, story: initial.story, image: initial.image, model: initial.model, id: initial.id, status: initial.status, videos: initial.videos, slug: initial.slug, done: true }
+      ? { key, story: initial.story, image: initial.image, model: initial.model, id: initial.id, status: initial.status, verifiedAt: initial.verifiedAt, videos: initial.videos, slug: initial.slug, done: true }
       : null,
   );
   const onSlugRef = useRef(onSlug);
@@ -128,6 +129,7 @@ export function AiPanel({
                 model: event.place.model,
                 id: event.place.id,
                 status: event.place.status,
+                verifiedAt: event.place.verifiedAt,
                 videos: event.place.videos,
                 slug: event.place.slug,
                 done: true,
@@ -173,6 +175,7 @@ export function AiPanel({
           onExplore={onExplore}
           id={current.id}
           status={current.status}
+          verifiedAt={current.verifiedAt}
           videos={current.videos}
           // What was already written stays; the notice sits under the header.
           notice={current.error ? <ErrorNotice message={current.error} onRetry={retry} /> : undefined}

@@ -275,8 +275,12 @@ export const AiStoryData = z.object({
   places_here: z.array(z.object({ name_bn: z.string(), what_bn: z.string() })).optional(),
   historical_debates: z.array(z.object({ question_bn: z.string(), views_bn: z.array(z.string()) })).optional().catch(undefined),
   uncertain_bn: z.string().optional(),
-  /** Real sources, once retrieval exists (never filled by the AI itself). */
+  /** Real sources, checked by an editor (never filled by the AI itself). */
   sources: z.array(StorySource).optional(),
+  /** Dates an editor checked against the sources, oldest first: "১৯৫৯" → "…". */
+  key_dates: z.array(z.object({ date_bn: z.string(), text_bn: z.string() })).optional(),
+  /** The editor's note on what was corrected in the AI's draft. */
+  corrections_bn: z.string().optional(),
   /** How the story was made, so the UI never claims more than happened. */
   provenance: z
     .object({
