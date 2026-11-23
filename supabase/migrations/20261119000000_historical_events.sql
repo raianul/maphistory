@@ -21,7 +21,7 @@ create table if not exists public.historical_events (
   date_label       text check (char_length(date_label) <= 120),      -- shown as is, e.g. "আনুমানিক ১৭৫৭"
   -- Shown on "On this day" every year on its month/day (only possible with an exact day).
   recurring        boolean not null default false,
-
+ 
   -- Where (the main place; timeline steps can add more in Phase 2).
   place_name       text check (char_length(place_name) <= 200),
   city             text check (char_length(city) <= 120),
