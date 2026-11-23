@@ -7,6 +7,7 @@ import { ImageResponse } from "next/og";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import sharp from "sharp";
+import { SITE_URL } from "../site";
 import { THEME } from "../theme";
 import { banglaSvg, svgDataUrl } from "./bangla-text";
 
@@ -23,7 +24,7 @@ async function photoData(src: string | undefined): Promise<string | undefined> {
       const buf = await readFile(join(process.cwd(), "public", decodeURIComponent(src.split("?")[0]).replace(/\.\.+/g, "")));
       return buf.length > 4_000_000 ? undefined : `data:${type};base64,${buf.toString("base64")}`;
     }
-    const res = await fetch(src, { headers: { "User-Agent": "Ondor/0.1 (https://ondor.site; share card)" }, signal: AbortSignal.timeout(6000) });
+    const res = await fetch(src, { headers: { "User-Agent": `Ondor/0.1 (${SITE_URL}; share card)` }, signal: AbortSignal.timeout(6000) });
     const type = res.headers.get("content-type") ?? "";
     if (!res.ok || !/^image\/(jpeg|png|webp)/.test(type)) return undefined;
     const buf = Buffer.from(await res.arrayBuffer());

@@ -1,6 +1,7 @@
 import data from "../generated/places.json";
 import { bnYear } from "./format";
 import type { Place, TextT } from "./schema";
+import { SITE_URL } from "./site";
 
 export { ERA_META, bnYear } from "./format";
 
@@ -24,16 +25,6 @@ export function builtLabel(p: Place): string {
 export function t(text: TextT | undefined): string {
   return text?.bn ?? "";
 }
-
-/**
- * The site's public address. Set NEXT_PUBLIC_SITE_URL once the domain (ondor.site) is connected;
- * until then, on Vercel, the project's own production address (e.g. ondor.vercel.app), which
- * Vercel provides; locally, localhost.
- */
-const SITE_URL =
-  process.env.NEXT_PUBLIC_SITE_URL ||
-  (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : "") ||
-  "http://localhost:3000";
 
 export const SITE = {
   name: "Ondor",

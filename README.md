@@ -49,19 +49,16 @@ merged with `status: "published"`.
 
 ## Share images
 
-```bash
-pnpm og                # all places
-pnpm og lalbagh-fort   # one place
-```
-
-Renders `public/og/<slug>.png` with the installed Google Chrome (or `CHROME_PATH`). Commit the
-PNGs. We don't use `next/og` because it breaks Bangla conjuncts ("কেল্লা" → "কেল্‌লা").
+Made on request, not ahead of time: `/og/place/<slug>` draws a place's 1200×630 card (its photo,
+Bangla name and era line), `/og/home` the home page's. Bangla is shaped with HarfBuzz
+(`src/lib/og/bangla-text.ts`), since `next/og` alone breaks conjuncts ("কেল্লা" → "কেল্‌লা").
+A place with a YouTube video shares the video's thumbnail instead.
 
 ## Environment
 
 | Variable | Purpose |
 | --- | --- |
-| `NEXT_PUBLIC_SITE_URL` | Canonical URL, default `https://jaygargolpo.com` |
+| `NEXT_PUBLIC_SITE_URL` | The site's public address, e.g. `https://ondor.site` (no trailing slash). Every canonical URL, share link, sitemap entry and share card uses it. Unset: Vercel's production address, then `http://localhost:3000` |
 | `NEXT_PUBLIC_REPORT_FORM_URL` | "Report a mistake" form; the place slug is appended |
 | `NEXT_PUBLIC_BANGLADESH_ONLY` | `true` (default): only Bangladesh is shown and has stories; `false`: the whole world |
 

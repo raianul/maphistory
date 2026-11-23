@@ -9,7 +9,6 @@
     "prebuild": "cp node_modules/maplibre-gl/dist/maplibre-gl-worker.mjs public/ && tsx scripts/build-content.ts",
     "build": "next build",
     "start": "next start",
-    "og": "tsx scripts/og.ts",
     "lint": "eslint",
     "make-admin": "tsx --env-file=.env.local scripts/make-admin.ts",
     "test": "vitest run"

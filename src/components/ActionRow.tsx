@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { slugOf, track } from "@/lib/analytics";
+import { siteUrl } from "@/lib/site";
 
 /**
  * Share (phone share sheet, or copy the link) and directions (Google Maps)
@@ -28,10 +29,9 @@ export function ActionRow({
   compact?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
-  const link = url ?? (typeof window !== "undefined" ? window.location.href : "");
-
   async function share() {
-    const full = new URL(link, window.location.origin).toString();
+    // Always the site's public address (NEXT_PUBLIC_SITE_URL), whatever address this page is on.
+    const full = siteUrl(url ?? `${window.location.pathname}${window.location.search}`);
     track("share_click", { slug: slugOf(full), method: typeof navigator.share === "function" ? "share_sheet" : "copy_link" });
     try {
       if (navigator.share) {
