@@ -1,7 +1,7 @@
 import { AiStoryData } from "@/lib/ai/place-story";
 import { CoverImage } from "@/lib/events/schema";
 import { requireAdmin } from "@/lib/admin-auth";
-import { clearReports, getStoryForAdmin, uniqueSlug, updateStory } from "@/lib/db";
+import { clearReports, ensureSlug, getStoryForAdmin, refreshPlacePage, updateStory } from "@/lib/db";
 
 /** One story with its reports. */
 export async function GET(req: Request, { params }: RouteContext<"/api/admin/stories/[id]">) {
@@ -43,7 +43,7 @@ export async function PATCH(req: Request, { params }: RouteContext<"/api/admin/s
             status: "verified",
             verified_at: new Date().toISOString(),
             verified_by: admin.userId,
-            slug: current.slug ?? (await uniqueSlug(current.name_en ?? current.story?.name_en ?? "", id)),
+            slug: current.slug ?? (await ensureSlug(id)),
           });
           break;
         case "unverify":
@@ -68,6 +68,8 @@ export async function PATCH(req: Request, { params }: RouteContext<"/api/admin/s
           return Response.json({ error: "Unknown action" }, { status: 400 });
       }
     }
+    // The place's page shows the change at once (text, pin = on search engines or not).
+    await refreshPlacePage(id);
     return Response.json(await getStoryForAdmin(id));
   } catch (e) {
     return Response.json({ error: (e as Error).message }, { status: 500 });

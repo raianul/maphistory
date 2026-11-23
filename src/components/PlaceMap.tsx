@@ -11,6 +11,7 @@ import { bnDistance, haversine } from "@/lib/format";
 import { initialMapLang, loadStyle, MIN_ZOOM, saveMapLang, setMapLang, type MapLang } from "@/lib/map-style";
 import { searchPlaces, type GeoResult } from "@/lib/geo-search";
 import { AiPanel, aiShareUrl, type AiTarget } from "./AiPanel";
+import type { AiPlace } from "@/lib/ai/types";
 import { OnThisDayPanel, STEP_REQUEST } from "./OnThisDayPanel";
 import { StepPopup } from "./StepPopup";
 import { SHEET_EVENT, SHEET_REQUEST } from "./SidePanel";
@@ -32,7 +33,7 @@ function toGeoJSON(pins: MapPin[]): GeoData {
     features: pins.map((p) => ({
       type: "Feature",
       geometry: { type: "Point", coordinates: [p.lng, p.lat] },
-      properties: { label: p.label, label_en: p.label_en ?? p.label, verified: p.verified, name: p.name, kind: p.kind ?? "" },
+      properties: { label: p.label, label_en: p.label_en ?? p.label, verified: p.verified, name: p.name, kind: p.kind ?? "", slug: p.slug ?? "" },
     })),
   };
 }
@@ -49,7 +50,11 @@ async function fetchTile(t: Tile, signal: AbortSignal): Promise<MapPin[]> {
  * square (see lib/tiles.ts): only the squares on screen, only from city zoom in, each once. Any
  * other named place on the base map can still be clicked for its story.
  */
-export function PlaceMap() {
+/**
+ * @param curated slugs of the hand-written places (content/): their /place/<slug> is a route of its own.
+ * @param initialAi a place page (/place/<slug>) rendered on the server: its story, open at once.
+ */
+export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; initialAi?: { target: AiTarget; place: AiPlace } } = {}) {
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MLMap | null>(null);
   const userMarker = useRef<Marker | null>(null);
@@ -65,7 +70,11 @@ export function PlaceMap() {
   const [locating, setLocating] = useState(false);
   const [locError, setLocError] = useState<string | null>(null);
   // EXPERIMENT: a base-map place clicked for a live AI story.
-  const [aiTarget, setAiTarget] = useState<AiTarget | null>(null);
+  const [aiTarget, setAiTarget] = useState<AiTarget | null>(initialAi?.target ?? null);
+  /** A story already loaded (the page's own, or fetched for Back/Forward): shown without a request. */
+  const [preload, setPreload] = useState<{ key: string; place: AiPlace } | null>(
+    initialAi ? { key: `${initialAi.target.name}@${initialAi.target.lat},${initialAi.target.lng}`, place: initialAi.place } : null,
+  );
   /** "On this day": closed, its list, or one event (by slug). One panel at a time with stories. */
   const [otd, setOtd] = useState<{ slug: string | null } | null>(null);
   /** Where the open event happened, for the ring on the map. */
@@ -123,7 +132,9 @@ export function PlaceMap() {
   // The open place comes from the URL: /place/<slug> shows its story in the side panel.
   const router = useRouter();
   const pathname = usePathname();
-  const selected = pathname.match(/^\/place\/([^/]+)/)?.[1] ?? null;
+  // A hand-written place's own route (/place/<slug>); an AI story's page address is not one of these.
+  const pathSlug = pathname.match(/^\/place\/([^/]+)/)?.[1] ?? null;
+  const selected = pathSlug && curated.includes(pathSlug) ? pathSlug : null;
 
   /** Whether the open story's history entry was pushed here (so closing = Back to the map). */
   const openedHere = useRef(false);
@@ -212,12 +223,21 @@ export function PlaceMap() {
 
   /** EXPERIMENT: opens a live AI story for any named place on the base map. */
   function openAi(target: AiTarget, zoom?: number) {
+    // A place with a hand-written page (e.g. Ahsan Manzil): that page, in its own panel.
+    if (target.slug && curated.includes(target.slug)) {
+      dismissTip();
+      setAiTarget(null);
+      setOtd(null);
+      router.push(`/place/${target.slug}`, { scroll: false });
+      return;
+    }
     if (selected) router.replace("/", { scroll: false });
     dismissTip();
-    // The address bar carries the story, so it can be shared and reopened. Opening one from the
-    // map adds a history entry, so the phone's Back button closes it; switching stories replaces it.
+    // The address bar carries the place's page (/place/<slug>, or a link that finds it while it is
+    // new), so it can be shared and reopened. Opening one from the map adds a history entry, so the
+    // phone's Back button closes it; switching places replaces it.
     const url = aiShareUrl(target);
-    if (aiTarget || selected || new URLSearchParams(window.location.search).has("place")) {
+    if (aiTarget || selected || window.location.pathname.startsWith("/place/") || new URLSearchParams(window.location.search).has("place")) {
       window.history.replaceState(window.history.state, "", url);
     } else {
       window.history.pushState(window.history.state, "", url);
@@ -274,13 +294,29 @@ export function PlaceMap() {
     openedHere.current = false;
   }
 
+  const curatedRef = useRef(curated);
+  const initialAiRef = useRef(initialAi);
   // Back/forward: the story follows the address bar (Back from a story returns to the plain map).
   useEffect(() => {
     const onPop = () => {
       const params = new URLSearchParams(window.location.search);
       const at = params.get("at")?.split(",").map(Number);
       const name = params.get("place");
-      if (name && at?.length === 2 && at.every(Number.isFinite)) {
+      const slug = window.location.pathname.match(/^\/place\/([^/]+)/)?.[1];
+      if (slug) {
+        // A hand-written place is its own route (Next shows it); an AI place is loaded by its address.
+        setOtd(null);
+        setTimeline(null);
+        if (curatedRef.current.includes(slug)) return setAiTarget(null);
+        fetch(`/api/place/${slug}`)
+          .then((r) => (r.ok ? r.json() : null))
+          .then((d: { target?: AiTarget; place?: AiPlace } | null) => {
+            if (!d?.target || !d.place) return setAiTarget(null);
+            setPreload({ key: `${d.target.name}@${d.target.lat},${d.target.lng}`, place: d.place });
+            setAiTarget(d.target);
+          })
+          .catch(() => setAiTarget(null));
+      } else if (name && at?.length === 2 && at.every(Number.isFinite)) {
         setOtd(null);
         setTimeline(null);
         setAiTarget({ name, lat: at[0], lng: at[1], kind: params.get("kind") ?? undefined });
@@ -434,8 +470,8 @@ export function PlaceMap() {
           const f = e.features?.[0];
           if (!f || f.geometry.type !== "Point") return;
           const [lng, lat] = f.geometry.coordinates as [number, number];
-          const { name, kind, label, verified } = f.properties as { name: string; kind: string; label: string; verified: boolean };
-          aiRef.current(pinTarget({ name, lat, lng, kind: kind || undefined, label, verified }));
+          const { name, kind, label, verified, slug } = f.properties as { name: string; kind: string; label: string; verified: boolean; slug?: string };
+          aiRef.current(pinTarget({ name, lat, lng, kind: kind || undefined, label, verified, slug: slug || undefined }));
         });
         // Squares of pins: fetched for what is on screen, after every move (and once now).
         map.on("moveend", () => loadPinsRef.current());
@@ -547,7 +583,13 @@ export function PlaceMap() {
         setReady(true);
         setMapObj(map);
 
-        // A shared AI story link (/?place=…&at=lat,lng) reopens that story.
+        // A place page (/place/<slug>): its story is already open; centre the map on it.
+        if (initialAiRef.current) {
+          const t = initialAiRef.current.target;
+          focus(t.lng, t.lat, 15);
+          return;
+        }
+        // An older shared AI story link (/?place=…&at=lat,lng) reopens that story.
         const params = new URLSearchParams(window.location.search);
         const at = params.get("at")?.split(",").map(Number);
         const shared = params.get("place");
@@ -824,7 +866,18 @@ export function PlaceMap() {
       )}
       {/* Wide screens: the current step's card on the map, beside its pin. */}
       {mapObj && timeline && timeline.step >= 0 && <StepPopup map={mapObj} event={timeline.event} step={timeline.step} rightInset={panelWidth()} />}
-      {aiTarget && <AiPanel target={aiTarget} onClose={closeAi} onExplore={exploreByName} />}
+      {aiTarget && (
+        <AiPanel
+          target={aiTarget}
+          initial={preload && preload.key === `${aiTarget.name}@${aiTarget.lat},${aiTarget.lng}` ? preload.place : undefined}
+          onClose={closeAi}
+          onExplore={exploreByName}
+          // A story saved just now gets its page address: put it in the address bar (same history entry).
+          onSlug={(slug) => {
+            if (window.location.pathname !== `/place/${slug}`) window.history.replaceState(window.history.state, "", `/place/${slug}${window.location.hash}`);
+          }}
+        />
+      )}
       {otd && (
         <OnThisDayPanel
           slug={otd.slug}

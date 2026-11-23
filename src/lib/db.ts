@@ -7,6 +7,8 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { AiPlace } from "./ai/types";
 import type { StoryTarget } from "./ai/place-story";
 import type { MapPin } from "./map-pin";
+import { getPlaces } from "./places";
+import { freeSlug } from "./slug";
 import { PINS_PER_TILE, type Bounds } from "./tiles";
 import type { PlaceVideo, VideoProvider } from "./video";
 
@@ -24,10 +26,11 @@ export function db(): SupabaseClient {
   return client;
 }
 
-export type StoredStory = AiPlace & { id: string; status: "ai" | "verified" | "hidden"; views: number };
+export type StoredStory = AiPlace & { id: string; status: "ai" | "verified" | "hidden"; views: number; slug?: string };
 
 type Row = {
   id: string;
+  slug?: string | null;
   status: StoredStory["status"];
   story: AiPlace["story"];
   image: AiPlace["image"] | null;
@@ -37,6 +40,7 @@ type Row = {
 
 const toStored = (r: Row): StoredStory => ({
   id: r.id,
+  ...(r.slug ? { slug: r.slug } : {}),
   status: r.status,
   story: r.story,
   image: r.image ?? undefined,
@@ -62,7 +66,7 @@ export async function findStory(t: StoryTarget): Promise<StoredStory | undefined
   const r = matchRadius(t.kind);
   const { data, error } = await db()
     .from("stories")
-    .select("id,status,story,image,model,views,lat,lng")
+    .select("id,slug,status,story,image,model,views,lat,lng")
     .eq("name_bn", norm(t.name))
     .gte("lat", t.lat - r)
     .lte("lat", t.lat + r)
@@ -93,13 +97,18 @@ export async function saveStory(t: StoryTarget, place: AiPlace): Promise<StoredS
     views: 1,
   };
   const insert = (r: typeof row) =>
-    db().from("stories").upsert(r, { onConflict: "place_key", ignoreDuplicates: true }).select("id,status,story,image,model,views").maybeSingle();
+    db().from("stories").upsert(r, { onConflict: "place_key", ignoreDuplicates: true }).select("id,slug,status,story,image,model,views").maybeSingle();
   let { data, error } = await insert(row);
   // A database that hasn't run the "global countries" migration yet only accepts BD/IN/PK
   // (check constraint, code 23514): save the story anyway, without the country column.
   if (error?.code === "23514" && row.country) ({ data, error } = await insert({ ...row, country: null }));
   if (error) throw new Error(`Database: ${error.message}`);
-  if (data) return toStored(data as Row);
+  if (data) {
+    // Every saved place gets its page address at once (/place/<slug>), from its English name.
+    const stored = toStored(data as Row);
+    const slug = await ensureSlug(stored.id).catch(() => undefined);
+    return slug ? { ...stored, slug } : stored;
+  }
   // Someone saved it a moment earlier: return theirs.
   const existing = await findStory(t);
   if (!existing) throw new Error("Story could not be saved.");
@@ -175,7 +184,7 @@ export async function listMapPins(b: Bounds, limit = PINS_PER_TILE): Promise<Map
   const query = (status: "verified" | "ai", n: number) =>
     db()
       .from("stories")
-      .select("name_bn,name_en,lat,lng,kind,status,label:story->>name_bn")
+      .select("name_bn,name_en,slug,lat,lng,kind,status,label:story->>name_bn")
       .eq("show_on_map", true)
       .eq("status", status)
       // Edges: south/west inclusive, north/east exclusive, so a pin on a border is in exactly one square.
@@ -195,10 +204,11 @@ export async function listMapPins(b: Bounds, limit = PINS_PER_TILE): Promise<Map
   const ai = room > 0 ? await query("ai", room) : { data: [], error: null };
   if (ai.error) throw new Error(`Database: ${ai.error.message}`);
 
-  type PinRow = { name_bn: string; name_en: string | null; lat: number; lng: number; kind: string | null; status: string; label: string | null };
+  type PinRow = { name_bn: string; name_en: string | null; slug: string | null; lat: number; lng: number; kind: string | null; status: string; label: string | null };
   return ([...verified.data, ...ai.data] as PinRow[]).map((r) => ({
     label: r.label?.trim() || r.name_bn,
     label_en: r.name_en?.trim() || undefined,
+    slug: r.slug ?? undefined,
     name: r.name_bn,
     lat: r.lat,
     lng: r.lng,
@@ -230,20 +240,78 @@ export async function updateStory(id: string, patch: Record<string, unknown>) {
 }
 
 /** A unique, readable URL name for a verified story: "lalbagh-fort", "lalbagh-fort-2", … */
-export async function uniqueSlug(base: string, id: string): Promise<string> {
-  const root =
-    base
-      .normalize("NFKD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-|-$/g, "") || "place";
-  for (let n = 1; n < 50; n++) {
-    const slug = n === 1 ? root : `${root}-${n}`;
-    const { data } = await db().from("stories").select("id").eq("slug", slug).neq("id", id).maybeSingle();
-    if (!data) return slug;
+/** Slugs of the hand-written places (content/): a story never takes one of these by accident. */
+const CURATED = new Set(getPlaces().map((p) => p.slug));
+
+/**
+ * The story's page address, giving it one if it has none yet: from its English name, with its city
+ * on a clash ("-dhaka"), then a number. Never changes once set.
+ */
+export async function ensureSlug(id: string): Promise<string> {
+  const { data, error } = await db().from("stories").select("slug,name_en,story").eq("id", id).maybeSingle();
+  if (error) throw new Error(`Database: ${error.message}`);
+  if (!data) throw new Error("Story not found");
+  if (data.slug) return data.slug as string;
+  const story = (data.story ?? {}) as { name_en?: string; locality_en?: string };
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const slug = await freeSlug(data.name_en || story.name_en || "", story.locality_en, async (s) => {
+      if (CURATED.has(s)) return true;
+      const { data: other } = await db().from("stories").select("id").eq("slug", s).neq("id", id).maybeSingle();
+      return !!other;
+    });
+    const { error: e } = await db().from("stories").update({ slug }).eq("id", id).is("slug", null);
+    if (!e) {
+      const { data: now } = await db().from("stories").select("slug").eq("id", id).single();
+      return now!.slug as string;
+    }
+    if (e.code !== "23505") throw new Error(`Database: ${e.message}`); // taken a moment ago: try again
   }
-  return `${root}-${id.slice(0, 8)}`;
+  throw new Error("Could not give the story a page address");
+}
+
+/** What a place page needs: the saved story by its address, with where it is and whether to index it. */
+export type PlacePage = StoredStory & {
+  slug: string;
+  name_bn: string;
+  lat: number;
+  lng: number;
+  kind: string | null;
+  show_on_map: boolean;
+  verified_at: string | null;
+  updated_at: string;
+};
+
+/** Refreshes a story's page (/place/<slug>) after an admin change. Server-side only. */
+export async function refreshPlacePage(storyId: string): Promise<void> {
+  const { data } = await db().from("stories").select("slug").eq("id", storyId).maybeSingle();
+  if (data?.slug) {
+    const { revalidatePath } = await import("next/cache");
+    revalidatePath(`/place/${data.slug}`);
+  }
+}
+
+export async function findStoryBySlug(slug: string): Promise<PlacePage | undefined> {
+  let { data, error } = await db()
+    .from("stories")
+    .select("id,slug,status,story,image,model,views,name_bn,lat,lng,kind,show_on_map,verified_at,updated_at")
+    .eq("slug", slug)
+    .neq("status", "hidden")
+    .maybeSingle();
+  // Before the show_on_map migration: the same without it.
+  if (missingColumn(error?.code)) {
+    ({ data, error } = await db().from("stories").select("id,slug,status,story,image,model,views,name_bn,lat,lng,kind,verified_at,updated_at").eq("slug", slug).neq("status", "hidden").maybeSingle());
+  }
+  if (error) throw new Error(`Database: ${error.message}`);
+  if (!data) return undefined;
+  const r = data as Row & { name_bn: string; lat: number; lng: number; kind: string | null; show_on_map?: boolean; verified_at: string | null; updated_at: string };
+  return { ...toStored(r), slug, name_bn: r.name_bn, lat: r.lat, lng: r.lng, kind: r.kind, show_on_map: !!r.show_on_map, verified_at: r.verified_at, updated_at: r.updated_at };
+}
+
+/** Every place with a page, for the sitemap: its address, last change, and whether it is pinned. */
+export async function listPlacePages(): Promise<{ slug: string; updated_at: string; show_on_map: boolean }[]> {
+  const { data, error } = await db().from("stories").select("slug,updated_at,show_on_map").not("slug", "is", null).neq("status", "hidden");
+  if (error) return [];
+  return (data ?? []) as { slug: string; updated_at: string; show_on_map: boolean }[];
 }
 
 export async function clearReports(id: string) {

@@ -1,5 +1,5 @@
 import { requireAdmin } from "@/lib/admin-auth";
-import { addVideo, getStoryForAdmin, listVideos } from "@/lib/db";
+import { addVideo, getStoryForAdmin, listVideos, refreshPlacePage } from "@/lib/db";
 import { fetchVideoInfo } from "@/lib/sources/video-oembed";
 import { parseDuration, parseVideoUrl } from "@/lib/video";
 
@@ -35,6 +35,7 @@ export async function POST(req: Request, { params }: RouteContext<"/api/admin/st
 
   try {
     const video = await addVideo(id, { ...parsed, title: info.title, thumbnailUrl: info.thumbnailUrl, language, durationSeconds });
+    await refreshPlacePage(id);
     return Response.json({ video, videos: await listVideos(id) });
   } catch (e) {
     return Response.json({ error: (e as Error).message }, { status: 500 });

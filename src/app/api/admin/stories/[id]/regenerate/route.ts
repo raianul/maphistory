@@ -1,6 +1,6 @@
 import { friendlyError, generatePlace } from "@/lib/ai/generate";
 import { requireAdmin } from "@/lib/admin-auth";
-import { getStoryForAdmin, updateStory } from "@/lib/db";
+import { getStoryForAdmin, refreshPlacePage, updateStory } from "@/lib/db";
 import { reverseGeocode } from "@/lib/sources/reverse-geocode";
 
 /** Write the story again with the AI. It goes back to "AI, not verified" until checked again. */
@@ -28,6 +28,7 @@ export async function POST(req: Request, { params }: RouteContext<"/api/admin/st
       verified_at: null,
       verified_by: null,
     });
+    await refreshPlacePage(id);
     return Response.json(await getStoryForAdmin(id));
   } catch (e) {
     return Response.json({ error: friendlyError(e) }, { status: 500 });

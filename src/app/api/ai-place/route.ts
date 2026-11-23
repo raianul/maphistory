@@ -1,7 +1,7 @@
 import { friendlyError, generatePlace } from "@/lib/ai/generate";
 import type { StoryTarget } from "@/lib/ai/place-story";
 import type { AiPlace } from "@/lib/ai/types";
-import { checkLimits, countView, findStory, listVideos, logGeneration, saveStory, visitorId } from "@/lib/db";
+import { checkLimits, countView, ensureSlug, findStory, listVideos, logGeneration, saveStory, visitorId } from "@/lib/db";
 import { inRegion } from "@/lib/region";
 import { reverseGeocode } from "@/lib/sources/reverse-geocode";
 
@@ -63,8 +63,8 @@ export async function POST(req: Request) {
             return;
           }
           // Videos are kept apart from the story: added here for the panel to show first.
-          const videos = await listVideos(saved.id);
-          send({ type: "done", place: videos.length ? { ...saved, videos } : saved });
+          const [videos, slug] = await Promise.all([listVideos(saved.id), saved.slug ? Promise.resolve(saved.slug) : ensureSlug(saved.id).catch(() => undefined)]);
+          send({ type: "done", place: { ...saved, ...(slug ? { slug } : {}), ...(videos.length ? { videos } : {}) } });
           countView(saved.id).catch(() => {});
           return;
         }

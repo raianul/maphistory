@@ -376,7 +376,7 @@ function StoryPanel({ id, onClose, onChanged }: { id: string; onClose: () => voi
               <span className="text-muted">👁 {detail.views} views</span>
               {detail.reports > 0 && <span className="font-semibold text-red-700">⚑ {detail.reports} {detail.reports === 1 ? "report" : "reports"}</span>}
               <a
-                href={aiShareUrl({ name: detail.name_bn, lat: detail.lat, lng: detail.lng, kind: detail.kind ?? undefined })}
+                href={aiShareUrl({ name: detail.name_bn, lat: detail.lat, lng: detail.lng, kind: detail.kind ?? undefined, slug: detail.slug ?? undefined })}
                 target="_blank"
                 rel="noreferrer"
                 className="ms-auto text-accent underline"
@@ -494,7 +494,7 @@ function StoryPanel({ id, onClose, onChanged }: { id: string; onClose: () => voi
               streaming={false}
               fallbackName={detail.name_bn}
               at={{ lat: detail.lat, lng: detail.lng }}
-              shareUrl={aiShareUrl({ name: detail.name_bn, lat: detail.lat, lng: detail.lng, kind: detail.kind ?? undefined })}
+              shareUrl={aiShareUrl({ name: detail.name_bn, lat: detail.lat, lng: detail.lng, kind: detail.kind ?? undefined, slug: detail.slug ?? undefined })}
               status={detail.status}
               videos={detail.videos}
             />

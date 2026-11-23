@@ -11,6 +11,8 @@ export type AiPlace = {
   model: string;
   /** Set once saved in the database. */
   id?: string;
+  /** The place's page address (/place/<slug>), once saved. */
+  slug?: string;
   /** "ai" until the admin checks it, then "verified". */
   status?: "ai" | "verified" | "hidden";
   /** Historical videos about this place, main one first (saved places only; separate from the story). */

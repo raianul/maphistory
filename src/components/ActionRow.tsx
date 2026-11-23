@@ -1,5 +1,6 @@
 "use client";
 
+
 import { useState } from "react";
 
 /**
@@ -33,7 +34,7 @@ export function ActionRow({
     const full = new URL(link, window.location.origin).toString();
     try {
       if (navigator.share) {
-        await navigator.share({ title, text: `${title} — জায়গার গল্প`, url: full });
+        await navigator.share({ title, text: `${title} — Ondor`, url: full });
         return;
       }
     } catch (e) {

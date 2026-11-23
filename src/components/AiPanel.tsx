@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { AiPlace, PartialStory } from "@/lib/ai/types";
 import { parsePartialJson } from "@/lib/partial-json";
 import { AiStory } from "./AiStory";
@@ -14,6 +14,8 @@ export type AiTarget = {
   kind?: string;
   /** Labels around it, so the AI knows which place of that name is meant. */
   nearby?: string[];
+  /** The place's page address (/place/<slug>), when known. */
+  slug?: string;
 };
 
 type View = {
@@ -24,6 +26,7 @@ type View = {
   id?: string;
   status?: AiPlace["status"];
   videos?: AiPlace["videos"];
+  slug?: string;
   done: boolean;
   error?: string;
 };
@@ -41,8 +44,9 @@ type Event =
   | { type: "done"; place: AiPlace }
   | { type: "error"; message: string };
 
-/** A link that reopens this AI story on the map (see PlaceMap). */
+/** The place's own page (/place/<slug>) when it has one; else a link that reopens the story on the map. */
 export function aiShareUrl(t: AiTarget): string {
+  if (t.slug) return `/place/${t.slug}`;
   const params = new URLSearchParams({ place: t.name, at: `${t.lat.toFixed(5)},${t.lng.toFixed(5)}` });
   if (t.kind) params.set("kind", t.kind);
   return `/?${params}`;
@@ -51,20 +55,37 @@ export function aiShareUrl(t: AiTarget): string {
 /** EXPERIMENT: streams a live AI story about a clicked map place and shows it as it is written. */
 export function AiPanel({
   target,
+  initial,
   onClose,
   onExplore,
+  onSlug,
 }: {
   target: AiTarget;
+  /** The saved story, already loaded (a place page rendered on the server): shown at once, no request. */
+  initial?: AiPlace;
   onClose: () => void;
   onExplore?: (name: string) => void;
+  /** The story was saved and has a page address: the map puts it in the address bar. */
+  onSlug?: (slug: string) => void;
 }) {
   const key = `${target.name}@${target.lat},${target.lng}`;
-  const [view, setView] = useState<View | null>(null);
+  const [view, setView] = useState<View | null>(() =>
+    initial
+      ? { key, story: initial.story, image: initial.image, model: initial.model, id: initial.id, status: initial.status, videos: initial.videos, slug: initial.slug, done: true }
+      : null,
+  );
+  const onSlugRef = useRef(onSlug);
+  useEffect(() => {
+    onSlugRef.current = onSlug;
+  });
   // Bumped by "আবার চেষ্টা করুন" to run the request again.
   const [attempt, setAttempt] = useState(0);
   const current: View = view?.key === key ? view : { key, story: {}, done: false };
 
+  // Already shown from the page's own data: nothing to fetch (until "try again").
+  const preloaded = !!initial && attempt === 0 && view?.key === key && view.done && !view.error;
   useEffect(() => {
+    if (preloaded) return;
     const ctrl = new AbortController();
     (async () => {
       let text = "";
@@ -108,8 +129,10 @@ export function AiPanel({
                 id: event.place.id,
                 status: event.place.status,
                 videos: event.place.videos,
+                slug: event.place.slug,
                 done: true,
               });
+              if (event.place.slug) onSlugRef.current?.(event.place.slug);
             } else {
               finished = true;
               update({ error: event.message, done: true });
@@ -124,6 +147,7 @@ export function AiPanel({
       }
     })();
     return () => ctrl.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- preloaded is decided once per place
   }, [key, target, attempt]);
 
   const retry = () => {
@@ -145,7 +169,7 @@ export function AiPanel({
           streaming={!current.done}
           fallbackName={target.name}
           at={target}
-          shareUrl={aiShareUrl(target)}
+          shareUrl={aiShareUrl({ ...target, slug: current.slug ?? target.slug })}
           onExplore={onExplore}
           id={current.id}
           status={current.status}

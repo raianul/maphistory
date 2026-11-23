@@ -1,4 +1,4 @@
-import data from "@/generated/places.json";
+import data from "../generated/places.json";
 import { bnYear } from "./format";
 import type { Place, TextT } from "./schema";
 
