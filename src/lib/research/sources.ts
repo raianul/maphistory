@@ -60,6 +60,37 @@ export async function wikipediaFromUrl(url: string, fetchImpl: typeof fetch = fe
   return r?.source ?? null;
 }
 
+/** Titles of pages that are lists or timelines, never about one subject. */
+const NOT_A_SUBJECT = /^(list of|lists of|timeline of|outline of|index of|\d{3,4}( in |$)|.*\(disambiguation\))|তালিকা|সময়রেখা/i;
+
+/**
+ * The Wikidata id (e.g. "Q7241") of the subject of an en/bn Wikipedia article link, or null: not a
+ * Wikipedia article, a list or timeline page, or no Wikidata item. One small API call.
+ */
+export async function wikidataIdFor(url: string, fetchImpl: typeof fetch = fetch): Promise<string | null> {
+  const m = /^https?:\/\/(en|bn)(?:\.m)?\.wikipedia\.org\/wiki\/([^?#]+)/i.exec(url.trim());
+  if (!m) return null;
+  let title: string;
+  try {
+    title = decodeURIComponent(m[2]).replace(/_/g, " ");
+  } catch {
+    return null;
+  }
+  try {
+    const data = await wikiApi<{ query?: { pages?: { title: string; missing?: boolean; pageprops?: { wikibase_item?: string; disambiguation?: string } }[] } }>(
+      m[1].toLowerCase() as "en" | "bn",
+      { action: "query", prop: "pageprops", redirects: "1", titles: title },
+      fetchImpl,
+    );
+    const page = data.query?.pages?.[0];
+    if (!page || page.missing || page.pageprops?.disambiguation !== undefined || NOT_A_SUBJECT.test(page.title)) return null;
+    const q = page.pageprops?.wikibase_item;
+    return q && /^Q\d+$/.test(q) ? q : null;
+  } catch {
+    return null;
+  }
+}
+
 async function wikipediaByTitle(lang: "en" | "bn", title: string, fetchImpl: typeof fetch, maxChars = EXCERPT_CHARS): Promise<{ source: ResearchSource; leads: ResearchLead[]; qid?: string } | null> {
   const data = await wikiApi<{ query?: { pages?: WikiPage[] } }>(
     lang,

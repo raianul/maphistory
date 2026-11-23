@@ -367,3 +367,151 @@ describe.skipIf(!ON)("on this day: generate and publish (database)", () => {
   });
 });
 
+
+// ── Stories with several "On this day" dates ─────────────────────────────────────────────
+
+const TAHER_PAGE = "https://archive.example.org/taher";
+const TAHER_TEXT =
+  "Colonel Abu Taher was arrested on 24 November 1975 in Dhaka. He was tried by a military tribunal in Dhaka Central Jail. " +
+  "Colonel Taher was hanged on 21 July 1976 at Dhaka Central Jail. ";
+const fetchTaher = (async (input: string, init?: RequestInit) => {
+  if (input === TAHER_PAGE) return new Response(`<title>Taher</title><p>${TAHER_TEXT.repeat(4)}</p>`, { headers: { "content-type": "text/html" } });
+  return (fetchFake as unknown as (i: string, n?: RequestInit) => Promise<Response>)(input, init);
+}) as unknown as typeof fetch;
+const TAHER_QID = `Q${900000000 + Math.floor(Math.random() * 99999999)}`;
+const taherAnswer = {
+  overview: {
+    kind: "person",
+    title: "কর্নেল আবু তাহের",
+    title_en: "Colonel Abu Taher",
+    summary: claim("কর্নেল আবু তাহের ১৯৭৫ সালের ২৪ নভেম্বর গ্রেপ্তার হন।", [["S1", "Colonel Abu Taher was arrested on 24 November 1975"]]),
+    date_precision: "day",
+  },
+  phases: [],
+  steps: [
+    { ...claim("তাহের গ্রেপ্তার হন।", [["S1", "Colonel Abu Taher was arrested on 24 November 1975"]]), title: "গ্রেপ্তার", order: 0, place_name: "Dhaka, Bangladesh | ঢাকা", location_precision: "approximate", map_type: "marker", year: 1975, month: 11, day: 24 },
+    { ...claim("সামরিক আদালতে বিচার।", [["S1", "He was tried by a military tribunal in Dhaka Central Jail"]]), title: "বিচার", order: 1, place_name: "", location_precision: "unknown", map_type: "none", year: 1976 },
+    { ...claim("তাহেরের ফাঁসি হয়।", [["S1", "Colonel Taher was hanged on 21 July 1976"]]), title: "ফাঁসি", order: 2, place_name: "", location_precision: "unknown", map_type: "none", year: 1976, month: 7, day: 21 },
+  ],
+  disagreements: [],
+  gaps: [],
+  source_notes: {},
+};
+const arrest = { year: 1975, title_bn: "কর্নেল তাহের গ্রেপ্তার", summary_bn: "সিপাহি অভ্যুত্থানের পর তাহের গ্রেপ্তার হন।", place: "Dhaka", category: "politics" as const, source_url: TAHER_PAGE, source_quote: "", subject: "কর্নেল আবু তাহের", kind: "person" as const, subject_qid: TAHER_QID, check: { confirmed: true, reason: "ok", page_title: null } };
+const hanging = { ...arrest, year: 1976, title_bn: "কর্নেল তাহেরের ফাঁসি", summary_bn: "ঢাকা কেন্দ্রীয় কারাগারে তাহেরের ফাঁসি কার্যকর হয়।" };
+async function generateFor(day: number, month: number, c: typeof arrest, analyse: () => Promise<{ text: string; model: string }>) {
+  const events: GenerateProgress[] = [];
+  await generateDraft({ day, month, country: "BD", candidate: c }, ADMIN, (p) => events.push(p), { fetch: fetchTaher, resolve, wikidata, analyse, geocode: async () => null });
+  return events;
+}
+let taherId = "";
+
+describe.skipIf(!ON)("stories with several dates (database)", () => {
+  beforeAll(resetLimit);
+
+  it("a generated story is about its subject (a person), with step dates and this day as its first date", async () => {
+    const events = await generateFor(24, 11, arrest, fakeGemini(taherAnswer));
+    const done = events.at(-1) as { type: string; event_id: string; warnings: string[] };
+    expect(done.type).toBe("done");
+    taherId = done.event_id;
+    const b = (await getEvent(taherId))!;
+    expect(b.event).toMatchObject({ kind: "person", title: "কর্নেল আবু তাহের", wikidata_id: TAHER_QID, status: "draft" });
+    expect(b.steps.map((s) => [s.step_year, s.step_month, s.step_day])).toEqual([
+      [1975, 11, 24],
+      [1976, null, null],
+      [1976, 7, 21],
+    ]);
+    // This day: its own headline, opening at the arrest step; a draft until published.
+    expect(b.dates).toHaveLength(1);
+    expect(b.dates[0]).toMatchObject({ year: 1975, month: 11, day: 24, title: "কর্নেল তাহের গ্রেপ্তার", status: "draft", step_id: b.steps[0].id });
+    expect(done.warnings.join(" ")).toMatch(/1 other step\(s\) have a full date/);
+  });
+
+  it("the same subject on another date: the date is added to the existing story, with no AI call and no new story", async () => {
+    const before = (await db().from("historical_events").select("id", { count: "exact", head: true })).count;
+    const events = await generateFor(21, 7, hanging, async () => {
+      throw new Error("the AI must not be called");
+    });
+    expect(events.at(-1)).toMatchObject({ type: "done", event_id: taherId, existing: true });
+    expect((await db().from("historical_events").select("id", { count: "exact", head: true })).count).toBe(before);
+    const b = (await getEvent(taherId))!;
+    const hanged = b.dates.find((d) => d.month === 7 && d.day === 21)!;
+    expect(hanged).toMatchObject({ year: 1976, title: "কর্নেল তাহেরের ফাঁসি", status: "draft", step_id: b.steps[2].id });
+    // Asking again for a date it already has changes nothing.
+    const again = await generateFor(21, 7, hanging, async () => {
+      throw new Error("the AI must not be called");
+    });
+    expect(again.at(-1)).toMatchObject({ type: "done", existing: true });
+    expect((await getEvent(taherId))!.dates).toHaveLength(2);
+  });
+
+  it("publishing the story publishes its dates", async () => {
+    const { verifyAll, publishDates } = await import("../../src/lib/events/db");
+    const b = (await getEvent(taherId))!;
+    await db().from("historical_events").update({ lat: 23.71, lng: 90.4, place_name: "ঢাকা" }).eq("id", taherId);
+    await verifyAll(taherId, ADMIN);
+    await publishDates(taherId);
+    await setEventStatus({ ...b.event, lat: 23.71, lng: 90.4 }, "published", ADMIN);
+    expect((await getEvent(taherId))!.dates.every((d) => d.status === "published")).toBe(true);
+  });
+
+  it("On this day: each date with its own title, the story's title and the step it opens at; nothing for drafts", async () => {
+    const day = async (m: number, d: number) => (await db().rpc("anniversaries_on_day", { p_month: m, p_day: d, p_year: 2027 })).data as { slug: string; title: string; story_title: string; kind: string; step_id: string }[];
+    const b = (await getEvent(taherId))!;
+    expect((await day(11, 24)).find((r) => r.story_title === "কর্নেল আবু তাহের")).toMatchObject({ title: "কর্নেল তাহের গ্রেপ্তার", kind: "person", step_id: b.steps[0].id });
+    expect((await day(7, 21)).find((r) => r.story_title === "কর্নেল আবু তাহের")).toMatchObject({ title: "কর্নেল তাহেরের ফাঁসি", step_id: b.steps[2].id });
+    // A withdrawn (draft) date disappears from that day only.
+    const hanged = b.dates.find((d) => d.month === 7)!;
+    await db().from("historical_event_dates").update({ status: "draft" }).eq("id", hanged.id);
+    expect((await day(7, 21)).some((r) => r.story_title === "কর্নেল আবু তাহের")).toBe(false);
+    expect((await day(11, 24)).some((r) => r.story_title === "কর্নেল আবু তাহের")).toBe(true);
+    await db().from("historical_event_dates").update({ status: "published" }).eq("id", hanged.id);
+  });
+});
+
+describe.skipIf(!ON || !APP)("story dates (HTTP)", () => {
+  const admin = { authorization: "Bearer test-admin-token", "content-type": "application/json" };
+  const user = { authorization: "Bearer test-user-token", "content-type": "application/json" };
+  const url = (p = "") => `${APP}/api/admin/events/${taherId}/dates${p}`;
+
+  it("admin only", async () => {
+    expect((await fetch(url(), { method: "POST", body: "{}" })).status).toBe(401);
+    expect((await fetch(url(), { method: "POST", headers: user, body: "{}" })).status).toBe(403);
+  });
+
+  it("adds a date (opening at the step on that date), refuses bad dates, duplicates and other stories' steps; edits, approves and deletes", async () => {
+    // The trial step has only a year: a date for it must name the step, and a date can't point to another story's step.
+    const bad = await fetch(url(), { method: "POST", headers: admin, body: JSON.stringify({ year: 1976, month: 2, day: 30, title: "x" }) });
+    expect(bad.status).toBe(400);
+    const other = (await newEvent(`it-other-${Date.now()}`)).id;
+    const { addStep } = await import("../../src/lib/events/db");
+    await addStep(other, { title: "s", map_type: "none", location_precision: "unknown", evidence: "documented", verified: false, source_ids: [] } as never, ADMIN);
+    const otherStep = (await getEvent(other))!.steps[0].id;
+    expect((await fetch(url(), { method: "POST", headers: admin, body: JSON.stringify({ year: 1976, month: 6, day: 1, title: "x", step_id: otherStep }) })).status).toBe(400);
+    expect((await fetch(url(), { method: "POST", headers: admin, body: JSON.stringify({ year: 1975, month: 11, day: 24, title: "dup" }) })).status).toBe(400);
+
+    const added = await fetch(url(), { method: "POST", headers: admin, body: JSON.stringify({ year: 1976, month: 6, day: 1, title: "বিচার শুরু" }) });
+    expect(added.status).toBe(201);
+    const after = await added.json();
+    const d = after.dates.find((x: { month: number; day: number }) => x.month === 6 && x.day === 1);
+    expect(d).toMatchObject({ status: "draft", step_id: null, title: "বিচার শুরু" });
+
+    const edited = await (await fetch(url(`/${d.id}`), { method: "PATCH", headers: admin, body: JSON.stringify({ year: 1976, month: 6, day: 2, title: "সামরিক আদালতে বিচার শুরু", summary: "এক লাইন" }) })).json();
+    expect(edited.dates.find((x: { id: string }) => x.id === d.id)).toMatchObject({ day: 2, title: "সামরিক আদালতে বিচার শুরু", summary: "এক লাইন" });
+    const approved = await (await fetch(url(`/${d.id}`), { method: "PATCH", headers: admin, body: JSON.stringify({ status: "published" }) })).json();
+    expect(approved.dates.find((x: { id: string }) => x.id === d.id).status).toBe("published");
+    const deleted = await (await fetch(url(`/${d.id}`), { method: "DELETE", headers: admin })).json();
+    expect(deleted.dates.some((x: { id: string }) => x.id === d.id)).toBe(false);
+  });
+
+  it("the public list shows that day's title and opens the story at that step", async () => {
+    const res = await (await fetch(`${APP}/api/events/on-this-day?date=07-21`)).json();
+    const card = res.events.find((e: { story_title: string }) => e.story_title === "কর্নেল আবু তাহের");
+    expect(card).toMatchObject({ title: "কর্নেল তাহেরের ফাঁসি", kind: "person", step: 3, md: "07-21", year: 1976 });
+    const ev = await (await fetch(`${APP}/api/events/${card.slug}`)).json();
+    expect(ev.event.dates.map((d: { md: string; title: string; step: number | null }) => [d.md, d.title, d.step])).toEqual([
+      ["07-21", "কর্নেল তাহেরের ফাঁসি", 3],
+      ["11-24", "কর্নেল তাহের গ্রেপ্তার", 1],
+    ]);
+  });
+});

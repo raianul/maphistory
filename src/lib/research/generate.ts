@@ -14,8 +14,8 @@
  *      admin reviews and publishes (lib/events/publish.ts).
  * Server-side only.
  */
-import { createEvent, getEvent, setPhases, addSource, addStep } from "../events/db";
-import { EventFields, PHASE_COLORS, StepFields, type PhaseT, type SourceFieldsT } from "../events/schema";
+import { addDate, createEvent, getEvent, setPhases, addSource, addStep } from "../events/db";
+import { EventFields, PHASE_COLORS, StepFields, stepOnDate, type PhaseT, type SourceFieldsT } from "../events/schema";
 import { db } from "../db";
 import { BANGLADESH_ONLY, inRegion } from "../region";
 import { WIKI_HEADERS } from "../sources/wiki";
@@ -36,7 +36,28 @@ export type GenerateDeps = NetDeps & {
 };
 
 export type GenerateInput = { day: number; month: number; country: CountryCode; candidate: Omit<Candidate, "check"> & { check?: Candidate["check"] } };
-export type GenerateProgress = { type: "stage"; message: string } | { type: "done"; event_id: string; warnings: string[] } | { type: "error"; message: string };
+export type GenerateProgress =
+  | { type: "stage"; message: string }
+  | { type: "done"; event_id: string; warnings: string[]; /** true: the subject already had a story; only this date was added (no AI call) */ existing?: boolean }
+  | { type: "error"; message: string };
+
+/**
+ * When the subject (by its Wikidata id) already has a story: adds this date to it (if missing) and
+ * returns that story's id. No AI call, no new story. Null when there is no such story.
+ */
+export async function addToExistingStory(input: GenerateInput, userId: string): Promise<{ eventId: string; added: boolean } | null> {
+  const { candidate: c, day, month } = input;
+  if (!c.subject_qid) return null;
+  const { data: found } = await db().from("historical_events").select("id").eq("wikidata_id", c.subject_qid).maybeSingle();
+  if (!found) return null;
+  const bundle = await getEvent(found.id as string);
+  if (!bundle) return null;
+  const when = { year: c.year, month, day };
+  if (bundle.dates.some((d) => d.year === when.year && d.month === when.month && d.day === when.day)) return { eventId: bundle.event.id, added: false };
+  if (c.year < 1) return { eventId: bundle.event.id, added: false };
+  await addDate(bundle.event.id, { ...when, title: c.title_bn.slice(0, 200), summary: c.summary_bn ? c.summary_bn.slice(0, 600) : null, step_id: stepOnDate(bundle.steps, when) }, userId);
+  return { eventId: bundle.event.id, added: true };
+}
 
 /** Places the AI says are outside the country (it is asked to end each place with the country). */
 const ABROAD = /\b(india|pakistan|myanmar|burma|nepal|bhutan|china|sri lanka|united kingdom|england|london|usa|united states|france|paris|west bengal|kolkata|calcutta|assam|tripura|karachi|lahore|delhi|bihar)\b|ভারত|পাকিস্তান|মিয়ানমার|পশ্চিমবঙ্গ|কলকাতা|কলিকাতা|আসাম|ত্রিপুরা|করাচি|লাহোর|দিল্লি|লন্ডন/i;
@@ -258,12 +279,24 @@ async function runsToday(userId: string): Promise<number> {
  * in the "done" message). The AI and network can be replaced in tests.
  */
 export async function generateDraft(input: GenerateInput, userId: string, onProgress: (p: GenerateProgress) => void, deps: GenerateDeps = {}): Promise<void> {
+  const { day, month, candidate: c } = input;
+  const warnings: string[] = [];
+
+  // 0. The same person or event already has a story: add this date to it instead of writing again.
+  const existing = await addToExistingStory(input, userId);
+  if (existing) {
+    onProgress({
+      type: "done",
+      event_id: existing.eventId,
+      existing: true,
+      warnings: [existing.added ? "This subject already has a story: this date was added to it as a draft (no new story written). Check the headline and approve it." : "This subject already has a story with this date."],
+    });
+    return;
+  }
   if ((await runsToday(userId)) >= RESEARCH_PER_DAY) {
     onProgress({ type: "error", message: `Today's limit (${RESEARCH_PER_DAY}) reached. Try again tomorrow.` });
     return;
   }
-  const { day, month, candidate: c } = input;
-  const warnings: string[] = [];
 
   // 1. Material: the suggestion's page first (S1), then Wikipedia.
   onProgress({ type: "stage", message: "Collecting sources…" });
@@ -353,7 +386,10 @@ export async function generateDraft(input: GenerateInput, userId: string, onProg
   onProgress({ type: "stage", message: "Saving the draft…" });
   const fields = EventFields.parse({
     slug: slugFor(c.year, report.overview.title_en ?? ""),
-    title: c.title_bn.slice(0, 200),
+    // The story is about its subject ("কাজী নজরুল ইসলাম"); this day's headline ("নজরুলের জন্ম") is its date's title.
+    title: (report.overview.title || c.subject || c.title_bn).slice(0, 200),
+    kind: report.overview.kind ?? c.kind ?? "event",
+    wikidata_id: c.subject_qid ?? null,
     summary: (report.overview.summary.text || c.summary_bn).slice(0, 600),
     narrative: [report.overview.background?.text, report.overview.context?.text].filter(Boolean).join("\n\n").slice(0, 20000) || null,
     language: "bn",
@@ -420,6 +456,9 @@ export async function generateDraft(input: GenerateInput, userId: string, onProg
       from_lat: from?.lat ?? null,
       from_lng: from?.lng ?? null,
       evidence: SUGGESTED_PUBLIC_EVIDENCE[s.evidence],
+      step_year: s.year ?? null,
+      step_month: s.year ? (s.month ?? null) : null,
+      step_day: s.year && s.month ? (s.day ?? null) : null,
       verified: false,
       source_ids: cited,
     });
@@ -434,6 +473,14 @@ export async function generateDraft(input: GenerateInput, userId: string, onProg
   if (matched.length) warnings.push(`Places put on the map (approximate; fix in the editor if wrong): ${[...new Set(matched)].join(" · ")}`);
   if (!input.candidate.check?.confirmed) warnings.push("This event's date could not be confirmed automatically; open the source link before publishing");
 
-  const bundle = await getEvent(event.id);
-  onProgress({ type: "done", event_id: bundle!.event.id, warnings });
+  // This day becomes the story's first "On this day" date (a draft, published with the story),
+  // opening at the step on that date when there is one.
+  const saved = (await getEvent(event.id))!;
+  if (c.year >= 1) {
+    const when = { year: c.year, month, day };
+    await addDate(event.id, { ...when, title: c.title_bn.slice(0, 200), summary: c.summary_bn ? c.summary_bn.slice(0, 600) : null, step_id: stepOnDate(saved.steps, when) }, userId);
+  }
+  const otherDays = saved.steps.filter((x) => x.step_year && x.step_month && x.step_day && !(x.step_year === c.year && x.step_month === month && x.step_day === day)).length;
+  if (otherDays) warnings.push(`${otherDays} other step(s) have a full date: they can be added as more "On this day" dates in the editor`);
+  onProgress({ type: "done", event_id: event.id, warnings });
 }

@@ -61,6 +61,10 @@ export type DatePrecision = "day" | "month" | "year" | "approximate" | "unknown"
 export type SuggestedStep = Claim & {
   title: string;
   date_label: string | null;
+  /** The step's date as numbers, as far as the material gives it (Gregorian). */
+  year?: number | null;
+  month?: number | null;
+  day?: number | null;
   /** Position in the chronology (0-based), as suggested. */
   order: number;
   significance: string | null;
@@ -78,6 +82,8 @@ export type ResearchReport = {
     title: string;
     /** Short English name, used only for the web address (slug). */
     title_en?: string | null;
+    /** What the story is about: one person's life, or one happening. */
+    kind?: "person" | "event";
     summary: Claim;
     background: Claim | null;
     date_text: string | null;

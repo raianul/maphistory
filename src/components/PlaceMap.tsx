@@ -231,12 +231,17 @@ export function PlaceMap() {
   }
 
   // ── "On this day" ───────────────────────────────────────────────────────────────────────
-  const otdUrl = (slug: string | null) => (slug ? `/?event=${encodeURIComponent(slug)}` : "/?day=today");
+  /**
+   * The address of the list, or of a story. Opened from a date in the list, it carries that date
+   * (on=MM-DD: the story shows that day's title) and the step it starts at.
+   */
+  const otdUrl = (slug: string | null, at?: { md: string; step: number | null }) =>
+    slug ? `/?event=${encodeURIComponent(slug)}${at ? `&on=${at.md}${at.step ? `&step=${at.step}` : ""}` : ""}` : "/?day=today";
   /** Opens the list (from the button) or an event (from the list or a shared link). */
-  function openOtd(slug: string | null, place?: { lat: number; lng: number } | null) {
+  function openOtd(slug: string | null, place?: { lat: number; lng: number } | null, at?: { md: string; step: number | null }) {
     if (selected) router.replace("/", { scroll: false });
     dismissTip();
-    const url = otdUrl(slug);
+    const url = otdUrl(slug, at);
     const p = new URLSearchParams(window.location.search);
     // From the plain map: a new history entry (Back closes it). Inside the panel or a story: replace.
     if (otd || aiTarget || p.has("event") || p.has("day") || p.has("place")) {
@@ -823,7 +828,7 @@ export function PlaceMap() {
       {otd && (
         <OnThisDayPanel
           slug={otd.slug}
-          onPick={(e) => openOtd(e.slug, e.lat !== null && e.lng !== null ? { lat: e.lat, lng: e.lng } : null)}
+          onPick={(e) => openOtd(e.slug, e.lat !== null && e.lng !== null ? { lat: e.lat, lng: e.lng } : null, { md: e.md, step: e.step })}
           onBack={() => openOtd(null)}
           onTimeline={setTimeline}
           onClose={closeOtd}

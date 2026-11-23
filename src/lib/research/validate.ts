@@ -63,6 +63,9 @@ const RawStep = z.object({
   ...RawClaimFields,
   title: Str(200),
   date_label: optStr(120),
+  year: z.number().int().min(-5000).max(2100).nullable().optional().catch(null),
+  month: z.number().int().min(1).max(12).nullable().optional().catch(null),
+  day: z.number().int().min(1).max(31).nullable().optional().catch(null),
   order: z.number().int().min(0).max(200).catch(0),
   significance: optStr(1000),
   place_name: optStr(200),
@@ -77,6 +80,7 @@ export const RawReport = z.object({
   overview: z.object({
     title: Str(200),
     title_en: optStr(120),
+    kind: z.enum(["person", "event"]).catch("event"),
     summary: RawClaim,
     background: RawClaim.nullable().optional().catch(null),
     date_text: optStr(120),
@@ -137,6 +141,14 @@ function checkClaim(id: string, raw: z.infer<typeof RawClaim>, byId: Map<string,
   return { id, text: raw.text, citations: kept, evidence, note };
 }
 
+/** A step's date as far as it is real: year; year + month; or a full real date. */
+function stepDate(y: number | null | undefined, m: number | null | undefined, d: number | null | undefined): { year: number | null; month: number | null; day: number | null } {
+  if (!y) return { year: null, month: null, day: null };
+  if (!m) return { year: y, month: null, day: null };
+  if (!d || !realDate(y, m, d)) return { year: y, month: m, day: null };
+  return { year: y, month: m, day: d };
+}
+
 /** Whether day/month/year make a real date (else they are cleared). */
 function realDate(y: number | null | undefined, m: number | null | undefined, d: number | null | undefined): boolean {
   if (!m || !d) return true;
@@ -186,6 +198,8 @@ export function validateReport(rawJson: unknown, sources: ResearchSource[]): Res
         ...claim,
         title: s.title,
         date_label: s.date_label ?? null,
+        // Numbers only as far as they make a real date (a day without a month, or 31 April, is dropped).
+        ...stepDate(s.year, s.month, s.day),
         order: i,
         significance: s.significance ?? null,
         place_name: s.place_name ?? null,
@@ -207,6 +221,7 @@ export function validateReport(rawJson: unknown, sources: ResearchSource[]): Res
     overview: {
       title: o.title,
       title_en: o.title_en ?? null,
+      kind: o.kind,
       summary: checkClaim("overview.summary", o.summary, byId, log),
       background: o.background ? checkClaim("overview.background", o.background, byId, log) : null,
       date_text: o.date_text ?? null,

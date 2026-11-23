@@ -143,6 +143,8 @@ function EventCard({ e, onPick }: { e: PublicEventCard; onPick: () => void }) {
           {e.place_name && <span className="font-normal text-muted"> · {where(e.place_name, e.city)}</span>}
         </span>
         <span className="mt-0.5 block font-semibold leading-snug">{e.title}</span>
+        {/* The story this date belongs to, when its own title says something else ("কর্নেল আবু তাহের"). */}
+        {e.story_title && e.story_title !== e.title && <span className="block text-micro text-muted">{e.story_title}</span>}
         {/* Two lines at most: the full text is one tap away. (No `block` here: it would undo line-clamp's display.) */}
         {e.summary && <span className="mt-0.5 line-clamp-2 text-meta text-ink-2">{e.summary}</span>}
         {e.step_count > 0 && <span className="mt-1 block text-micro text-muted">{bn(e.step_count)} ধাপের সময়রেখা</span>}
@@ -226,12 +228,20 @@ function EventBody({ e, onTimeline }: { e: PublicEvent; onTimeline: (t: { event:
     return () => window.removeEventListener(STEP_REQUEST, go);
   }, []);
 
-  const when = e.date_precision === "day" && e.event_month && e.event_day ? `${dayBn(`${String(e.event_month).padStart(2, "0")}-${String(e.event_day).padStart(2, "0")}`)} ${e.event_year ? bn(e.event_year) : ""}` : e.date_label;
+  // Opened from "On this day" (on=MM-DD): that date's own title, with the story's title under it.
+  const [on] = useState(() => new URLSearchParams(window.location.search).get("on"));
+  const anniversary = on ? e.dates.find((d) => d.md === on) : undefined;
+  const when = anniversary
+    ? `${dayBn(anniversary.md)} ${bn(anniversary.year)}`
+    : e.date_precision === "day" && e.event_month && e.event_day
+      ? `${dayBn(`${String(e.event_month).padStart(2, "0")}-${String(e.event_day).padStart(2, "0")}`)} ${e.event_year ? bn(e.event_year) : ""}`
+      : e.date_label;
   return (
     <>
       <header className="mt-2">
         <p className="text-meta font-semibold text-accent">{when}</p>
-        <h1 className="mt-1 text-display font-bold tracking-tight text-balance">{e.title}</h1>
+        <h1 className="mt-1 text-display font-bold tracking-tight text-balance">{anniversary?.title ?? e.title}</h1>
+        {anniversary && anniversary.title !== e.title && <p className="mt-0.5 text-lead font-semibold text-ink-2">{e.title}</p>}
         {e.place_name && <p className="mt-1 text-meta text-muted">{where(e.place_name, e.city)}</p>}
       </header>
       {/* Wide screens: the card is a popup on the map (PlaceMap); here, the steps to jump between. */}

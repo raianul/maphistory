@@ -108,6 +108,21 @@ export const CoverImage = z.object({
 
 const daysIn = (year: number | null | undefined, month: number) => new Date(Date.UTC(year ?? 2000, month, 0)).getUTCDate();
 
+/** A story is about a person (a life) or an event (one happening). */
+export const EVENT_KINDS = ["event", "person"] as const;
+export type EventKind = (typeof EVENT_KINDS)[number];
+export const EVENT_KIND_EN: Record<EventKind, string> = { event: "Event", person: "Person" };
+
+/** A Wikidata item id, e.g. "Q7241" (Rabindranath Tagore): the subject's identity across titles. */
+export const WikidataId = z
+  .string()
+  .trim()
+  .toUpperCase()
+  .regex(/^Q[0-9]{1,12}$/, "A Wikidata id looks like Q7241")
+  .nullable()
+  .optional()
+  .or(z.literal("").transform(() => null));
+
 /** The editable fields of an event (everything except status, which has its own route). */
 export const EventFields = z
   .object({
@@ -139,6 +154,8 @@ export const EventFields = z
     lat: z.number().min(-90).max(90).nullable().optional(),
     lng: z.number().min(-180).max(180).nullable().optional(),
     cover_image: CoverImage.nullable().optional(),
+    kind: z.enum(EVENT_KINDS).default("event"),
+    wikidata_id: WikidataId,
   })
   .superRefine((e, ctx) => {
     const has = (v: unknown) => v !== null && v !== undefined;
@@ -289,6 +306,10 @@ export const StepFields = z
     radius_m: z.number().int().min(10, "Radius must be at least 10 m").max(200000, "Radius can't exceed 200 km").nullable().optional(),
     image: CoverImage.nullable().optional(),
     evidence: z.enum(EVIDENCE_LEVELS),
+    /** The step's date as numbers, when known (year; year+month; or a full date). Gregorian. */
+    step_year: z.number().int().min(-5000).max(2100).nullable().optional(),
+    step_month: z.number().int().min(1).max(12).nullable().optional(),
+    step_day: z.number().int().min(1).max(31).nullable().optional(),
     verified: z.boolean().default(false),
     /** The event's sources that back this step (ids). */
     source_ids: z.array(z.uuid()).max(50).default([]),
@@ -319,6 +340,12 @@ export const StepFields = z
     }
     // Verified means checked against sources: at least one must back it.
     need(!s.verified || s.source_ids.length > 0, "verified", "Can't mark as verified without attaching at least one source");
+    // A date is a year, a year and month, or a real full date.
+    need(!has(s.step_month) || has(s.step_year), "step_year", "Enter the year");
+    need(!has(s.step_day) || has(s.step_month), "step_month", "Enter the month");
+    if (has(s.step_year) && has(s.step_month) && has(s.step_day)) {
+      need(s.step_day! <= daysIn(s.step_year, s.step_month!), "step_day", "That month doesn't have that many days");
+    }
   });
 export type StepFieldsT = z.infer<typeof StepFields>;
 
@@ -344,6 +371,40 @@ export type HistoricalEvent = EventFieldsT & {
   created_at: string;
   updated_at: string;
 };
+
+// ── Anniversaries: the dates a story appears on "On this day" ─────────────────────────────
+
+export const DATE_STATUSES = ["draft", "published"] as const;
+
+/** One "On this day" date of a story, with that day's own title. Gregorian dates only. */
+export const DateFields = z
+  .object({
+    year: z.number().int().min(1).max(2100),
+    month: z.number().int().min(1).max(12),
+    day: z.number().int().min(1).max(31),
+    title: z.string().trim().min(1, "Enter the headline for this date").max(200),
+    summary: optText(600),
+    /** The step the story opens at on this date; null opens at the first step. */
+    step_id: z.uuid().nullable().optional(),
+  })
+  .superRefine((d, ctx) => {
+    if (d.day > daysIn(d.year, d.month)) ctx.addIssue({ code: "custom", path: ["day"], message: "That month doesn't have that many days" });
+  });
+export type DateFieldsT = z.infer<typeof DateFields>;
+
+export type EventDate = DateFieldsT & {
+  id: string;
+  event_id: string;
+  step_id: string | null;
+  status: (typeof DATE_STATUSES)[number];
+  created_at: string;
+  updated_at: string;
+};
+
+/** The step whose exact date is this one (the step a new anniversary opens at), if any. */
+export function stepOnDate(steps: Pick<TimelineStep, "id" | "step_year" | "step_month" | "step_day">[], d: { year: number; month: number; day: number }): string | null {
+  return steps.find((s) => s.step_year === d.year && s.step_month === d.month && s.step_day === d.day)?.id ?? null;
+}
 
 /** A row in the admin list. */
 export type EventListRow = Pick<

@@ -16,13 +16,14 @@ import {
   type PhaseColor,
   type PhaseT,
   type TimelineStep,
+  type EventDate,
 } from "@/lib/events/schema";
 import { adminFetch } from "@/lib/supabase-browser";
 import { ImagePicker } from "./ImagePicker";
 import { MapPicker, type PickedPlace } from "./MapPicker";
 import { TimelinePreview } from "./TimelinePreview";
 
-type Loaded = { event: HistoricalEvent; sources: EventSource[]; steps: TimelineStep[]; problems: string[] };
+type Loaded = { event: HistoricalEvent; sources: EventSource[]; steps: TimelineStep[]; dates?: EventDate[]; problems: string[] };
 
 const field =
   "w-full rounded-control border border-line-strong bg-card px-3 py-2 text-meta outline-none transition-shadow focus:border-accent focus:ring-2 focus:ring-accent-ring";
@@ -290,11 +291,17 @@ function StepList({
 
 // ── Step form ─────────────────────────────────────────────────────────────────────────────
 
+const MONTHS_EN = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
 type Draft = {
   title: string;
   narrative: string;
   date_label: string;
   sort_minutes: string;
+  /** The exact date as typed (empty = unknown). A full date lets the step become an "On this day" date. */
+  step_year: string;
+  step_month: string;
+  step_day: string;
   phase_id: string;
   map_type: TimelineStep["map_type"];
   location_precision: TimelineStep["location_precision"];
@@ -329,6 +336,9 @@ function StepForm({
     narrative: step?.narrative ?? "",
     date_label: step?.date_label ?? "",
     sort_minutes: step?.sort_minutes?.toString() ?? "",
+    step_year: step?.step_year?.toString() ?? "",
+    step_month: step?.step_month?.toString() ?? "",
+    step_day: step?.step_day?.toString() ?? "",
     phase_id: step?.phase_id ?? phases[0]?.id ?? "",
     map_type: step?.map_type ?? "marker",
     location_precision: step?.location_precision ?? "exact",
@@ -356,6 +366,9 @@ function StepForm({
       narrative: d.narrative,
       date_label: d.date_label,
       sort_minutes: d.sort_minutes.trim() === "" ? null : Number(d.sort_minutes),
+      step_year: d.step_year.trim() === "" ? null : Number(d.step_year),
+      step_month: d.step_month === "" ? null : Number(d.step_month),
+      step_day: d.step_day.trim() === "" ? null : Number(d.step_day),
       phase_id: d.phase_id || null,
       map_type: d.map_type,
       location_precision: d.location_precision,
@@ -407,6 +420,23 @@ function StepForm({
           Slider time (minutes, optional)
           <input type="number" value={d.sort_minutes} onChange={(e) => set("sort_minutes", e.target.value)} className={field} placeholder="Leave empty if the time is unknown" />
         </label>
+      </div>
+      {/* The step's date as numbers: with a full date it can become an "On this day" date of the story. */}
+      <div className={label}>
+        Date (English calendar, optional)
+        <div className="grid grid-cols-[5rem_1fr_6rem] gap-2">
+          <input type="number" min={1} max={31} value={d.step_day} onChange={(e) => set("step_day", e.target.value)} className={field} placeholder="Day" aria-label="Day" />
+          <select value={d.step_month} onChange={(e) => set("step_month", e.target.value)} className={field} aria-label="Month">
+            <option value="">Month</option>
+            {MONTHS_EN.map((m, i) => (
+              <option key={m} value={i + 1}>
+                {m}
+              </option>
+            ))}
+          </select>
+          <input type="number" min={-5000} max={2100} value={d.step_year} onChange={(e) => set("step_year", e.target.value)} className={field} placeholder="Year" aria-label="Year" />
+        </div>
+        <span className="text-micro font-normal text-muted">Year only, month and year, or a full date. A full date can be added to &ldquo;On this day&rdquo; below.</span>
       </div>
 
       <fieldset className="grid gap-3 rounded-control border border-line p-3">

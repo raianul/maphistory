@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
   DATE_PRECISIONS,
+  EVENT_KINDS,
   SOURCE_TYPE_EN,
   SOURCE_TYPES,
   STATUS_EN,
@@ -13,15 +14,17 @@ import {
   type EventStatus,
   type HistoricalEvent,
   type TimelineStep,
+  type EventDate,
 } from "@/lib/events/schema";
 import { adminFetch } from "@/lib/supabase-browser";
+import { DatesPanel } from "./DatesPanel";
 import { ImagePicker } from "./ImagePicker";
 import { MapPicker } from "./MapPicker";
 import { dateBn, StatusBadge } from "./shared";
 import { ResearchPanel } from "./ResearchPanel";
 import { TimelinePanel } from "./TimelinePanel";
 
-type Loaded = { event: HistoricalEvent; sources: EventSource[]; steps: TimelineStep[]; problems: string[] };
+type Loaded = { event: HistoricalEvent; sources: EventSource[]; steps: TimelineStep[]; dates?: EventDate[]; problems: string[] };
 
 const field =
   "w-full rounded-control border border-line-strong bg-card px-3 py-2 text-meta outline-none transition-shadow focus:border-accent focus:ring-2 focus:ring-accent-ring";
@@ -85,6 +88,7 @@ export function EventEditor({ id }: { id: string }) {
       <StatusPanel data={data} onChange={setData} />
       {/* Keyed by id only: saving must not throw the form away (and its "saved" note with it). */}
       <BasicsForm key={event.id} event={event} onSaved={setData} />
+      <DatesPanel data={data} onChange={setData} />
       <SourcesPanel data={data} onChange={setData} />
       <TimelinePanel data={data} onChange={setData} />
       {/* Detailed AI research (claim by claim): rarely needed now that drafts are generated. */}
@@ -232,6 +236,8 @@ function BasicsForm({ event, onSaved }: { event: HistoricalEvent; onSaved: (d: L
       lat: f.lat,
       lng: f.lng,
       cover_image: f.cover_image ?? null,
+      kind: f.kind ?? "event",
+      wikidata_id: f.wikidata_id ?? "",
     };
     const r = await adminFetch(`/api/admin/events/${event.id}`, { method: "PUT", body: JSON.stringify(body) });
     const d = await r.json().catch(() => ({}));
@@ -260,6 +266,32 @@ function BasicsForm({ event, onSaved }: { event: HistoricalEvent; onSaved: (d: L
           Slug
           <input required value={f.slug} onChange={(e) => set("slug", e.target.value.toLowerCase())} className={field} />
           <FieldError message={issueFor("slug")} />
+        </label>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className={label}>
+          Story type
+          <div className="flex gap-1 rounded-full bg-hover p-1" role="radiogroup" aria-label="Story type">
+            {EVENT_KINDS.map((k) => (
+              <button
+                key={k}
+                type="button"
+                role="radio"
+                aria-checked={(f.kind ?? "event") === k}
+                onClick={() => set("kind", k)}
+                className={`h-8 flex-1 rounded-full text-meta font-normal transition-colors ${(f.kind ?? "event") === k ? "bg-card font-semibold text-accent shadow-float" : "text-ink-2"}`}
+              >
+                {k === "person" ? "Person (a life)" : "Event (one happening)"}
+              </button>
+            ))}
+          </div>
+        </div>
+        <label className={label}>
+          Wikidata id (optional)
+          <input value={f.wikidata_id ?? ""} onChange={(e) => set("wikidata_id", e.target.value.trim() || null)} className={field} placeholder="e.g. Q7241" />
+          <span className="text-micro font-normal text-muted">The subject&rsquo;s identity, so the same person or event is never written twice.</span>
+          <FieldError message={issueFor("wikidata_id")} />
         </label>
       </div>
 
@@ -322,21 +354,9 @@ function BasicsForm({ event, onSaved }: { event: HistoricalEvent; onSaved: (d: L
           <input value={f.date_label ?? ""} onChange={(e) => set("date_label", text(e.target.value))} className={field} placeholder="e.g. আনুমানিক ১৭৫৭" />
           <FieldError message={issueFor("date_label")} />
         </label>
-        <label className="flex items-start gap-2 text-meta">
-          <input
-            type="checkbox"
-            className="mt-1 size-4 accent-[var(--accent)]"
-            disabled={f.date_precision !== "day"}
-            checked={f.date_precision === "day" && f.recurring}
-            onChange={(e) => set("recurring", e.target.checked)}
-          />
-          <span>
-            <span className="font-semibold">Show every year in &ldquo;On this day&rdquo;</span>
-            <span className="block text-muted">
-              {f.date_precision === "day" ? "When off, it shows only on that day in the event’s own year." : "Only events with an exact day can show every year."}
-            </span>
-          </span>
-        </label>
+        <p className="text-micro text-muted">
+          Which days this story appears on in &ldquo;On this day&rdquo; is set in the <a href="#dates" className="font-semibold text-accent underline">On this day dates</a> section below.
+        </p>
       </fieldset>
 
       <fieldset className="grid gap-3 rounded-control border border-line p-3">

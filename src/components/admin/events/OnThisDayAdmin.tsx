@@ -22,7 +22,13 @@ type Candidate = {
   source_url: string;
   source_quote: string;
   check: { confirmed: boolean; reason: string; page_title: string | null };
-  existing: { id: string; title: string; status: EventStatus } | null;
+  subject?: string;
+  kind?: "person" | "event";
+  subject_qid?: string | null;
+  /** A story already shows on this date. */
+  existing: { id: string; title: string; status: EventStatus; story_title?: string } | null;
+  /** The subject already has a story, without this date: add the date (no AI call). */
+  story?: { id: string; title: string; status: EventStatus } | null;
 };
 type Saved = { id: string; title: string; status: EventStatus; year: number | null };
 
@@ -71,7 +77,7 @@ export function OnThisDayAdmin() {
       return setError(d.error ?? "Couldn't search for events");
     }
     setResult({ candidates: d.candidates, saved: d.saved, searched_at: d.searched_at });
-    const first = (d.candidates as Candidate[]).findIndex((c) => !c.existing && c.check.confirmed);
+    const first = (d.candidates as Candidate[]).findIndex((c) => !c.existing && !c.story && c.check.confirmed);
     setChosen(first >= 0 ? first : null);
     setState("found");
   }
@@ -104,7 +110,7 @@ export function OnThisDayAdmin() {
           return setState("idle");
         }
         setResult({ candidates: d.candidates, saved: d.saved, searched_at: d.searched_at });
-        const first = (d.candidates as Candidate[]).findIndex((c) => !c.existing && c.check.confirmed);
+        const first = (d.candidates as Candidate[]).findIndex((c) => !c.existing && !c.story && c.check.confirmed);
         setChosen(first >= 0 ? first : null);
         setState("found");
       })
@@ -114,6 +120,19 @@ export function OnThisDayAdmin() {
     };
   }, [day, month, country]);
 
+  /** The subject already has a story: add this date to it (a draft) and open it. No AI call. */
+  async function addDateTo(c: Candidate) {
+    if (!c.story) return;
+    setError(null);
+    const r = await adminFetch(`/api/admin/events/${c.story.id}/dates`, {
+      method: "POST",
+      body: JSON.stringify({ year: c.year, month, day, title: c.title_bn, summary: c.summary_bn || null }),
+    }).catch(() => null);
+    const d = r ? await r.json().catch(() => ({})) : {};
+    if (!r || !r.ok) return setError(d.error ?? "Couldn't add the date");
+    router.push(`/admin/events/${c.story.id}/preview#dates`);
+  }
+
   async function generate() {
     if (chosen === null || !result) return;
     const c = result.candidates[chosen];
@@ -122,7 +141,7 @@ export function OnThisDayAdmin() {
     setStage("Starting…");
     const res = await adminFetch("/api/admin/on-this-day/generate", {
       method: "POST",
-      body: JSON.stringify({ day, month, country, candidate: { ...c, existing: undefined } }),
+      body: JSON.stringify({ day, month, country, candidate: { ...c, existing: undefined, story: undefined } }),
     }).catch(() => null);
     if (!res || !res.ok || !res.body) {
       const d = res ? await res.json().catch(() => ({})) : {};
@@ -252,7 +271,7 @@ export function OnThisDayAdmin() {
                 <label
                   className={`flex cursor-pointer gap-3 rounded-control border p-3 transition-colors ${chosen === i ? "border-accent bg-accent-soft/40" : "border-line hover:bg-hover"} ${c.existing ? "cursor-default opacity-80" : ""}`}
                 >
-                  <input type="radio" name="event" className="mt-1 accent-[var(--accent)]" checked={chosen === i} disabled={!!c.existing || busy} onChange={() => setChosen(i)} />
+                  <input type="radio" name="event" className="mt-1 accent-[var(--accent)]" checked={chosen === i} disabled={!!c.existing || !!c.story || busy} onChange={() => setChosen(i)} />
                   <span className="min-w-0 flex-1">
                     <span className="flex flex-wrap items-baseline gap-x-2">
                       <span className="font-semibold tabular-nums text-ink-2">{yearEn(c.year)}</span>
@@ -279,8 +298,27 @@ export function OnThisDayAdmin() {
                       <span className="mt-1 flex items-center gap-2 text-micro">
                         <StatusBadge status={c.existing.status} />
                         <Link href={`/admin/events/${c.existing.id}/preview`} className="font-semibold text-accent hover:underline">
-                          Already exists: open →
+                          Already on this date{c.existing.story_title && c.existing.story_title !== c.existing.title ? ` (story: ${c.existing.story_title})` : ""}: open →
                         </Link>
+                      </span>
+                    )}
+                    {c.story && (
+                      <span className="mt-1 flex flex-wrap items-center gap-2 text-micro">
+                        <StatusBadge status={c.story.status} />
+                        <span className="text-ink-2">
+                          {c.kind === "person" ? "This person" : "This subject"} already has a story: <span className="font-semibold">{c.story.title}</span>
+                        </span>
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={(ev) => {
+                            ev.preventDefault();
+                            addDateTo(c);
+                          }}
+                          className="rounded-full bg-accent px-3 py-1 font-semibold text-on-accent hover:bg-accent-hover disabled:opacity-50"
+                        >
+                          Add this date to it (no AI)
+                        </button>
                       </span>
                     )}
                   </span>
@@ -307,7 +345,7 @@ export function OnThisDayAdmin() {
             </div>
           )}
 
-          {result.candidates.some((c) => !c.existing) && (
+          {result.candidates.some((c) => !c.existing && !c.story) && (
             <div className="mt-4 flex flex-wrap items-center gap-3">
               <button
                 type="button"

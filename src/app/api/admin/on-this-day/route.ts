@@ -75,15 +75,25 @@ async function saveSearch(country: string, month: number, day: number, candidate
 }
 
 /**
- * Marks suggestions that already have an event: one generated from the same source link (recorded
- * with its research run), or one with the same year and a similar title. Also lists the day's
- * other saved events.
+ * Marks each suggestion against what is already saved:
+ *  - `existing`: a story already shows on this date (its date row exists), matched by the subject's
+ *    Wikidata id, the same source link, or the same year and a similar title → "open it".
+ *  - `story`: the subject already has a story, but not this date → "add this date" (no AI call).
+ * Also lists the day's other saved dates (stories the search didn't mention).
  */
 async function withExisting(month: number, day: number, candidates: Candidate[]) {
-  const { data: rows } = await db().from("historical_events").select("id, title, status, event_year").eq("event_month", month).eq("event_day", day);
-  const existing = rows ?? [];
-  const ids = existing.map((e) => e.id);
-  const { data: runs } = ids.length ? await db().from("historical_event_research").select("event_id, input").in("event_id", ids) : { data: [] };
+  // The stories with a date on this day (drafts included), and every story with one of the suggested subjects.
+  const { data: dayRows } = await db().from("historical_event_dates").select("id, event_id, year, title, status").eq("month", month).eq("day", day);
+  const dates = dayRows ?? [];
+  const qids = [...new Set(candidates.map((c) => c.subject_qid).filter((q): q is string => !!q))];
+  const [{ data: dayStories }, { data: bySubject }] = await Promise.all([
+    dates.length ? db().from("historical_events").select("id, title, status, wikidata_id").in("id", [...new Set(dates.map((d) => d.event_id))]) : Promise.resolve({ data: [] }),
+    qids.length ? db().from("historical_events").select("id, title, status, wikidata_id").in("wikidata_id", qids) : Promise.resolve({ data: [] }),
+  ]);
+  type Story = { id: string; title: string; status: string; wikidata_id: string | null };
+  const stories = new Map<string, Story>();
+  for (const s of [...((dayStories ?? []) as Story[]), ...((bySubject ?? []) as Story[])]) stories.set(s.id, s);
+  const { data: runs } = stories.size ? await db().from("historical_event_research").select("event_id, input").in("event_id", [...stories.keys()]) : { data: [] };
   const byUrl = new Map<string, string>();
   for (const r of runs ?? []) for (const u of ((r.input as { urls?: string[] })?.urls ?? [])) byUrl.set(u, r.event_id as string);
   const words = (s: string) => new Set(normalise(s).split(/[\s,।:;—-]+/).filter((w) => w.length > 2));
@@ -94,10 +104,21 @@ async function withExisting(month: number, day: number, candidates: Candidate[])
     return common / Math.max(1, Math.min(A.size, B.size)) >= 0.5;
   };
   const out = candidates.map((c) => {
-    const viaUrl = byUrl.get(c.source_url);
-    const match = existing.find((e) => e.id === viaUrl) ?? existing.find((e) => e.event_year === c.year && similar(e.title, c.title_bn));
-    return { ...c, existing: match ? { id: match.id, title: match.title, status: match.status } : null };
+    const subject = c.subject_qid ? [...stories.values()].find((s) => s.wikidata_id === c.subject_qid) : undefined;
+    // A date on this day of the same story (by subject, link, or year + similar title).
+    const date =
+      dates.find((d) => d.year === c.year && subject && d.event_id === subject.id) ??
+      dates.find((d) => d.year === c.year && d.event_id === byUrl.get(c.source_url)) ??
+      dates.find((d) => d.year === c.year && (similar(d.title, c.title_bn) || similar(stories.get(d.event_id)?.title ?? "", c.title_bn)));
+    const shown = date ? stories.get(date.event_id) : undefined;
+    return {
+      ...c,
+      existing: shown && date ? { id: shown.id, title: date.title, status: date.status === "published" && shown.status === "published" ? "published" : shown.status, story_title: shown.title } : null,
+      story: !date && subject ? { id: subject.id, title: subject.title, status: subject.status } : null,
+    };
   });
-  const saved = existing.filter((e) => !out.some((c) => c.existing?.id === e.id)).map((e) => ({ id: e.id, title: e.title, status: e.status, year: e.event_year }));
+  const saved = dates
+    .filter((d) => !out.some((c) => c.existing?.id === d.event_id))
+    .map((d) => ({ id: d.event_id, title: d.title, status: stories.get(d.event_id)?.status ?? "draft", year: d.year }));
   return { candidates: out, saved };
 }

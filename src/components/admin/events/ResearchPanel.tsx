@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { EventSource, HistoricalEvent, TimelineStep } from "@/lib/events/schema";
+import type { EventSource, HistoricalEvent, TimelineStep, EventDate } from "@/lib/events/schema";
 import { EVIDENCE_EN, EVIDENCE_LEVELS, LOCATION_PRECISION_EN, MAP_TYPE_EN } from "@/lib/events/schema";
 import { AI_EVIDENCE_EN, SUGGESTED_PUBLIC_EVIDENCE, type AiEvidence, type Claim, type ResearchRun, type SuggestedStep } from "@/lib/research/types";
 import { adminFetch } from "@/lib/supabase-browser";
 
-type Loaded = { event: HistoricalEvent; sources: EventSource[]; steps: TimelineStep[]; problems: string[] };
+type Loaded = { event: HistoricalEvent; sources: EventSource[]; steps: TimelineStep[]; dates?: EventDate[]; problems: string[] };
 
 const section = "rounded-2xl bg-card p-4 shadow-float md:p-5";
 const field =
@@ -191,7 +191,7 @@ function RunView({ run, data, onRun, onEvent }: { run: ResearchRun; data: Loaded
       return false;
     }
     onRun(d.run);
-    onEvent({ event: d.event, sources: d.sources, steps: d.steps, problems: d.problems });
+    onEvent({ event: d.event, sources: d.sources, steps: d.steps, dates: d.dates, problems: d.problems });
     return true;
   }
   const state = (key: string) => run.decisions[key]?.state;

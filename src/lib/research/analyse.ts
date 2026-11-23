@@ -44,6 +44,10 @@ RULES
 - Write titles, summary, background and step texts in clear modern Bangla. Keep source titles and
   personal names as in the sources.
 - "source_notes": for each source id, one line on what it supports.
+- The story is about a SUBJECT: for a person, their life from birth to death (key moments in order,
+  each a step); for an event, how it unfolded. overview.title is the subject, not one moment.
+- Give each step's date as numbers (year, month, day: English/Gregorian calendar) only as far as the
+  material states it; never guess a day or month.
 - Limits: at most 15 steps, 4 phases, 10 disagreements, 10 gaps.`;
 
 const claim = {
@@ -70,8 +74,9 @@ export const RESEARCH_SCHEMA = {
     overview: {
       type: "object",
       properties: {
-        title: { type: "string" },
-        title_en: { type: "string", description: "The event's short English name for its web address, 2–6 words, e.g. 'Death of Maulana Bhashani', 'Kagmari Conference'" },
+        kind: { type: "string", enum: ["person", "event"], description: "person: the story of one person's life; event: one happening (a massacre, a fire, a movement, a battle)" },
+        title: { type: "string", description: "The story's SUBJECT in Bangla: the person's name for a person (e.g. 'কাজী নজরুল ইসলাম'), the event's name for an event (e.g. 'তাজরীন ফ্যাশনস অগ্নিকাণ্ড'). Not a moment like 'জন্ম' or 'মৃত্যু'." },
+        title_en: { type: "string", description: "The subject's short English name for its web address, 2–6 words, e.g. 'Kazi Nazrul Islam', 'Tazreen Fashions fire'" },
         summary: claim,
         background: claim,
         date_text: { type: "string", description: "The date as the sources give it, in Bangla" },
@@ -94,6 +99,9 @@ export const RESEARCH_SCHEMA = {
           ...claim.properties,
           title: { type: "string" },
           date_label: { type: "string" },
+          year: { type: "integer", description: "The step's year (Gregorian), if the material gives it" },
+          month: { type: "integer", description: "1–12, only if the material gives the month" },
+          day: { type: "integer", description: "1–31, only if the material gives the exact day" },
           order: { type: "integer" },
           significance: { type: "string" },
           place_name: { type: "string", description: 'Where this step happened: "English place, District, Country | Bangla name". Empty string only if the material names no place for it.' },

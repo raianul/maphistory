@@ -3,12 +3,13 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import type { EventSource, HistoricalEvent, TimelineStep } from "@/lib/events/schema";
+import type { EventSource, HistoricalEvent, TimelineStep, EventDate } from "@/lib/events/schema";
 import { adminFetch } from "@/lib/supabase-browser";
 import { dateBn, StatusBadge } from "./shared";
+import { DatesPanel } from "./DatesPanel";
 import { TimelinePreview } from "./TimelinePreview";
 
-type Loaded = { event: HistoricalEvent; sources: EventSource[]; steps: TimelineStep[]; problems: string[] };
+type Loaded = { event: HistoricalEvent; sources: EventSource[]; steps: TimelineStep[]; dates?: EventDate[]; problems: string[] };
 const btn = "h-11 rounded-full px-5 text-meta font-semibold transition-colors disabled:opacity-50";
 
 /**
@@ -173,6 +174,8 @@ export function EventPreview({ id }: { id: string }) {
           </ul>
         </section>
       </div>
+
+      <DatesPanel data={data} onChange={setData} />
 
       <section className="mt-5 rounded-2xl bg-card p-4 shadow-float md:p-5" aria-label="Timeline">
         <h2 className="font-semibold">Timeline ({steps.length} {steps.length === 1 ? "step" : "steps"})</h2>

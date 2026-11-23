@@ -18,6 +18,10 @@ const Body = z.object({
     category: z.enum(CATEGORIES).default("other"),
     source_url: z.string().trim().max(2000).regex(/^https?:\/\/[^\s]+$/i, "Link must start with http(s)"),
     source_quote: z.string().trim().max(1200).default(""),
+    subject: z.string().trim().max(200).optional(),
+    kind: z.enum(["person", "event"]).optional(),
+    subject_wikipedia_url: z.string().trim().max(2000).optional(),
+    subject_qid: z.string().regex(/^Q\d{1,12}$/).nullable().optional(),
     check: z.object({ confirmed: z.boolean(), reason: z.string().max(500), page_title: z.string().max(300).nullable() }).optional(),
   }),
 });

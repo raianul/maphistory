@@ -1,6 +1,6 @@
 import { requireAdmin } from "@/lib/admin-auth";
 import { invalidatePublicEvents } from "@/lib/events/cache";
-import { getEvent, setEventStatus, verifyAll, withProblems } from "@/lib/events/db";
+import { getEvent, publishDates, setEventStatus, verifyAll, withProblems } from "@/lib/events/db";
 import { canMove, EVENT_STATUSES, publishProblems, STATUS_EN, type EventStatus } from "@/lib/events/schema";
 
 /**
@@ -30,7 +30,10 @@ export async function POST(req: Request, { params }: RouteContext<"/api/admin/ev
       if (problems.length) return Response.json({ error: "Fix these before publishing", problems }, { status: 409 });
     }
     // Publishing is the admin's verification of everything in the event (sources and steps).
-    if (to === "published") await verifyAll(id, admin.userId);
+    if (to === "published") {
+      await verifyAll(id, admin.userId);
+      await publishDates(id);
+    }
     const event = await setEventStatus(found.event, to as EventStatus, admin.userId);
     if (from === "published" || to === "published") invalidatePublicEvents();
     const fresh = to === "published" ? await getEvent(id) : undefined;

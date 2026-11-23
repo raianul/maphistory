@@ -11,7 +11,7 @@ import { GoogleGenAI } from "@google/genai";
 import { z } from "zod";
 import { FALLBACK_MODEL, GEMINI_MODEL } from "../ai/model";
 import { safeFetch } from "./fetch";
-import { wikipediaFromUrl, type NetDeps } from "./sources";
+import { wikidataIdFor, wikipediaFromUrl, type NetDeps } from "./sources";
 import { normalise } from "./validate";
 
 export const COUNTRIES = {
@@ -34,6 +34,14 @@ export type Candidate = {
   category: (typeof CATEGORIES)[number];
   source_url: string;
   source_quote: string;
+  /** Who or what the story is about (Bangla), e.g. "কাজী নজরুল ইসলাম", "তাজরীন ফ্যাশনস অগ্নিকাণ্ড". */
+  subject?: string;
+  /** person: a life (birth, award, death…); event: one happening. */
+  kind?: "person" | "event";
+  /** The English Wikipedia article about the subject itself, as the AI named it. */
+  subject_wikipedia_url?: string;
+  /** Set by the application: the subject's Wikidata id, from that article (identity across titles). */
+  subject_qid?: string | null;
   /** Set by the application after opening the page. */
   check: { confirmed: boolean; reason: string; page_title: string | null };
 };
@@ -46,6 +54,9 @@ const RawCandidate = z.object({
   category: z.enum(CATEGORIES).catch("other"),
   source_url: z.string().trim().max(2000),
   source_quote: z.string().trim().max(1200).catch(""),
+  subject: z.string().trim().max(200).optional().catch(undefined),
+  kind: z.enum(["person", "event"]).optional().catch(undefined),
+  subject_wikipedia_url: z.string().trim().max(2000).optional().catch(undefined),
 });
 const RawAnswer = z.object({ events: z.array(z.unknown()).max(20).catch([]) });
 
@@ -65,7 +76,7 @@ STRICT RULES
 8. "place": the most specific place the source names (building, campus, area, then city), e.g. "Dhaka Medical College, Dhaka", not just "Dhaka".
 
 Return ONLY JSON, no other text, no markdown:
-{"events":[{"year":1971,"title_bn":"short Bangla title, at most 12 words","summary_bn":"one or two Bangla sentences: what happened, where","place":"...","category":"war|politics|culture|disaster|birth|death|founding|other","source_url":"https://...","source_quote":"..."}]}
+{"events":[{"year":1971,"title_bn":"short Bangla title, at most 12 words","summary_bn":"one or two Bangla sentences: what happened, where","place":"...","category":"war|politics|culture|disaster|birth|death|founding|other","source_url":"https://...","source_quote":"...","subject":"who or what it is about, in Bangla: the person's name (for a birth, death, award, arrest…) or the event's name","kind":"person|event","subject_wikipedia_url":"the English Wikipedia article about that person or event itself (not a list, timeline or year page); empty if none"}]}
 Sort by year, oldest first. Titles and summaries in clear modern Bangla.`;
 }
 
@@ -185,7 +196,15 @@ export async function discoverEvents(
     seen.add(key);
     raw.push({ ...r.data, source_url: url });
   }
-  const candidates = await Promise.all(raw.slice(0, 7).map(async (c) => ({ ...c, check: await checkCandidate(c, day, month, deps) })));
+  // Each suggestion's page is checked for the date, and its subject identified (Wikidata, via the
+  // subject's own Wikipedia article): the same person or event is then recognised whatever the title.
+  const candidates = await Promise.all(
+    raw.slice(0, 7).map(async (c) => {
+      const wiki = c.subject_wikipedia_url ? c.subject_wikipedia_url.replace(/^\[[^\]]*\]\((.*)\)$/, "$1").trim() : "";
+      const [check, subject_qid] = await Promise.all([checkCandidate(c, day, month, deps), wiki ? wikidataIdFor(wiki, deps.fetch) : Promise.resolve(null)]);
+      return { ...c, subject_wikipedia_url: wiki || undefined, subject_qid, check };
+    }),
+  );
   candidates.sort((a, b) => a.year - b.year);
   return { candidates, dropped };
 }

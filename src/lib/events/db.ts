@@ -5,7 +5,7 @@
  */
 import { db } from "../db";
 import { publishProblems } from "./schema";
-import type { EventFieldsT, EventListRow, EventSource, EventStatus, HistoricalEvent, PhaseT, SourceFieldsT, StepFieldsT, TimelineStep } from "./schema";
+import type { DateFieldsT, EventDate, EventFieldsT, EventListRow, EventSource, EventStatus, HistoricalEvent, PhaseT, SourceFieldsT, StepFieldsT, TimelineStep } from "./schema";
 
 export type { EventListRow };
 
@@ -13,7 +13,15 @@ export type { EventListRow };
 const missingTable = (code?: string) => code === "42P01" || code === "PGRST205";
 export const MIGRATION_MISSING = "The historical events table doesn't exist yet: run the historical_events migration in Supabase.";
 
+/** Shown when the story_dates migration hasn't been run (kind, wikidata_id, step dates, dates table). */
+export const DATES_MIGRATION_MISSING = "Story dates aren't set up yet: run the story_dates migration (20261124000000_story_dates.sql) in Supabase.";
+
 function fail(error: { code?: string; message: string }): never {
+  if (/historical_event_dates|wikidata_id|step_year|step_month|step_day|'kind'/.test(error.message) && (missingTable(error.code) || error.code === "42703" || error.code === "PGRST204")) {
+    throw new Error(DATES_MIGRATION_MISSING);
+  }
+  if (error.code === "23505" && /historical_events_wikidata/.test(error.message)) throw new Error("Another story already has this Wikidata id: add this date to that story instead.");
+  if (error.code === "23505" && /historical_event_dates_once/.test(error.message)) throw new Error("This story already has this date.");
   if (missingTable(error.code)) throw new Error(MIGRATION_MISSING);
   if (error.code === "23505") throw new Error("This slug already exists; choose another.");
   if (error.code === "23514") throw new Error(`Data breaks a database rule (${error.message})`);
@@ -53,7 +61,7 @@ export async function listEvents(f: EventListFilters = {}): Promise<EventListRow
   return (data as unknown as Raw[]).map(({ historical_event_sources, ...r }) => ({ ...r, source_count: historical_event_sources[0]?.count ?? 0 }));
 }
 
-export type EventBundle = { event: HistoricalEvent; sources: EventSource[]; steps: TimelineStep[] };
+export type EventBundle = { event: HistoricalEvent; sources: EventSource[]; steps: TimelineStep[]; dates: EventDate[] };
 
 /** What every admin event route answers with: the whole event and what still blocks publishing. */
 export function withProblems(b: EventBundle) {
@@ -62,10 +70,11 @@ export function withProblems(b: EventBundle) {
 
 /** An event with its sources and its timeline steps (each with the ids of the sources it cites). */
 export async function getEvent(id: string): Promise<EventBundle | undefined> {
-  const [ev, src, steps] = await Promise.all([
+  const [ev, src, steps, dates] = await Promise.all([
     db().from("historical_events").select("*").eq("id", id).maybeSingle(),
     db().from("historical_event_sources").select("*").eq("event_id", id).order("position").order("created_at"),
     db().from("historical_event_timeline_steps").select("*, historical_event_step_sources(source_id)").eq("event_id", id).order("position"),
+    db().from("historical_event_dates").select("*").eq("event_id", id).order("month").order("day").order("year"),
   ]);
   if (ev.error) fail(ev.error);
   if (src.error) fail(src.error);
@@ -78,8 +87,10 @@ export async function getEvent(id: string): Promise<EventBundle | undefined> {
     type Raw = Omit<TimelineStep, "source_ids"> & { historical_event_step_sources: { source_id: string }[] };
     stepRows = (steps.data as Raw[]).map(({ historical_event_step_sources, ...r }) => ({ ...r, source_ids: historical_event_step_sources.map((l) => l.source_id) }));
   }
-  const event = { phases: [], ...ev.data } as HistoricalEvent;
-  return { event, sources: (src.data ?? []) as EventSource[], steps: stepRows };
+  // Before the story_dates migration there are no anniversaries (and no kind column): carry on.
+  if (dates.error && !missingTable(dates.error.code)) fail(dates.error);
+  const event = { phases: [], kind: "event", wikidata_id: null, ...ev.data } as HistoricalEvent;
+  return { event, sources: (src.data ?? []) as EventSource[], steps: stepRows, dates: (dates.error ? [] : (dates.data ?? [])) as EventDate[] };
 }
 
 export async function createEvent(fields: EventFieldsT, userId: string): Promise<HistoricalEvent> {
@@ -119,6 +130,36 @@ export async function verifyAll(eventId: string, userId: string): Promise<void> 
   if (a.error) fail(a.error);
   const b = await db().from("historical_event_timeline_steps").update({ verified: true, updated_by: userId }).eq("event_id", eventId).eq("verified", false);
   if (b.error) fail(b.error);
+}
+
+// ── Anniversaries ─────────────────────────────────────────────────────────────────────
+
+/** Adds an "On this day" date to a story (a draft until approved or until the story is published). */
+export async function addDate(eventId: string, fields: DateFieldsT, userId: string, status: EventDate["status"] = "draft"): Promise<EventDate> {
+  const { data, error } = await db()
+    .from("historical_event_dates")
+    .insert({ ...fields, step_id: fields.step_id ?? null, event_id: eventId, status, created_by: userId })
+    .select("*")
+    .single();
+  if (error) fail(error);
+  return data as EventDate;
+}
+
+export async function updateDate(eventId: string, dateId: string, patch: Partial<DateFieldsT> & { status?: EventDate["status"] }): Promise<void> {
+  const { data, error } = await db().from("historical_event_dates").update(patch).eq("id", dateId).eq("event_id", eventId).select("id").maybeSingle();
+  if (error) fail(error);
+  if (!data) throw new Error("Date not found");
+}
+
+export async function deleteDate(eventId: string, dateId: string): Promise<void> {
+  const { error } = await db().from("historical_event_dates").delete().eq("id", dateId).eq("event_id", eventId);
+  if (error) fail(error);
+}
+
+/** Publishing a story publishes its draft dates too (the admin reviewed them with it). */
+export async function publishDates(eventId: string): Promise<void> {
+  const { error } = await db().from("historical_event_dates").update({ status: "published" }).eq("event_id", eventId).eq("status", "draft");
+  if (error && !missingTable(error.code)) fail(error);
 }
 
 export async function deleteEvent(id: string): Promise<void> {

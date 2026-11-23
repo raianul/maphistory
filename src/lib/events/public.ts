@@ -10,10 +10,21 @@ import { inRegion } from "../region";
 import { EVENTS_CACHE_TAG } from "./cache";
 import type { EventSource, HistoricalEvent, PhaseT, TimelineStep } from "./schema";
 
-/** What the "On this day" list shows for one event. */
+/**
+ * What the "On this day" list shows for one anniversary: that day's own title and summary
+ * (e.g. "কর্নেল তাহেরের ফাঁসি"), the story it belongs to, and the step the story opens at.
+ */
 export type PublicEventCard = {
   slug: string;
+  /** That date's headline. */
   title: string;
+  /** The story's own title (e.g. "কর্নেল আবু তাহের"). */
+  story_title: string;
+  kind: "person" | "event";
+  /** The step the story opens at on this date, 1-based (null: the first). */
+  step: number | null;
+  /** This anniversary's month and day, MM-DD. */
+  md: string;
   summary: string | null;
   year: number | null;
   date_label: string | null;
@@ -40,6 +51,9 @@ export type PublicEvent = Pick<
   HistoricalEvent,
   "slug" | "title" | "summary" | "narrative" | "event_year" | "event_month" | "event_day" | "date_precision" | "date_label" | "place_name" | "city" | "country" | "lat" | "lng" | "cover_image"
 > & {
+  kind: "person" | "event";
+  /** The story's published "On this day" dates, each with its own title and the step it opens at (1-based). */
+  dates: { md: string; year: number; title: string; summary: string | null; step: number | null }[];
   phases: PhaseT[];
   sources: Pick<EventSource, "id" | "title" | "url" | "author_or_publisher" | "published_on" | "source_type">[];
   steps: Omit<TimelineStep, "event_id" | "created_at" | "updated_at" | "verified">[];
@@ -52,46 +66,66 @@ const md = (m: number, d: number) => `${pad(m)}-${pad(d)}`;
 const visible = (e: { lat?: number | null; lng?: number | null }) =>
   e.lat !== null && e.lat !== undefined && e.lng !== null && e.lng !== undefined && inRegion(e.lat, e.lng);
 
+type AnniversaryRow = {
+  date_id: string;
+  event_id: string;
+  slug: string;
+  story_title: string;
+  kind: "person" | "event";
+  title: string;
+  summary: string | null;
+  year: number;
+  step_id: string | null;
+  place_name: string | null;
+  city: string | null;
+  lat: number | null;
+  lng: number | null;
+  cover_image: HistoricalEvent["cover_image"];
+};
+
 async function loadDay(month: number, day: number, year: number): Promise<OnThisDay> {
   const asked = md(month, day);
   const cards = async (m: number, d: number, y: number) => {
-    const { data, error } = await db().rpc("events_on_day", { p_month: m, p_day: d, p_year: y });
+    const { data, error } = await db().rpc("anniversaries_on_day", { p_month: m, p_day: d, p_year: y });
     if (error) throw new Error(`Database: ${error.message}`);
-    const rows = (data ?? []) as HistoricalEvent[];
-    const shown = rows.filter(visible);
-    if (!shown.length) return [];
-    // How many timeline steps each has (a hint in the list: "৮ ধাপ").
-    const { data: counts } = await db()
+    const rows = ((data ?? []) as AnniversaryRow[]).filter(visible);
+    if (!rows.length) return [];
+    // Each story's steps (ids in order): the count for the list, and which step a date opens at.
+    const { data: steps } = await db()
       .from("historical_event_timeline_steps")
-      .select("event_id")
-      .in(
-        "event_id",
-        shown.map((r) => r.id),
-      );
-    const n = new Map<string, number>();
-    for (const c of counts ?? []) n.set(c.event_id, (n.get(c.event_id) ?? 0) + 1);
-    return shown.map(
-      (r): PublicEventCard => ({
+      .select("id,event_id,position")
+      .in("event_id", [...new Set(rows.map((r) => r.event_id))])
+      .order("position");
+    const byEvent = new Map<string, string[]>();
+    for (const s of steps ?? []) byEvent.set(s.event_id, [...(byEvent.get(s.event_id) ?? []), s.id]);
+    return rows.map((r): PublicEventCard => {
+      const ids = byEvent.get(r.event_id) ?? [];
+      const at = r.step_id ? ids.indexOf(r.step_id) : -1;
+      return {
         slug: r.slug,
         title: r.title,
+        story_title: r.story_title,
+        kind: r.kind,
+        step: at >= 0 ? at + 1 : null,
+        md: md(m, d),
         summary: r.summary ?? null,
-        year: r.event_year ?? null,
-        date_label: r.date_label ?? null,
+        year: r.year,
+        date_label: null,
         place_name: r.place_name ?? null,
         city: r.city ?? null,
         lat: r.lat ?? null,
         lng: r.lng ?? null,
         cover_image: r.cover_image ?? null,
-        step_count: n.get(r.id) ?? 0,
-      }),
-    );
+        step_count: ids.length,
+      };
+    });
   };
 
   const today = await cards(month, day, year);
   if (today.length) return { date: asked, shown: asked, next: false, events: today };
 
-  // Nothing that day: the next date with events (looking up to a year ahead).
-  const { data: nextDate, error } = await db().rpc("next_event_day", { p_month: month, p_day: day, p_year: year });
+  // Nothing that day: the next date with anniversaries (looking up to a year ahead).
+  const { data: nextDate, error } = await db().rpc("next_anniversary_day", { p_month: month, p_day: day, p_year: year });
   if (error) throw new Error(`Database: ${error.message}`);
   if (!nextDate) return { date: asked, shown: asked, next: false, events: [] };
   const [y, m, d] = (nextDate as string).split("-").map(Number);
@@ -114,14 +148,22 @@ async function loadEvent(slug: string): Promise<PublicEvent | null> {
   const { data: e, error } = await db().from("historical_events").select("*").eq("slug", slug).eq("status", "published").maybeSingle();
   if (error) throw new Error(`Database: ${error.message}`);
   if (!e || !visible(e)) return null;
-  const [src, steps] = await Promise.all([
+  const [src, steps, dates] = await Promise.all([
     db().from("historical_event_sources").select("id,title,url,author_or_publisher,published_on,source_type").eq("event_id", e.id).order("position"),
     db().from("historical_event_timeline_steps").select("*, historical_event_step_sources(source_id)").eq("event_id", e.id).order("position"),
+    db().from("historical_event_dates").select("year,month,day,title,summary,step_id").eq("event_id", e.id).eq("status", "published").order("month").order("day"),
   ]);
   if (src.error) throw new Error(`Database: ${src.error.message}`);
   type RawStep = TimelineStep & { historical_event_step_sources: { source_id: string }[] };
+  const stepIds = ((steps.data ?? []) as RawStep[]).map((r) => r.id);
+  type RawDate = { year: number; month: number; day: number; title: string; summary: string | null; step_id: string | null };
   return {
     slug: e.slug,
+    kind: e.kind ?? "event",
+    dates: ((dates.error ? [] : (dates.data ?? [])) as RawDate[]).map((d) => {
+      const at = d.step_id ? stepIds.indexOf(d.step_id) : -1;
+      return { md: md(d.month, d.day), year: d.year, title: d.title, summary: d.summary, step: at >= 0 ? at + 1 : null };
+    }),
     title: e.title,
     summary: e.summary,
     narrative: e.narrative,
@@ -158,6 +200,9 @@ async function loadEvent(slug: string): Promise<PublicEvent | null> {
       radius_m: r.radius_m,
       image: r.image,
       evidence: r.evidence,
+      step_year: r.step_year ?? null,
+      step_month: r.step_month ?? null,
+      step_day: r.step_day ?? null,
       source_ids: r.historical_event_step_sources.map((l) => l.source_id),
     })),
   };
