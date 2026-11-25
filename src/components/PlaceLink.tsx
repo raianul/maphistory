@@ -1,7 +1,7 @@
 "use client";
 
 /** How a place was opened, for analytics (place_open's "source"). */
-export type PlaceSource = "link" | "pin" | "map" | "nearby" | "search" | "explore" | "on_this_day";
+export type PlaceSource = "link" | "pin" | "map" | "nearby" | "search" | "explore" | "on_this_day" | "collection";
 
 /** Asks the map (PlaceMap) to open a place's page in place, without reloading: detail { slug, source }. */
 export const OPEN_PLACE = "ondor:open-place";

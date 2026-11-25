@@ -194,10 +194,56 @@ export async function listStories() {
  * important first: checked by an editor, then the most opened, at most `limit` in all. Range
  * queries on lat/lng, served by the stories_lat_lng index. Empty before the show_on_map migration.
  */
+/** What a pin shows: its name, its category chips, and the hover preview (picture, kind · era). */
+export const PIN_COLUMNS =
+  "name_bn,name_en,slug,lat,lng,kind,status,label:story->>name_bn,kind_bn:story->>kind_bn,era:story->>era_label_bn,photo:image->>src,videos:place_videos(thumbnail_url,sort_order)";
+
+export type PinRow = {
+  name_bn: string;
+  name_en: string | null;
+  slug: string | null;
+  lat: number;
+  lng: number;
+  kind: string | null;
+  status: string;
+  label: string | null;
+  kind_bn: string | null;
+  era: string | null;
+  photo: string | null;
+  videos: { thumbnail_url: string | null; sort_order: number }[] | null;
+  category?: string | null;
+};
+
+/** Stories (selected with PIN_COLUMNS, plus category when it exists) as map pins, with their likes. */
+export async function toMapPins(rows: PinRow[]): Promise<MapPin[]> {
+  const { likesFor } = await import("./reactions");
+  const likes = await likesFor(rows.flatMap((r) => (r.slug ? [r.slug] : [])));
+  return rows.map((r) => {
+    const videos = [...(r.videos ?? [])].sort((a, b) => a.sort_order - b.sort_order);
+    const thumb = smallPicture(r.photo) ?? smallPicture(videos.find((v) => v.thumbnail_url)?.thumbnail_url);
+    const line = [r.kind_bn?.trim(), r.era?.trim()].filter(Boolean).join(" · ");
+    const categories = categoriesOf(r.category, guessCategories({ kind_bn: r.kind_bn, era: r.era }));
+    const n = r.slug ? likes.get(r.slug) : undefined;
+    return {
+      label: r.label?.trim() || r.name_bn,
+      label_en: r.name_en?.trim() || undefined,
+      slug: r.slug ?? undefined,
+      name: r.name_bn,
+      lat: r.lat,
+      lng: r.lng,
+      kind: r.kind ?? undefined,
+      verified: r.status === "verified",
+      ...(categories.length ? { categories } : {}),
+      ...(videos.length ? { video: true } : {}),
+      ...(thumb ? { thumb } : {}),
+      ...(line ? { line } : {}),
+      ...(n ? { likes: n } : {}),
+    };
+  });
+}
+
 export async function listMapPins(b: Bounds, limit = PINS_PER_TILE): Promise<MapPin[]> {
-  // What a pin shows: its name, its category chip, and the hover preview (picture, kind · era).
-  const base =
-    "name_bn,name_en,slug,lat,lng,kind,status,label:story->>name_bn,kind_bn:story->>kind_bn,era:story->>era_label_bn,photo:image->>src,videos:place_videos(thumbnail_url,sort_order)";
+  const base = PIN_COLUMNS;
   const query = (columns: string, status: "verified" | "ai", n: number) =>
     db()
       .from("stories")
@@ -224,46 +270,7 @@ export async function listMapPins(b: Bounds, limit = PINS_PER_TILE): Promise<Map
   const ai = room > 0 ? await query(columns, "ai", room) : { data: [], error: null };
   if (ai.error) throw new Error(`Database: ${ai.error.message}`);
 
-  type PinRow = {
-    name_bn: string;
-    name_en: string | null;
-    slug: string | null;
-    lat: number;
-    lng: number;
-    kind: string | null;
-    status: string;
-    label: string | null;
-    kind_bn: string | null;
-    era: string | null;
-    photo: string | null;
-    videos: { thumbnail_url: string | null; sort_order: number }[] | null;
-    category?: string | null;
-  };
-  const rows = [...(verified.data ?? []), ...(ai.data ?? [])] as unknown as PinRow[];
-  const { likesFor } = await import("./reactions");
-  const likes = await likesFor(rows.flatMap((r) => (r.slug ? [r.slug] : [])));
-  return rows.map((r) => {
-    const videos = [...(r.videos ?? [])].sort((a, b) => a.sort_order - b.sort_order);
-    const thumb = smallPicture(r.photo) ?? smallPicture(videos.find((v) => v.thumbnail_url)?.thumbnail_url);
-    const line = [r.kind_bn?.trim(), r.era?.trim()].filter(Boolean).join(" · ");
-    const categories = categoriesOf(r.category, guessCategories({ kind_bn: r.kind_bn, era: r.era }));
-    const n = r.slug ? likes.get(r.slug) : undefined;
-    return {
-      label: r.label?.trim() || r.name_bn,
-      label_en: r.name_en?.trim() || undefined,
-      slug: r.slug ?? undefined,
-      name: r.name_bn,
-      lat: r.lat,
-      lng: r.lng,
-      kind: r.kind ?? undefined,
-      verified: r.status === "verified",
-      ...(categories.length ? { categories } : {}),
-      ...(videos.length ? { video: true } : {}),
-      ...(thumb ? { thumb } : {}),
-      ...(line ? { line } : {}),
-      ...(n ? { likes: n } : {}),
-    };
-  });
+  return toMapPins([...(verified.data ?? []), ...(ai.data ?? [])] as unknown as PinRow[]);
 }
 
 

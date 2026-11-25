@@ -13,17 +13,19 @@ type HomeState = { data: AdminHome | null; error: string | null; reload: () => v
 const HomeContext = createContext<HomeState>({ data: null, error: null, reload: () => {} });
 export const useAdminHome = () => useContext(HomeContext);
 
-type Section = "home" | "places" | "events" | "otd";
+type Section = "home" | "places" | "collections" | "events" | "otd";
 
 const SECTIONS: { id: Section; href: string; label: string; icon: string }[] = [
   { id: "home", href: "/admin", label: "Home", icon: "M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z" },
   { id: "places", href: "/admin/places", label: "Places", icon: "M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21zM12 12a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z" },
+  { id: "collections", href: "/admin/collections", label: "Collections", icon: "M4 7h16M6 4h12M3 10h18v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z" },
   { id: "events", href: "/admin/events", label: "Events", icon: "M4 6h16M4 12h16M4 18h10" },
   { id: "otd", href: "/admin/events/today", label: "On this day", icon: "M5 5h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zM3 10h18M8 3v4M16 3v4" },
 ];
 
 function sectionOf(path: string): Section {
   if (path.startsWith("/admin/places")) return "places";
+  if (path.startsWith("/admin/collections")) return "collections";
   if (path.startsWith("/admin/events/today")) return "otd";
   if (path.startsWith("/admin/events")) return "events";
   return "home";
@@ -115,7 +117,7 @@ export function AdminShell({ email, children }: { email?: string; children: Reac
         <div className="min-w-0 flex-1 pb-[var(--admin-tabbar)]">{children}</div>
 
         {/* Phone tab bar */}
-        <nav aria-label="Admin sections" className="fixed inset-x-0 bottom-0 z-10 grid h-[var(--admin-tabbar)] grid-cols-4 border-t border-line bg-card pb-[env(safe-area-inset-bottom)] md:hidden">
+        <nav aria-label="Admin sections" className="fixed inset-x-0 bottom-0 z-10 grid h-[var(--admin-tabbar)] grid-cols-5 border-t border-line bg-card pb-[env(safe-area-inset-bottom)] md:hidden">
           {SECTIONS.map((s) => {
             const on = s.id === active;
             return (

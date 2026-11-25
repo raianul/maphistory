@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { GeoJSONSource, Map as MLMap, MapLayerMouseEvent, MapMouseEvent, Marker } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { pinTarget, type MapPin } from "@/lib/map-pin";
@@ -18,7 +18,9 @@ import { slugOf, track, withCampaign } from "@/lib/analytics";
 import { StepPopup } from "./StepPopup";
 import { SHEET_EVENT, SHEET_REQUEST } from "./SidePanel";
 import { SearchBox } from "./SearchBox";
-import { Brand, BrandMark, CategoryChips, LangSwitch, MoreMenu, OnThisDayCard, PinPreview, SectionNav, TabBar, ZoomButtons, type PinFilter, type PinPreviewData } from "./MapShell";
+import { Brand, BrandMark, CategoryChips, LangSwitch, MoreMenu, OnThisDayCard, PinPreview, SectionNav, TabBar, ZoomButtons, type MapSection, type PinFilter, type PinPreviewData } from "./MapShell";
+import { CollectionBar, CollectionsPicker } from "./Collections";
+import type { PublicCollection } from "@/lib/collections";
 import type { CategoryId } from "@/lib/categories";
 import { THEME } from "@/lib/theme";
 import { addEventLayers, allBounds, drawSteps, EVENT_CLICK_LAYERS, EVENT_LAYERS, stepBounds } from "@/lib/events/draw";
@@ -115,6 +117,12 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
   const [pinFilter, setPinFilter] = useState<PinFilter | null>(null);
   /** Zoomed in far enough for pins (and so for their chips). */
   const [pinsShown, setPinsShown] = useState(false);
+  /** The collection shown on the map (only its places, numbered), and which of them is open. */
+  const [coll, setColl] = useState<PublicCollection | null>(null);
+  const [collAt, setCollAt] = useState<number | null>(null);
+  /** The সংগ্রহ list is open. */
+  const [picker, setPicker] = useState(false);
+  const closePicker = useCallback(() => setPicker(false), []);
   /** Desktop: the pin under the pointer, previewed in a small card. */
   const [preview, setPreview] = useState<PinPreviewData | null>(null);
   /** The floating search, so the map knows where its visible area begins. */
@@ -435,9 +443,75 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
 
   // The map's click handlers are registered once; this ref always points at the latest openAi.
   const aiRef = useRef(openAi);
+  const collStepRef = useRef(stepCollection);
   useEffect(() => {
     aiRef.current = openAi;
+    collStepRef.current = stepCollection;
   });
+
+  // ── Collections ────────────────────────────────────────────────────────────────────────
+  /** Shows a published collection on the map: only its places, numbered, framed together. */
+  async function openCollection(slug: string) {
+    const r = await fetch(`/api/collections/${encodeURIComponent(slug)}`).catch(() => null);
+    const c = r?.ok ? ((await r.json()).collection as PublicCollection) : null;
+    setPicker(false);
+    if (!c || !c.places.length) return;
+    goToMap();
+    setPinFilter(null);
+    setPreview(null);
+    setColl(c);
+    setCollAt(null);
+    track("collection_open", { slug: c.slug });
+    if (window.location.pathname === "/") window.history.replaceState(window.history.state, "", withCampaign(`/?collection=${c.slug}`));
+  }
+  /** Back to every pin. */
+  function closeCollection() {
+    setColl(null);
+    setCollAt(null);
+    const url = new URL(window.location.href);
+    if (url.searchParams.has("collection")) {
+      url.searchParams.delete("collection");
+      window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+    }
+  }
+  /** Opens the collection's place number i + 1 (as clicking its pin does). */
+  function stepCollection(i: number) {
+    const p = coll?.places[i];
+    if (!p) return;
+    setCollAt(i);
+    openAi(pinTarget(p), Math.max(mapRef.current?.getZoom() ?? 15, 15), "collection");
+  }
+  // A shared link (/?collection=<slug>): open it once the map is ready.
+  useEffect(() => {
+    if (!ready) return;
+    const slug = new URLSearchParams(window.location.search).get("collection");
+    if (slug) queueMicrotask(() => openCollection(slug));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once, when the map is ready
+  }, [ready]);
+  // Draw the collection (or nothing), hide the other pins meanwhile, and frame all its places.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!ready || !map) return;
+    (map.getSource("collection") as GeoJSONSource | undefined)?.setData({
+      type: "FeatureCollection",
+      features: (coll?.places ?? []).map((p, i) => ({
+        type: "Feature",
+        geometry: { type: "Point", coordinates: [p.lng, p.lat] },
+        properties: { i, num: (i + 1).toLocaleString("bn-BD"), label: p.label, label_en: p.label_en ?? p.label },
+      })),
+    });
+    for (const id of ["pins", "pin-labels"]) if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", coll ? "none" : "visible");
+    if (!coll) return;
+    const lngs = coll.places.map((p) => p.lng);
+    const lats = coll.places.map((p) => p.lat);
+    map.fitBounds(
+      [
+        [Math.min(...lngs), Math.min(...lats)],
+        [Math.max(...lngs), Math.max(...lats)],
+      ],
+      { padding: freePadding(), maxZoom: 15, duration: 900 },
+    );
+  }, [ready, coll]);
 
   // Create the map once; maplibre-gl is loaded only on this page.
   useEffect(() => {
@@ -547,6 +621,41 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
             "text-opacity": fadeIn(PIN_MIN_ZOOM + 1),
           },
         });
+        // A collection's places: numbered pins (above everything of ours), names under them.
+        map.addSource("collection", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+        map.addLayer({
+          id: "coll-pins",
+          type: "circle",
+          source: "collection",
+          paint: { "circle-color": THEME.accent, "circle-radius": 12, "circle-stroke-color": THEME.white, "circle-stroke-width": 2.5 },
+        });
+        map.addLayer({
+          id: "coll-nums",
+          type: "symbol",
+          source: "collection",
+          layout: { "text-field": ["get", "num"], "text-font": ["Noto Sans Bold"], "text-size": 13, "text-allow-overlap": true, "text-ignore-placement": true },
+          paint: { "text-color": THEME.white },
+        });
+        map.addLayer({
+          id: "coll-labels",
+          type: "symbol",
+          source: "collection",
+          layout: {
+            "text-field": ["get", mapLangRef.current === "en" ? "label_en" : "label"],
+            "text-font": ["Noto Sans Bold"],
+            "text-size": 14,
+            "text-offset": [0, 1.5],
+            "text-anchor": "top",
+            "text-optional": true,
+          },
+          paint: { "text-color": THEME.ink, "text-halo-color": THEME.white, "text-halo-width": 1.5 },
+        });
+        map.on("click", "coll-pins", (e: MapLayerMouseEvent) => {
+          const i = e.features?.[0]?.properties?.i;
+          if (typeof i === "number") collStepRef.current(i);
+        });
+        map.on("mouseenter", "coll-pins", () => (map.getCanvas().style.cursor = "pointer"));
+        map.on("mouseleave", "coll-pins", () => (map.getCanvas().style.cursor = ""));
         map.on("click", "pins", (e: MapLayerMouseEvent) => {
           setPreview(null);
           const f = e.features?.[0];
@@ -572,7 +681,7 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
           .map((l) => l.id);
         map.on("click", (e: MapMouseEvent) => {
           if (e.defaultPrevented) return; // an event step's pin
-          if (map.queryRenderedFeatures(e.point, { layers: ["pins", ...EVENT_CLICK_LAYERS.filter((id) => map.getLayer(id))] }).length) return;
+          if (map.queryRenderedFeatures(e.point, { layers: ["pins", "coll-pins", ...EVENT_CLICK_LAYERS.filter((id) => map.getLayer(id))] }).length) return;
           const { x, y } = e.point;
           // A generous box, so small road names are easy to hit on a phone.
           const f = map.queryRenderedFeatures(
@@ -618,7 +727,7 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
           const name = shownLabel(e.features?.[0]?.properties);
           if (!tip) return;
           // Over one of our pins: its own preview card shows instead.
-          if (map.queryRenderedFeatures(e.point, { layers: ["pins"] }).length) {
+          if (map.queryRenderedFeatures(e.point, { layers: ["pins", "coll-pins"] }).length) {
             tip.hidden = true;
             return;
           }
@@ -843,6 +952,7 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
   }, [timeline]);
 
   const panelOpen = Boolean(selected || aiTarget || otd);
+  const section: MapSection = otd ? "otd" : coll || picker ? "collections" : "map";
   const tabBar = !panelOpen;
 
   /** The plain map: closes whatever panel is open. */
@@ -852,6 +962,12 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
     else if (selected) router.replace("/", { scroll: false });
   }
 
+  /** "মানচিত্র": the plain map, every pin (closes a panel and the collection). */
+  function plainMap() {
+    goToMap();
+    if (coll) closeCollection();
+  }
+
   /** Map place names in Bangla or English (our own layers keep theirs). */
   function chooseLang(l: MapLang) {
     mapLangRef.current = l;
@@ -859,9 +975,9 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
     saveMapLang(l);
     const map = mapRef.current;
     if (!map) return;
-    setMapLang(map, l, (id) => EVENT_LAYERS.includes(id) || /^(pins|pin-labels|ai-target|outside)/.test(id));
+    setMapLang(map, l, (id) => EVENT_LAYERS.includes(id) || /^(pins|pin-labels|coll-|ai-target|outside)/.test(id));
     // Our story pins: their English name in EN (the Bangla one when a story has none).
-    if (map.getLayer("pin-labels")) map.setLayoutProperty("pin-labels", "text-field", ["get", l === "en" ? "label_en" : "label"]);
+    for (const id of ["pin-labels", "coll-labels"]) if (map.getLayer(id)) map.setLayoutProperty(id, "text-field", ["get", l === "en" ? "label_en" : "label"]);
   }
 
 
@@ -914,7 +1030,7 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
       >
         <div className="flex flex-wrap items-center gap-2 md:gap-3">
         <Brand />
-        <SectionNav onThisDay={!!otd} onMap={goToMap} onOtd={() => openOtd(null)} />
+        <SectionNav section={section} onMap={plainMap} onCollections={() => setPicker(true)} onOtd={() => openOtd(null)} />
         <div className="pointer-events-auto w-full min-w-0 md:w-[360px] md:max-w-full md:flex-initial">
           <SearchBox
             leading={
@@ -957,11 +1073,17 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
         {!panelOpen && <MoreMenu />}
         </div>
 
-        {pinsShown && (
-          // Phones: not while a story's sheet is open (desktop keeps them beside the panel).
+        {coll ? (
+          // Phones: not while a story's sheet is open (desktop keeps it beside the panel).
           <div className={panelOpen ? "hidden md:block" : undefined}>
-            <CategoryChips kinds={pinKinds} videos={pinVideos} value={pinFilter} onChange={setPinFilter} />
+            <CollectionBar c={coll} at={collAt} onStep={stepCollection} onClose={closeCollection} />
           </div>
+        ) : (
+          pinsShown && (
+            <div className={panelOpen ? "hidden md:block" : undefined}>
+              <CategoryChips kinds={pinKinds} videos={pinVideos} value={pinFilter} onChange={setPinFilter} />
+            </div>
+          )
         )}
 
         {locError && (
@@ -1089,7 +1211,8 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
       </div>
 
       {/* Phones: the tab bar, while nothing covers the map. */}
-      {tabBar && <TabBar onMap={goToMap} onOtd={() => openOtd(null)} lang={mapLang} onLang={chooseLang} />}
+      {tabBar && <TabBar section={section} onMap={plainMap} onCollections={() => setPicker(true)} onOtd={() => openOtd(null)} lang={mapLang} onLang={chooseLang} />}
+      {picker && <CollectionsPicker onPick={openCollection} onClose={closePicker} />}
     </div>
   );
 }

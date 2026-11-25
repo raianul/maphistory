@@ -37,15 +37,22 @@ export function Brand() {
   );
 }
 
+/** Which section is showing: the plain map, a collection on it, or "On this day". */
+export type MapSection = "map" | "collections" | "otd";
+
 /** Desktop: the sections, as one pill. */
-export function SectionNav({ onThisDay, onMap, onOtd }: { onThisDay: boolean; onMap: () => void; onOtd: () => void }) {
+export function SectionNav({ section, onMap, onCollections, onOtd }: { section: MapSection; onMap: () => void; onCollections: () => void; onOtd: () => void }) {
   const item = "flex h-11 items-center rounded-full px-4 text-body transition-colors";
+  const cls = (on: boolean) => `${item} ${on ? "bg-accent-soft font-semibold text-accent" : "text-ink-2 hover:bg-hover hover:text-ink"}`;
   return (
     <nav aria-label="বিভাগ" className={`${pill} hidden gap-1 p-1 md:flex`}>
-      <button type="button" onClick={onMap} aria-current={!onThisDay ? "page" : undefined} className={`${item} ${!onThisDay ? "bg-accent-soft font-semibold text-accent" : "text-ink-2 hover:bg-hover hover:text-ink"}`}>
+      <button type="button" onClick={onMap} aria-current={section === "map" ? "page" : undefined} className={cls(section === "map")}>
         মানচিত্র
       </button>
-      <button type="button" onClick={onOtd} aria-current={onThisDay ? "page" : undefined} className={`${item} ${onThisDay ? "bg-accent-soft font-semibold text-accent" : "text-ink-2 hover:bg-hover hover:text-ink"}`}>
+      <button type="button" onClick={onCollections} aria-current={section === "collections" ? "page" : undefined} className={cls(section === "collections")}>
+        সংগ্রহ
+      </button>
+      <button type="button" onClick={onOtd} aria-current={section === "otd" ? "page" : undefined} className={cls(section === "otd")}>
         আজকের দিনে
       </button>
     </nav>
@@ -143,11 +150,12 @@ export function MoreMenu() {
 const TAB_ICONS = {
   map: "M9 4 3 6v14l6-2 6 2 6-2V4l-6 2zM9 4v14M15 6v14",
   otd: "M4 5h16v16H4zM4 10h16M9 3v4M15 3v4",
+  collections: "M4 7h16M6 4h12M3 10h18v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z",
   more: "M5 12h.01M12 12h.01M19 12h.01",
 };
 
-/** Phones: the tab bar (মানচিত্র · আজকের দিনে · আরও). Hidden while a place or the day's list is open. */
-export function TabBar({ onMap, onOtd, lang, onLang }: { onMap: () => void; onOtd: () => void; lang: MapLang; onLang: (l: MapLang) => void }) {
+/** Phones: the tab bar (মানচিত্র · সংগ্রহ · আজকের দিনে · আরও). Hidden while a place or the day's list is open. */
+export function TabBar({ section, onMap, onCollections, onOtd, lang, onLang }: { section: MapSection; onMap: () => void; onCollections: () => void; onOtd: () => void; lang: MapLang; onLang: (l: MapLang) => void }) {
   const [more, setMore] = useState(false);
   const box = useDismiss(more, () => setMore(false));
   const tab = "flex flex-col items-center justify-center gap-0.5 text-micro";
@@ -165,10 +173,14 @@ export function TabBar({ onMap, onOtd, lang, onLang }: { onMap: () => void; onOt
           <MoreLinks lang={lang} onLang={onLang} />
         </div>
       )}
-      <nav aria-label="বিভাগ" className="fixed inset-x-0 bottom-0 z-30 grid h-[var(--tabbar-h)] grid-cols-3 border-t border-line bg-card px-2 pb-[env(safe-area-inset-bottom)]">
-        <button type="button" onClick={onMap} aria-current="page" className={`${tab} font-semibold text-accent`}>
-          {icon(TAB_ICONS.map, true)}
+      <nav aria-label="বিভাগ" className="fixed inset-x-0 bottom-0 z-30 grid h-[var(--tabbar-h)] grid-cols-4 border-t border-line bg-card px-2 pb-[env(safe-area-inset-bottom)]">
+        <button type="button" onClick={onMap} aria-current={section === "map" ? "page" : undefined} className={`${tab} ${section === "map" ? "font-semibold text-accent" : "text-muted"}`}>
+          {icon(TAB_ICONS.map, section === "map")}
           মানচিত্র
+        </button>
+        <button type="button" onClick={onCollections} aria-current={section === "collections" ? "page" : undefined} className={`${tab} ${section === "collections" ? "font-semibold text-accent" : "text-muted"}`}>
+          {icon(TAB_ICONS.collections, section === "collections")}
+          সংগ্রহ
         </button>
         <button type="button" onClick={onOtd} className={`${tab} text-muted`}>
           {icon(TAB_ICONS.otd)}
