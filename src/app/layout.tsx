@@ -37,7 +37,7 @@ export default function RootLayout({ children, panel }: LayoutProps<"/">) {
   return (
     <html lang="bn" className={`${hind.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col">
-        <header className="relative z-30 flex h-[calc(var(--header-h)+env(safe-area-inset-top))] shrink-0 items-center border-b border-line bg-paper ps-[max(1rem,env(safe-area-inset-left))] pe-[max(1rem,env(safe-area-inset-right))] pt-[env(safe-area-inset-top)] md:ps-[max(1.25rem,env(safe-area-inset-left))]">
+        <header className="site-header relative z-30 flex h-[calc(var(--header-h)+env(safe-area-inset-top))] shrink-0 items-center border-b border-line bg-paper ps-[max(1rem,env(safe-area-inset-left))] pe-[max(1rem,env(safe-area-inset-right))] pt-[env(safe-area-inset-top)] md:ps-[max(1.25rem,env(safe-area-inset-left))]">
           <Link href="/" className="-mx-1 flex h-10 items-center gap-2 rounded-md px-1">
             <span className="text-lg font-bold tracking-tight">{SITE.name}</span>
             <span className="hidden text-meta text-muted sm:inline">{SITE.tagline}</span>

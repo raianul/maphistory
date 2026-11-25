@@ -18,6 +18,7 @@ import { slugOf, track, withCampaign } from "@/lib/analytics";
 import { StepPopup } from "./StepPopup";
 import { SHEET_EVENT, SHEET_REQUEST } from "./SidePanel";
 import { SearchBox } from "./SearchBox";
+import { Brand, BrandMark, LangSwitch, MoreMenu, OnThisDayCard, SectionNav, TabBar, ZoomButtons } from "./MapShell";
 import { THEME } from "@/lib/theme";
 import { addEventLayers, allBounds, drawSteps, EVENT_CLICK_LAYERS, EVENT_LAYERS, stepBounds } from "@/lib/events/draw";
 import type { PublicEvent } from "@/lib/events/public";
@@ -52,6 +53,14 @@ async function fetchTile(t: Tile, signal: AbortSignal): Promise<MapPin[]> {
  * square (see lib/tiles.ts): only the squares on screen, only from city zoom in, each once. Any
  * other named place on the base map can still be clicked for its story.
  */
+/** The room the place panel takes on wide screens: its width plus the gap around it (a floating card). */
+function panelSpace() {
+  const css = getComputedStyle(document.documentElement);
+  const rem = parseFloat(css.fontSize) || 16;
+  const px = (v: string) => (v.trim().endsWith("rem") ? parseFloat(v) * rem : parseFloat(v)) || 0;
+  return (px(css.getPropertyValue("--panel-w")) || 440) + 2 * px(css.getPropertyValue("--panel-gap"));
+}
+
 /**
  * @param curated slugs of the hand-written places (content/): their /place/<slug> is a route of its own.
  * @param initialAi a place page (/place/<slug>) rendered on the server: its story, open at once.
@@ -156,7 +165,7 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
     focusPoint.current = { lng, lat };
     const wide = window.matchMedia("(min-width: 768px)").matches;
     // Half the panel's width (a CSS token), so the point sits in the middle of the visible map.
-    const panel = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--panel-w")) || 440;
+    const panel = panelSpace();
     // Phones: the sheet opens at half height before it has reported in.
     const sheet = sheetPx.current || Math.round(window.innerHeight * 0.56);
     const top = overlayRef.current?.getBoundingClientRect().bottom ?? 0;
@@ -177,13 +186,13 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
   /** The side panel's width on wide screens (0 on phones), from its CSS token. */
   function panelWidth() {
     if (typeof window === "undefined" || !window.matchMedia("(min-width: 768px)").matches) return 0;
-    return parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--panel-w")) || 440;
+    return panelSpace();
   }
 
   /** The map's free area (what the panel and search leave visible), as fitBounds padding. */
   function freePadding() {
     const wide = window.matchMedia("(min-width: 768px)").matches;
-    const panel = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--panel-w")) || 440;
+    const panel = panelSpace();
     const top = Math.max(0, (overlayRef.current?.getBoundingClientRect().bottom ?? 0) - (container.current?.getBoundingClientRect().top ?? 0));
     const sheet = sheetPx.current || Math.round(window.innerHeight * 0.56);
     return wide ? { top: top + 40, bottom: 60, left: 60, right: panel + 60 } : { top: top + 24, bottom: sheet + 24, left: 32, right: 32 };
@@ -425,7 +434,6 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
       map.touchZoomRotate.disableRotation();
       map.keyboard.disableRotation();
       // Bottom right, out of the way of search; hidden on touch screens (see globals.css).
-      map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
       // Safety net: if the map is ever turned or tilted anyway, a compass appears to put it straight.
       const straighten = () => setTurned(Math.abs(map.getBearing()) > 0.5 || map.getPitch() > 0.5);
       map.on("rotate", straighten);
@@ -756,6 +764,26 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
   }, [timeline]);
 
   const panelOpen = Boolean(selected || aiTarget || otd);
+  const tabBar = !panelOpen;
+
+  /** The plain map: closes whatever panel is open. */
+  function goToMap() {
+    if (otd) closeOtd();
+    else if (aiTarget) closeAi();
+    else if (selected) router.replace("/", { scroll: false });
+  }
+
+  /** Map place names in Bangla or English (our own layers keep theirs). */
+  function chooseLang(l: MapLang) {
+    mapLangRef.current = l;
+    setMapLangState(l);
+    saveMapLang(l);
+    const map = mapRef.current;
+    if (!map) return;
+    setMapLang(map, l, (id) => EVENT_LAYERS.includes(id) || /^(pins|pin-labels|ai-target|outside)/.test(id));
+    // Our story pins: their English name in EN (the Bangla one when a story has none).
+    if (map.getLayer("pin-labels")) map.setLayoutProperty("pin-labels", "text-field", ["get", l === "en" ? "label_en" : "label"]);
+  }
 
 
   async function nearMe() {
@@ -794,19 +822,33 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
     : [];
 
   return (
-    <div className="relative h-[calc(100dvh-var(--header-h)-env(safe-area-inset-top))] min-h-[420px] w-full overflow-hidden">
+    <div className={`map-shell relative h-dvh min-h-[420px] w-full overflow-hidden ${tabBar ? "with-tabbar" : ""}`}>
       {/* MapLibre's CSS forces position: relative on the map element, so a wrapper does the positioning. */}
       <div className="absolute inset-0">
         <div ref={container} className="h-full w-full bg-[var(--map-ground)]" aria-label="ঐতিহাসিক স্থানের মানচিত্র" />
       </div>
 
-      {/* Search and near me: top left on wide screens, full width on phones. */}
+      {/* The floating top bar: brand, sections, search (with near me), map language, more. Phones: search only. */}
       <div
         ref={overlayRef}
-        className={`pointer-events-none absolute inset-x-0 top-0 z-30 p-3 md:z-auto md:p-4 ${panelOpen ? "md:pe-[calc(var(--panel-w)+1rem)]" : ""}`}
+        className={`pointer-events-none absolute inset-x-0 top-0 z-30 p-3 pt-[calc(0.75rem+env(safe-area-inset-top))] md:z-auto md:p-4 ${panelOpen ? "md:pe-[calc(var(--panel-w)+2rem)]" : ""}`}
       >
-        <div className="pointer-events-auto w-full md:max-w-[400px]">
+        <div className="flex flex-wrap items-center gap-2 md:gap-3">
+        <Brand />
+        <SectionNav onThisDay={!!otd} onMap={goToMap} onOtd={() => openOtd(null)} />
+        <div className="pointer-events-auto w-full min-w-0 md:w-[360px] md:max-w-full md:flex-initial">
           <SearchBox
+            leading={
+              <>
+                <span className="md:hidden">
+                  <BrandMark />
+                </span>
+                <svg viewBox="0 0 20 20" className="hidden size-[18px] shrink-0 text-muted md:ms-2.5 md:block" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
+                  <circle cx="9" cy="9" r="5.5" />
+                  <path d="m13.2 13.2 3.8 3.8" strokeLinecap="round" />
+                </svg>
+              </>
+            }
             onPickGeo={openGeo}
             // Phones: an open story sheet steps down to its peek height, so results have room.
             onOpen={() => panelOpen && window.dispatchEvent(new CustomEvent(SHEET_REQUEST, { detail: "peek" }))}
@@ -832,6 +874,9 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
             }
           />
         </div>
+        {!panelOpen && <LangSwitch lang={mapLang} onChange={chooseLang} className="pointer-events-auto hidden shadow-float md:flex" />}
+        {!panelOpen && <MoreMenu />}
+        </div>
 
         {locError && (
           <p role="alert" className="pointer-events-auto mt-2 w-fit max-w-full rounded-control bg-card px-3 py-2 text-meta text-danger shadow-float">
@@ -851,7 +896,7 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
 
       {/* First-visit tip: what makes this map different (above the attribution line). */}
       {showTip && !panelOpen && (
-        <div className="pointer-events-none absolute inset-x-0 bottom-8 z-10 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
+        <div className="pointer-events-none absolute inset-x-0 bottom-[calc(2rem+var(--tabbar-h))] z-10 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
           <div className="pointer-events-auto mx-auto flex max-w-md animate-[rise_.3s_var(--ease-out)] items-center gap-3 rounded-2xl bg-card p-3 ps-4 shadow-menu">
             <span className="relative flex size-2.5 shrink-0" aria-hidden>
               <span className="absolute inline-flex size-full animate-ping rounded-full bg-accent/50" />
@@ -874,7 +919,7 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
 
       {/* Nearest places after "near me" (hidden while a story is open), above the attribution line. */}
       {!panelOpen && nearest.length > 0 && (
-        <div className="pointer-events-none absolute inset-x-0 bottom-8 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
+        <div className="pointer-events-none absolute inset-x-0 bottom-[calc(2rem+var(--tabbar-h))] p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
           <div className="pointer-events-auto mx-auto max-w-md animate-[rise_.3s_var(--ease-out)] rounded-2xl bg-card p-2 shadow-menu">
             <p className="px-2 pt-1 pb-0.5 text-micro font-semibold tracking-wide text-muted">আপনার কাছাকাছি</p>
             <ul>
@@ -924,37 +969,6 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
         />
       )}
 
-      {/* Map label language: বাংলা | EN (only the map's place names; browsers translate the rest). */}
-      <div
-        role="radiogroup"
-        aria-label="Map labels language"
-        className="absolute end-3 bottom-[7.5rem] z-10 flex rounded-full bg-card p-0.5 text-micro font-semibold shadow-float md:end-4 md:bottom-28"
-      >
-        {(["bn", "en"] as const).map((l) => (
-          <button
-            key={l}
-            type="button"
-            role="radio"
-            aria-checked={mapLang === l}
-            onClick={() => {
-              mapLangRef.current = l;
-              setMapLangState(l);
-              saveMapLang(l);
-              const map = mapRef.current;
-              // Our own layers (pins, events, labels we draw) keep their names.
-              if (map) {
-                setMapLang(map, l, (id) => EVENT_LAYERS.includes(id) || /^(pins|pin-labels|ai-target|outside)/.test(id));
-                // Our story pins: their English name in EN (the Bangla one when a story has none).
-                if (map.getLayer("pin-labels")) map.setLayoutProperty("pin-labels", "text-field", ["get", l === "en" ? "label_en" : "label"]);
-              }
-            }}
-            className={`h-7 min-w-9 rounded-full px-2 transition-colors ${mapLang === l ? "bg-accent text-on-accent" : "text-ink-2 hover:text-ink"}`}
-          >
-            {l === "bn" ? "বাংলা" : "EN"}
-          </button>
-        ))}
-      </div>
-
       {/* Turned or tilted map: one tap puts it back north-up and flat. */}
       {turned && (
         <button
@@ -962,7 +976,7 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
           onClick={() => mapRef.current?.easeTo({ bearing: 0, pitch: 0, duration: 500 })}
           aria-label="মানচিত্র সোজা করুন"
           title="মানচিত্র সোজা করুন (উত্তর উপরে)"
-          className="absolute start-3 bottom-24 z-20 grid size-11 place-items-center rounded-full bg-card text-ink shadow-float transition-colors hover:text-accent md:start-4 md:bottom-28"
+          className="absolute start-3 bottom-[calc(6rem+var(--tabbar-h))] z-20 grid size-11 place-items-center rounded-full bg-card text-ink shadow-float transition-colors hover:text-accent md:start-4 md:bottom-28"
         >
           <svg viewBox="0 0 24 24" className="size-6" aria-hidden>
             <path d="M12 3l4 9h-8z" fill="#c0392b" />
@@ -971,20 +985,23 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
         </button>
       )}
 
-      {/* "On this day": top right, out of the way of search; hidden while a panel covers that side. */}
-      {!panelOpen && (
-        <button
-          type="button"
-          onClick={() => openOtd(null)}
-          className="absolute end-3 top-[calc(0.75rem+3rem+0.5rem)] z-20 flex h-11 items-center gap-2 rounded-full bg-card ps-3 pe-4 text-meta font-semibold text-ink shadow-float transition-colors hover:text-accent active:bg-accent-soft md:end-4 md:top-4 md:h-12"
-        >
-          <svg viewBox="0 0 20 20" className="size-[18px] text-accent" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden>
-            <rect x="3" y="4.5" width="14" height="12" rx="2" />
-            <path d="M3 8.5h14M7 2.5v4M13 2.5v4" strokeLinecap="round" />
-          </svg>
-          আজকের দিনে
-        </button>
+      {/* "On this day": the day's first story, bottom left (phones: above the tab bar). */}
+      {!panelOpen && !showTip && nearest.length === 0 && (
+        <div className="pointer-events-none absolute inset-x-3 bottom-[calc(var(--tabbar-h)+2rem)] z-10 md:inset-x-auto md:start-4 md:bottom-4">
+          <OnThisDayCard
+            onPick={(e) => openOtd(e.slug, e.lat !== null && e.lng !== null ? { lat: e.lat, lng: e.lng } : null, { md: e.md, step: e.step })}
+            onAll={() => openOtd(null)}
+          />
+        </div>
       )}
+
+      {/* Zoom (desktop), above the attribution line. */}
+      <div className={`pointer-events-none absolute end-4 bottom-10 z-10 ${panelOpen ? "md:end-[calc(var(--panel-w)+2rem)]" : ""}`}>
+        <ZoomButtons onZoom={(by) => (by > 0 ? mapRef.current?.zoomIn() : mapRef.current?.zoomOut())} />
+      </div>
+
+      {/* Phones: the tab bar, while nothing covers the map. */}
+      {tabBar && <TabBar onMap={goToMap} onOtd={() => openOtd(null)} lang={mapLang} onLang={chooseLang} />}
     </div>
   );
 }

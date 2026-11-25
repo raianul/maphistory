@@ -51,6 +51,12 @@
   /* Layout */
   --header-h: 3.25rem;
   --panel-w: 440px;
+  /* The place panel: glued to the edge by default (admin); floating as a card on the map page. */
+  --panel-gap: 0px;
+  --panel-radius: 0px;
+  --panel-shadow: -1px 0 0 var(--line), -12px 0 32px rgb(16 24 40 / 0.05);
+  /* The phone tab bar's height (map page only; 0 elsewhere and while a panel is open). */
+  --tabbar-h: 0px;
 
   /* Motion */
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
@@ -70,6 +76,28 @@
   :root {
     --panel-w: 480px;
   }
+}
+
+/* The map page draws its own floating header (MapShell): the site header steps aside, and the
+   place panel floats as a rounded card. :has() keeps this in CSS, so the server HTML is right. */
+:root:has(.map-shell) {
+  --header-h: 0px;
+  --panel-gap: 1rem;
+  --panel-radius: 1.5rem;
+  --panel-shadow: 0 2px 4px rgb(16 24 40 / 0.04), 0 16px 48px rgb(16 24 40 / 0.16);
+}
+:root:has(.map-shell) .site-header {
+  display: none;
+}
+@media (max-width: 767px) {
+  :root:has(.map-shell.with-tabbar) {
+    --tabbar-h: calc(4rem + env(safe-area-inset-bottom));
+  }
+}
+/* The map's attribution stays above the phone tab bar. */
+.map-shell .maplibregl-ctrl-bottom-left,
+.map-shell .maplibregl-ctrl-bottom-right {
+  margin-bottom: var(--tabbar-h);
 }
 
 /* Reading sizes: phones one step larger (held at arm's length; Bangla vowel signs need it). */

@@ -29,11 +29,14 @@ function saveRecent(r: GeoResult) {
 export function SearchBox({
   onPickGeo,
   onOpen,
+  leading,
   trailing,
 }: {
   onPickGeo: (r: GeoResult) => void;
   /** Called when the results list opens (the map makes room for it). */
   onOpen?: () => void;
+  /** Rendered inside the box at the start instead of the search icon (the brand mark on phones). */
+  leading?: React.ReactNode;
   /** Rendered inside the box at the end (the near-me button). */
   trailing?: React.ReactNode;
 }) {
@@ -97,14 +100,16 @@ export function SearchBox({
   return (
     <div className="relative">
       <div
-        className={`flex h-12 items-center gap-0.5 rounded-2xl bg-card ps-3.5 pe-0.5 shadow-float transition-shadow md:gap-1 md:pe-1 ${
+        className={`flex h-[52px] items-center gap-0.5 rounded-full bg-card pe-1 shadow-float transition-shadow md:gap-1 ${leading ? "ps-1.5" : "ps-4"} ${
           open ? "shadow-menu ring-2 ring-accent-ring" : ""
         }`}
       >
-        <svg viewBox="0 0 20 20" className="size-[18px] shrink-0 text-muted" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
-          <circle cx="9" cy="9" r="5.5" />
-          <path d="m13.2 13.2 3.8 3.8" strokeLinecap="round" />
-        </svg>
+        {leading ?? (
+          <svg viewBox="0 0 20 20" className="size-[18px] shrink-0 text-muted" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
+            <circle cx="9" cy="9" r="5.5" />
+            <path d="m13.2 13.2 3.8 3.8" strokeLinecap="round" />
+          </svg>
+        )}
         <input
           ref={input}
           type="search"

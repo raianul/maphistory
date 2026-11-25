@@ -10,8 +10,8 @@ import { useEffect, useRef, useState } from "react";
  */
 type Snap = "peek" | "half" | "full";
 const HALF = 0.56;
-/** Full height stops below the floating search bar (header + search + gaps), so both stay usable. */
-const FULL_GAP_PX = 128;
+/** Full height stops below the floating search bar (search + gaps; plus the site header where there is one). */
+const FULL_GAP_PX = 76;
 /** The peek sheet: handle, title row and a little breathing room (+ safe area). */
 const PEEK_PX = 88;
 /** Dragged below this share of the peek height, the sheet closes. */
@@ -105,7 +105,7 @@ export function SidePanel({
   useEffect(() => () => void window.dispatchEvent(new CustomEvent(SHEET_EVENT, { detail: 0 })), []);
 
   const peekPx = () => PEEK_PX + safeBottom();
-  const fullPx = () => window.innerHeight - FULL_GAP_PX - safeTop();
+  const fullPx = () => window.innerHeight - FULL_GAP_PX - headerPx() - safeTop();
   const snapPx = (s: Snap) => (s === "peek" ? peekPx() : s === "half" ? Math.round(window.innerHeight * HALF) : fullPx());
 
   function onPointerDown(e: React.PointerEvent) {
@@ -168,7 +168,7 @@ export function SidePanel({
         ? `calc(${PEEK_PX}px + env(safe-area-inset-bottom))`
         : snap === "half"
           ? `${HALF * 100}dvh`
-          : `calc(100dvh - ${FULL_GAP_PX}px - env(safe-area-inset-top))`;
+          : `calc(100dvh - ${FULL_GAP_PX}px - var(--header-h) - env(safe-area-inset-top))`;
 
   return (
     <aside
@@ -177,7 +177,7 @@ export function SidePanel({
       data-snap={snap}
       style={{ "--sheet-h": height } as React.CSSProperties}
       className={`fixed inset-x-0 bottom-0 z-20 flex h-[var(--sheet-h)] flex-col rounded-t-sheet bg-paper shadow-sheet
-        md:inset-x-auto md:end-0 md:top-[var(--header-h)] md:h-auto md:w-[var(--panel-w)] md:rounded-none md:shadow-panel
+        md:inset-x-auto md:end-[var(--panel-gap)] md:top-[calc(var(--header-h)+var(--panel-gap))] md:bottom-[var(--panel-gap)] md:h-auto md:w-[var(--panel-w)] md:overflow-hidden md:rounded-[var(--panel-radius)] md:shadow-[var(--panel-shadow)]
         ${closing ? "animate-[sheetout_.18s_ease-in_forwards] md:animate-[panelout_.18s_ease-in_forwards]" : "animate-[sheetin_.28s_var(--ease-out)] md:animate-[panelin_.28s_var(--ease-out)]"}
         ${dragPx !== null ? "" : "transition-[height] duration-[260ms] ease-[var(--ease-out)]"}`}
     >
@@ -248,4 +248,6 @@ function inset(side: "top" | "bottom"): number {
   return h;
 }
 const safeBottom = () => inset("bottom");
+/** The site header's height in px (0 on the map page, where it is hidden). */
+const headerPx = () => (typeof document === "undefined" ? 0 : (document.querySelector(".site-header")?.getBoundingClientRect().height ?? 0));
 const safeTop = () => inset("top");
