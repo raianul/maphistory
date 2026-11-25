@@ -21,6 +21,8 @@ describe("place categories", () => {
     expect(g("সচিবালয়")).toEqual(["government"]);
     expect(g("হাইকোর্ট ভবন")).toEqual(["government"]);
     expect(g("স্টেডিয়াম")).toEqual(["stadium"]);
+    expect(g("হাসপাতাল")).toEqual(["hospital"]);
+    expect(g("মেডিকেল কলেজ ও হাসপাতাল")).toEqual(["hospital", "education"]);
     expect(g("ক্রীড়া কমপ্লেক্স")).toEqual(["stadium"]);
     expect(g("খেলার মাঠ")).toEqual(["stadium"]);
     expect(g("ঐতিহাসিক হল")).toEqual(["building"]);

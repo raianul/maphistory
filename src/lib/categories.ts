@@ -15,6 +15,7 @@ export const CATEGORIES = [
   { id: "fort", bn: "দুর্গ ও প্রাসাদ", en: "Forts & palaces", match: /দুর্গ(?![\u0980-\u09FF])|কেল্লা|প্রাসাদ|মঞ্জিল|মহল(?![\u0980-\u09FF])|\bfort\b|palace/i },
   { id: "building", bn: "ঐতিহাসিক ভবন", en: "Landmark buildings", match: /ভবন|দালান|কাটরা|হল(?![\u0980-\u09FF])|building|\bhall\b/i },
   { id: "government", bn: "সরকারি ভবন", en: "Government buildings", match: /সরকারি|সংসদ|সচিবালয়|আদালত|হাইকোর্ট|মন্ত্রণালয়|বঙ্গভবন|গণভবন|parliament|secretariat|\bcourt\b|ministry|government/i },
+  { id: "hospital", bn: "হাসপাতাল", en: "Hospitals", match: /হাসপাতাল|চিকিৎসা|মেডিক্যাল|মেডিকেল|hospital|medical/i },
   { id: "museum", bn: "জাদুঘর", en: "Museums", match: /জাদুঘর|যাদুঘর|সংগ্রহশালা|museum/i },
   { id: "education", bn: "স্কুল ও বিশ্ববিদ্যালয়", en: "Schools & universities", match: /বিদ্যাল|কলেজ|স্কুল|মাদ্রাসা|শিক্ষা প্রতিষ্ঠান|university|college|school|madrasa/i },
   { id: "park", bn: "পার্ক ও উদ্যান", en: "Parks & gardens", match: /উদ্যান|পার্ক(?![\u0980-\u09FF])|বাগান(?![\u0980-\u09FF])|ময়দান|\bpark\b|garden/i },
