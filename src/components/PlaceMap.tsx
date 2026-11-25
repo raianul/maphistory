@@ -18,7 +18,8 @@ import { slugOf, track, withCampaign } from "@/lib/analytics";
 import { StepPopup } from "./StepPopup";
 import { SHEET_EVENT, SHEET_REQUEST } from "./SidePanel";
 import { SearchBox } from "./SearchBox";
-import { Brand, BrandMark, LangSwitch, MoreMenu, OnThisDayCard, SectionNav, TabBar, ZoomButtons } from "./MapShell";
+import { Brand, BrandMark, CategoryChips, LangSwitch, MoreMenu, OnThisDayCard, PinPreview, SectionNav, TabBar, ZoomButtons, type PinFilter, type PinPreviewData } from "./MapShell";
+import type { CategoryId } from "@/lib/categories";
 import { THEME } from "@/lib/theme";
 import { addEventLayers, allBounds, drawSteps, EVENT_CLICK_LAYERS, EVENT_LAYERS, stepBounds } from "@/lib/events/draw";
 import type { PublicEvent } from "@/lib/events/public";
@@ -36,7 +37,20 @@ function toGeoJSON(pins: MapPin[]): GeoData {
     features: pins.map((p) => ({
       type: "Feature",
       geometry: { type: "Point", coordinates: [p.lng, p.lat] },
-      properties: { label: p.label, label_en: p.label_en ?? p.label, verified: p.verified, name: p.name, kind: p.kind ?? "", slug: p.slug ?? "" },
+      properties: {
+        label: p.label,
+        label_en: p.label_en ?? p.label,
+        verified: p.verified,
+        name: p.name,
+        kind: p.kind ?? "",
+        slug: p.slug ?? "",
+        // For the chips and the hover preview.
+        category: p.category ?? "",
+        video: !!p.video,
+        thumb: p.thumb ?? "",
+        line: p.line ?? "",
+        likes: p.likes ?? 0,
+      },
     })),
   };
 }
@@ -96,6 +110,12 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
   const [showTip, setShowTip] = useState(false);
   const tipMarker = useRef<Marker | null>(null);
   const tooltip = useRef<HTMLDivElement>(null);
+  /** The chip chosen above the map (one category, or "has a video"); null = every pin. */
+  const [pinFilter, setPinFilter] = useState<PinFilter | null>(null);
+  /** Zoomed in far enough for pins (and so for their chips). */
+  const [pinsShown, setPinsShown] = useState(false);
+  /** Desktop: the pin under the pointer, previewed in a small card. */
+  const [preview, setPreview] = useState<PinPreviewData | null>(null);
   /** The floating search, so the map knows where its visible area begins. */
   const overlayRef = useRef<HTMLDivElement>(null);
 
@@ -139,6 +159,18 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
   useEffect(() => {
     if (ready) (mapRef.current?.getSource("pins") as GeoJSONSource | undefined)?.setData(toGeoJSON(pins));
   }, [ready, pins]);
+
+  // A chip shows only its pins (and their names).
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!ready || !map) return;
+    const only = pinFilter === null ? null : pinFilter === "video" ? ["get", "video"] : ["==", ["get", "category"], pinFilter];
+    for (const id of ["pins", "pin-labels"]) map.setFilter(id, only as Parameters<MLMap["setFilter"]>[1]);
+    setPreview(null);
+  }, [ready, pinFilter]);
+  /** The chips: the kinds of place among the pins loaded so far. */
+  const pinKinds = [...new Set(pins.flatMap((p) => (p.category ? [p.category] : [])))] as CategoryId[];
+  const pinVideos = pins.some((p) => p.video);
 
   // The open place comes from the URL: /place/<slug> shows its story in the side panel.
   const router = useRouter();
@@ -511,6 +543,7 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
           },
         });
         map.on("click", "pins", (e: MapLayerMouseEvent) => {
+          setPreview(null);
           const f = e.features?.[0];
           if (!f || f.geometry.type !== "Point") return;
           const [lng, lat] = f.geometry.coordinates as [number, number];
@@ -579,6 +612,11 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
           const tip = tooltip.current;
           const name = shownLabel(e.features?.[0]?.properties);
           if (!tip) return;
+          // Over one of our pins: its own preview card shows instead.
+          if (map.queryRenderedFeatures(e.point, { layers: ["pins"] }).length) {
+            tip.hidden = true;
+            return;
+          }
           if (!name || !inRegion(e.lngLat.lat, e.lngLat.lng)) {
             tip.hidden = true;
             map.getCanvas().style.cursor = "";
@@ -608,8 +646,44 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
           source: "ai-target",
           paint: { "circle-radius": 4, "circle-color": THEME.accent, "circle-stroke-color": THEME.white, "circle-stroke-width": 1.5 },
         }, "pins");
+        // Desktop hover preview: a small card above the pin (below it near the top of the map).
+        let hovered = "";
+        const canHover = window.matchMedia("(hover: hover) and (pointer: fine)").matches;
         map.on("mouseenter", "pins", () => (map.getCanvas().style.cursor = "pointer"));
-        map.on("mouseleave", "pins", () => (map.getCanvas().style.cursor = ""));
+        map.on("mouseleave", "pins", () => {
+          map.getCanvas().style.cursor = "";
+          hovered = "";
+          setPreview(null);
+        });
+        map.on("mousemove", "pins", (e: MapLayerMouseEvent) => {
+          const f = e.features?.[0];
+          if (!canHover || !f || f.geometry.type !== "Point") return;
+          const p = f.properties as { name: string; label: string; label_en: string; line: string; thumb: string; verified: boolean; likes: number };
+          const key = `${p.name}@${(f.geometry.coordinates as number[]).join(",")}`;
+          if (key === hovered) return;
+          hovered = key;
+          if (tooltip.current) tooltip.current.hidden = true;
+          const at = map.project(f.geometry.coordinates as [number, number]);
+          const width = map.getContainer().clientWidth;
+          setPreview({
+            label: mapLangRef.current === "en" ? p.label_en : p.label,
+            line: p.line || undefined,
+            thumb: p.thumb || undefined,
+            verified: p.verified,
+            likes: p.likes || undefined,
+            x: Math.min(Math.max(at.x, 140), width - 140),
+            y: at.y,
+            below: at.y < (p.thumb ? 330 : 200),
+          });
+        });
+        map.on("movestart", () => {
+          hovered = "";
+          setPreview(null);
+        });
+        // Chips only where pins show.
+        const zoomed = () => setPinsShown(map.getZoom() >= PIN_MIN_ZOOM);
+        map.on("zoomend", zoomed);
+        zoomed();
         // Event timelines (On this day): drawn under the pins, over the base map.
         addEventLayers(map, THEME.white, THEME.ink);
         for (const id of EVENT_LAYERS) if (map.getLayer(id)) map.moveLayer(id, "ai-target");
@@ -878,12 +952,21 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
         {!panelOpen && <MoreMenu />}
         </div>
 
+        {pinsShown && (
+          // Phones: not while a story's sheet is open (desktop keeps them beside the panel).
+          <div className={panelOpen ? "hidden md:block" : undefined}>
+            <CategoryChips available={pinKinds} video={pinVideos} value={pinFilter} onChange={setPinFilter} />
+          </div>
+        )}
+
         {locError && (
           <p role="alert" className="pointer-events-auto mt-2 w-fit max-w-full rounded-control bg-card px-3 py-2 text-meta text-danger shadow-float">
             {locError}
           </p>
         )}
       </div>
+
+      {preview && <PinPreview p={preview} />}
 
       {/* Hover hint over clickable labels (desktop) */}
       <div

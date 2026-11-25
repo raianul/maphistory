@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { CATEGORIES, type CategoryId } from "@/lib/categories";
 import type { OnThisDay, PublicEventCard } from "@/lib/events/public";
 import { FACEBOOK_URL } from "@/lib/links";
 import type { MapLang } from "@/lib/map-style";
@@ -10,7 +11,7 @@ import { dayBn } from "./OnThisDayPanel";
 /*
  * The map page's own frame, floating over the map: brand, sections (মানচিত্র · আজকের দিনে),
  * map language, "আরও" (About, Privacy, Facebook); on phones a tab bar at the bottom; the
- * "On this day" card; zoom buttons. The site header steps aside on this page (globals.css).
+ * "On this day" card; zoom buttons; the category chips and the pin preview. The site header steps aside on this page (globals.css).
  */
 
 const pill = "pointer-events-auto rounded-full bg-card shadow-float";
@@ -248,6 +249,72 @@ export function ZoomButtons({ onZoom }: { onZoom: (by: 1 | -1) => void }) {
           <path d="M5 12h14" />
         </svg>
       </button>
+    </div>
+  );
+}
+
+/** A chip's filter: one category, or places with a video. */
+export type PinFilter = CategoryId | "video";
+
+/**
+ * Chips under the search that filter the pins: only kinds the loaded pins have (no chip that
+ * would empty the map), plus "ভিডিও আছে". Tapping the chosen chip again shows every pin.
+ */
+export function CategoryChips({ available, video, value, onChange }: { available: CategoryId[]; video: boolean; value: PinFilter | null; onChange: (f: PinFilter | null) => void }) {
+  const chips: { id: PinFilter; label: string }[] = [
+    ...CATEGORIES.filter((c) => available.includes(c.id)).map((c) => ({ id: c.id as PinFilter, label: c.bn })),
+    ...(video ? [{ id: "video" as const, label: "▶ ভিডিও আছে" }] : []),
+  ];
+  if (chips.length === 0) return null;
+  const chip = "h-9 shrink-0 rounded-full px-3.5 text-meta font-semibold whitespace-nowrap shadow-float transition-colors";
+  return (
+    <div role="group" aria-label="জায়গার ধরন" className="no-scrollbar pointer-events-auto -mx-3 mt-2 flex w-fit max-w-[calc(100%+1.5rem)] gap-2 overflow-x-auto px-3 pb-2 md:mx-0 md:max-w-full md:px-0">
+      {value && (
+        <button type="button" onClick={() => onChange(null)} className={`${chip} bg-card text-ink-2 hover:text-ink`}>
+          সব
+        </button>
+      )}
+      {chips.map((c) => {
+        const on = c.id === value;
+        return (
+          <button
+            key={c.id}
+            type="button"
+            aria-pressed={on}
+            onClick={() => onChange(on ? null : c.id)}
+            className={`${chip} ${on ? "bg-accent text-on-accent hover:bg-accent-hover" : "bg-card text-ink hover:bg-hover"}`}
+          >
+            {c.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** What the hover preview shows for a pin. */
+export type PinPreviewData = { label: string; line?: string; thumb?: string; verified: boolean; likes?: number; x: number; y: number; below: boolean };
+
+/** Desktop: pointing at a pin shows a small card (picture, what it is, ✓, likes) before clicking. */
+export function PinPreview({ p }: { p: PinPreviewData }) {
+  return (
+    <div
+      className="pointer-events-none absolute top-0 left-0 z-20 w-64 animate-[fadein_.12s_ease] overflow-hidden rounded-2xl bg-card shadow-menu"
+      style={{ transform: `translate(calc(${p.x}px - 50%), calc(${p.y}px ${p.below ? "+ 18px" : "- 100% - 18px"}))` }}
+    >
+      {p.thumb && (
+        // eslint-disable-next-line @next/next/no-img-element -- a small outside picture (Commons / YouTube)
+        <img src={p.thumb} alt="" onError={(e) => (e.currentTarget.hidden = true)} className="aspect-video w-full bg-hover object-cover" />
+      )}
+      <div className="p-3">
+        <p className="line-clamp-2 text-body leading-snug font-bold">{p.label}</p>
+        {p.line && <p className="mt-0.5 truncate text-meta text-muted">{p.line}</p>}
+        <p className="mt-2 flex items-center gap-2.5 text-meta">
+          {p.verified && <span className="font-semibold text-accent">✓ যাচাইকৃত</span>}
+          {!!p.likes && <span className="text-ink-2">👍 {p.likes.toLocaleString("bn-BD")}</span>}
+          <span className="ms-auto font-semibold text-accent">গল্প পড়ুন →</span>
+        </p>
+      </div>
     </div>
   );
 }

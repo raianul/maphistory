@@ -6,6 +6,7 @@ import { createHash } from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { AiPlace } from "./ai/types";
 import type { StoryTarget } from "./ai/place-story";
+import { categoryOf, guessCategory } from "./categories";
 import type { MapPin } from "./map-pin";
 import { getPlaces } from "./places";
 import type { PageCandidate } from "./place-links";
@@ -187,10 +188,13 @@ export async function listStories() {
  * queries on lat/lng, served by the stories_lat_lng index. Empty before the show_on_map migration.
  */
 export async function listMapPins(b: Bounds, limit = PINS_PER_TILE): Promise<MapPin[]> {
-  const query = (status: "verified" | "ai", n: number) =>
+  // What a pin shows: its name, its category chip, and the hover preview (picture, kind · era).
+  const base =
+    "name_bn,name_en,slug,lat,lng,kind,status,label:story->>name_bn,kind_bn:story->>kind_bn,era:story->>era_label_bn,photo:image->>src,videos:place_videos(thumbnail_url,sort_order)";
+  const query = (columns: string, status: "verified" | "ai", n: number) =>
     db()
       .from("stories")
-      .select("name_bn,name_en,slug,lat,lng,kind,status,label:story->>name_bn")
+      .select(columns)
       .eq("show_on_map", true)
       .eq("status", status)
       // Edges: south/west inclusive, north/east exclusive, so a pin on a border is in exactly one square.
@@ -201,26 +205,76 @@ export async function listMapPins(b: Bounds, limit = PINS_PER_TILE): Promise<Map
       .order("views", { ascending: false })
       .limit(n);
 
-  const verified = await query("verified", limit);
+  // Before the category migration: without the editor's choice (the guess still works).
+  let columns = `${base},category`;
+  let verified = await query(columns, "verified", limit);
+  if (missingColumn(verified.error?.code)) verified = await query((columns = base), "verified", limit);
   if (verified.error) {
     if (missingColumn(verified.error.code)) return [];
     throw new Error(`Database: ${verified.error.message}`);
   }
-  const room = limit - verified.data.length;
-  const ai = room > 0 ? await query("ai", room) : { data: [], error: null };
+  const room = limit - (verified.data?.length ?? 0);
+  const ai = room > 0 ? await query(columns, "ai", room) : { data: [], error: null };
   if (ai.error) throw new Error(`Database: ${ai.error.message}`);
 
-  type PinRow = { name_bn: string; name_en: string | null; slug: string | null; lat: number; lng: number; kind: string | null; status: string; label: string | null };
-  return ([...verified.data, ...ai.data] as PinRow[]).map((r) => ({
-    label: r.label?.trim() || r.name_bn,
-    label_en: r.name_en?.trim() || undefined,
-    slug: r.slug ?? undefined,
-    name: r.name_bn,
-    lat: r.lat,
-    lng: r.lng,
-    kind: r.kind ?? undefined,
-    verified: r.status === "verified",
-  }));
+  type PinRow = {
+    name_bn: string;
+    name_en: string | null;
+    slug: string | null;
+    lat: number;
+    lng: number;
+    kind: string | null;
+    status: string;
+    label: string | null;
+    kind_bn: string | null;
+    era: string | null;
+    photo: string | null;
+    videos: { thumbnail_url: string | null; sort_order: number }[] | null;
+    category?: string | null;
+  };
+  const rows = [...(verified.data ?? []), ...(ai.data ?? [])] as unknown as PinRow[];
+  const { likesFor } = await import("./reactions");
+  const likes = await likesFor(rows.flatMap((r) => (r.slug ? [r.slug] : [])));
+  return rows.map((r) => {
+    const videos = [...(r.videos ?? [])].sort((a, b) => a.sort_order - b.sort_order);
+    const thumb = smallPicture(r.photo) ?? smallPicture(videos.find((v) => v.thumbnail_url)?.thumbnail_url);
+    const line = [r.kind_bn?.trim(), r.era?.trim()].filter(Boolean).join(" · ");
+    const category = categoryOf(r.category, guessCategory({ kind_bn: r.kind_bn, era: r.era }));
+    const n = r.slug ? likes.get(r.slug) : undefined;
+    return {
+      label: r.label?.trim() || r.name_bn,
+      label_en: r.name_en?.trim() || undefined,
+      slug: r.slug ?? undefined,
+      name: r.name_bn,
+      lat: r.lat,
+      lng: r.lng,
+      kind: r.kind ?? undefined,
+      verified: r.status === "verified",
+      ...(category ? { category } : {}),
+      ...(videos.length ? { video: true } : {}),
+      ...(thumb ? { thumb } : {}),
+      ...(line ? { line } : {}),
+      ...(n ? { likes: n } : {}),
+    };
+  });
+}
+
+/**
+ * A hover-preview-sized picture: Commons at 500 px (a standard thumbnail width; originals can be
+ * many MB), YouTube's medium still. Commons tracking parameters are dropped.
+ */
+export function smallPicture(src: string | null | undefined): string | undefined {
+  if (!src) return undefined;
+  const url = src.split("?")[0];
+  const commons = url.match(/^https:\/\/(?:upload|thumb)\.wikimedia\.org\/wikipedia\/(\w+)\/(?:thumb\/)?([0-9a-f]\/[0-9a-f]{2})\/([^/]+)/);
+  if (commons) {
+    const [, wiki, dir, file] = commons;
+    // Only photos have a same-format thumbnail; anything else stays as it was.
+    if (!/\.(jpe?g|png|webp)$/i.test(file)) return url;
+    return `https://upload.wikimedia.org/wikipedia/${wiki}/thumb/${dir}/${file}/500px-${file}`;
+  }
+  if (/(ytimg|youtube)\.com\/vi\//.test(url)) return url.replace(/\/(hq|sd|maxres)default\.jpg$/, "/mqdefault.jpg");
+  return url;
 }
 
 export async function getStoryForAdmin(id: string) {
@@ -232,7 +286,10 @@ export async function getStoryForAdmin(id: string) {
   if (!story.data) return undefined;
   const { reactionTotals } = await import("./reactions");
   const votes = story.data.slug ? (await reactionTotals()).get(story.data.slug) : undefined;
-  return { ...story.data, likes: votes?.likes ?? 0, dislikes: votes?.dislikes ?? 0, report_list: reports.data ?? [], videos: await listVideos(id) };
+  // The category the map would guess, so the admin shows what "automatic" means for this place.
+  const st = story.data.story as { kind_bn?: string; era_label_bn?: string } | null;
+  const category_guess = guessCategory({ kind_bn: st?.kind_bn, era: st?.era_label_bn }) ?? null;
+  return { ...story.data, category_guess, likes: votes?.likes ?? 0, dislikes: votes?.dislikes ?? 0, report_list: reports.data ?? [], videos: await listVideos(id) };
 }
 
 export async function updateStory(id: string, patch: Record<string, unknown>) {
@@ -242,6 +299,9 @@ export async function updateStory(id: string, patch: Record<string, unknown>) {
   if (error?.code === "23514" && patch.country) ({ data, error } = await update({ ...patch, country: null }));
   if (missingColumn(error?.code) && "show_on_map" in patch) {
     throw new Error("The show_on_map column doesn't exist yet: run the show_on_map migration in Supabase.");
+  }
+  if (missingColumn(error?.code) && "category" in patch) {
+    throw new Error("The category column doesn't exist yet: run the story_category migration in Supabase.");
   }
   if (error) throw new Error(`Database: ${error.message}`);
   return data;

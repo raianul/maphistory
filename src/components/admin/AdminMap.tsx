@@ -15,6 +15,7 @@ import { StoryEditor } from "./StoryEditor";
 import { VideoManager } from "./VideoManager";
 import type { PlaceVideo } from "@/lib/video";
 import { THEME } from "@/lib/theme";
+import { CATEGORIES, categoryLabel, NO_CATEGORY, type CategoryId } from "@/lib/categories";
 
 type Status = "ai" | "verified" | "hidden";
 
@@ -44,6 +45,10 @@ type Detail = Row & {
   verified_at: string | null;
   report_list: { id: number; message: string | null; created_at: string }[];
   videos: PlaceVideo[];
+  /** The editor's category for the map's chips (null = guessed; undefined before the category migration). */
+  category?: string | null;
+  /** What the guess from the story's kind gives. */
+  category_guess: CategoryId | null;
 };
 
 const STATUS: Record<Status, { bn: string; color: string }> = {
@@ -455,6 +460,28 @@ function StoryPanel({ id, onClose, onChanged }: { id: string; onClose: () => voi
                 </button>
               )}
             </div>
+            {/* Category: the chip that finds this pin on the public map. */}
+            <label className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+              <span className="font-semibold">Category</span>
+              <select
+                value={detail.category ?? ""}
+                disabled={!!busy || detail.category === undefined}
+                title={detail.category === undefined ? "Run the story_category migration first" : undefined}
+                onChange={(e) =>
+                  call("category", `/api/admin/stories/${id}`, { method: "PATCH", body: JSON.stringify({ category: e.target.value || null }) })
+                }
+                className="rounded-full border border-line bg-card px-3 py-1.5 text-sm disabled:opacity-50"
+              >
+                <option value="">Automatic ({detail.category_guess ? categoryLabel(detail.category_guess) : "none"})</option>
+                {CATEGORIES.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.bn} · {c.en}
+                  </option>
+                ))}
+                <option value={NO_CATEGORY}>None</option>
+              </select>
+              {busy === "category" && <span className="text-muted">…</span>}
+            </label>
             {error && <p className="mt-2 text-sm text-red-800">{error}</p>}
           </div>
 

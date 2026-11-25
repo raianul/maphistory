@@ -310,3 +310,11 @@ body {
     transition-duration: 1ms !important;
   }
 }
+
+/* A row that scrolls sideways without a scrollbar (the map's category chips). */
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}

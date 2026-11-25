@@ -48,6 +48,14 @@ export async function setReaction(slug: string, visitor: string, value: Reaction
   if (error) throw new Error(`Database: ${error.message}`);
 }
 
+/** Like counts for these places (the map's pins), by slug. Empty before the reactions migration. */
+export async function likesFor(slugs: string[]): Promise<Map<string, number>> {
+  if (slugs.length === 0) return new Map();
+  const { data, error } = await db().from("place_reaction_totals").select("slug,likes").in("slug", slugs).gt("likes", 0);
+  if (error) return new Map();
+  return new Map((data ?? []).map((r) => [r.slug as string, r.likes as number]));
+}
+
 /** Likes and dislikes by slug, for the admin. Empty before the reactions migration. */
 export async function reactionTotals(): Promise<Map<string, { likes: number; dislikes: number }>> {
   const { data, error } = await db().from("place_reaction_totals").select("slug,likes,dislikes");

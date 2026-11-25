@@ -1,5 +1,7 @@
 // Client-safe: the shape of a pin on the public map (filled by db.ts on the server).
 
+import type { CategoryId } from "./categories";
+
 /** A pin on the public map: a saved story the admin switched on ("ম্যাপে পিন"). */
 export type MapPin = {
   /** Shown on the map: the story's own Bangla name. */
@@ -14,6 +16,14 @@ export type MapPin = {
   lng: number;
   kind?: string;
   verified: boolean;
+  /** For the chips that filter the pins (see categories.ts). */
+  category?: CategoryId;
+  /** Has at least one video ("ভিডিও আছে"). */
+  video?: boolean;
+  /** For the hover preview: a small picture (the story's photo, else its video's), what it is, likes. */
+  thumb?: string;
+  line?: string;
+  likes?: number;
 };
 
 /**
