@@ -410,7 +410,12 @@ export function stepOnDate(steps: Pick<TimelineStep, "id" | "step_year" | "step_
 export type EventListRow = Pick<
   HistoricalEvent,
   "id" | "slug" | "title" | "status" | "event_year" | "event_month" | "event_day" | "date_precision" | "date_label" | "recurring" | "place_name" | "city" | "country" | "updated_at" | "published_at"
-> & { source_count: number };
+> & {
+  source_count: number;
+  step_count: number;
+  /** In-review events on the admin board: what still blocks publishing ([] = ready). */
+  problems?: string[];
+};
 
 export type EventSource = SourceFieldsT & {
   id: string;

@@ -1,8 +1,8 @@
 import { requireAdmin } from "@/lib/admin-auth";
-import { createEvent, listEvents, type EventListFilters } from "@/lib/events/db";
-import { EVENT_STATUSES, EventFields, type EventStatus } from "@/lib/events/schema";
+import { createEvent, getEvent, listEvents, type EventListFilters } from "@/lib/events/db";
+import { EVENT_STATUSES, EventFields, publishProblems, type EventStatus } from "@/lib/events/schema";
 
-/** Admin list: ?q=&status=&month=&day=&country= */
+/** Admin list: ?q=&status=&month=&day=&country=, plus &board=1 for what blocks each in-review event from publishing. */
 export async function GET(req: Request) {
   const admin = await requireAdmin(req);
   if (admin instanceof Response) return admin;
@@ -17,7 +17,19 @@ export async function GET(req: Request) {
     country: /^[A-Za-z]{2}$/.test(p.get("country") ?? "") ? p.get("country")! : undefined,
   };
   try {
-    return Response.json({ events: await listEvents(filters) });
+    const events = await listEvents(filters);
+    if (p.get("board") === "1") {
+      // Few events wait for review at a time: each one's checklist, as Publish would check it.
+      await Promise.all(
+        events
+          .filter((e) => e.status === "review")
+          .map(async (e) => {
+            const b = await getEvent(e.id);
+            e.problems = b ? publishProblems(b.event, b.sources, b.steps) : [];
+          }),
+      );
+    }
+    return Response.json({ events });
   } catch (e) {
     return Response.json({ error: (e as Error).message }, { status: 500 });
   }

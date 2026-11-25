@@ -42,7 +42,7 @@ export async function listEvents(f: EventListFilters = {}): Promise<EventListRow
   let q = db()
     .from("historical_events")
     .select(
-      "id,slug,title,status,event_year,event_month,event_day,date_precision,date_label,recurring,place_name,city,country,updated_at,published_at,historical_event_sources(count)",
+      "id,slug,title,status,event_year,event_month,event_day,date_precision,date_label,recurring,place_name,city,country,updated_at,published_at,historical_event_sources(count),historical_event_timeline_steps(count)",
     )
     .order("updated_at", { ascending: false })
     .limit(500);
@@ -57,8 +57,12 @@ export async function listEvents(f: EventListFilters = {}): Promise<EventListRow
   }
   const { data, error } = await q;
   if (error) fail(error);
-  type Raw = Omit<EventListRow, "source_count"> & { historical_event_sources: { count: number }[] };
-  return (data as unknown as Raw[]).map(({ historical_event_sources, ...r }) => ({ ...r, source_count: historical_event_sources[0]?.count ?? 0 }));
+  type Raw = Omit<EventListRow, "source_count" | "step_count"> & { historical_event_sources: { count: number }[]; historical_event_timeline_steps: { count: number }[] };
+  return (data as unknown as Raw[]).map(({ historical_event_sources, historical_event_timeline_steps, ...r }) => ({
+    ...r,
+    source_count: historical_event_sources[0]?.count ?? 0,
+    step_count: historical_event_timeline_steps[0]?.count ?? 0,
+  }));
 }
 
 export type EventBundle = { event: HistoricalEvent; sources: EventSource[]; steps: TimelineStep[]; dates: EventDate[] };
