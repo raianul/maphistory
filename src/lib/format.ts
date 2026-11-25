@@ -131,3 +131,12 @@ export function ago(iso: string, now = Date.now()): string {
   if (s < 7 * 86_400) return `${Math.floor(s / 86_400)} days ago`;
   return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "Asia/Dhaka" });
 }
+
+/** "23.7104, 90.4074" (as Google Maps copies it) → { lat, lng }; undefined when it isn't that. */
+export function parseLatLng(text: string): { lat: number; lng: number } | undefined {
+  const m = text.trim().match(/^\(?\s*(-?\d{1,2}(?:\.\d+)?)\s*[,\s]\s*(-?\d{1,3}(?:\.\d+)?)\s*\)?$/);
+  if (!m) return undefined;
+  const lat = Number(m[1]);
+  const lng = Number(m[2]);
+  return Math.abs(lat) <= 90 && Math.abs(lng) <= 180 ? { lat, lng } : undefined;
+}

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import type { AiStoryDataT } from "@/lib/ai/types";
 import { CATEGORIES, categoryLabels, parseCategories, type CategoryId } from "@/lib/categories";
-import { ago } from "@/lib/format";
+import { ago, parseLatLng } from "@/lib/format";
 import { smallPicture } from "@/lib/pictures";
 import { adminFetch } from "@/lib/supabase-browser";
 import type { PlaceVideo } from "@/lib/video";
@@ -198,6 +198,7 @@ export function PlaceDetail({ id, onClose, onChanged }: { id: string; onClose: (
           disabled={!!busy}
           onChange={(category) => patch("category", { category })}
         />
+        <Location lat={d.lat} lng={d.lng} disabled={!!busy} onSave={(location) => patch("location", { location })} />
         <div className="flex flex-col gap-1 rounded-2xl border border-line px-4 py-3.5">
           <span className="font-semibold">What visitors think</span>
           <span className="text-meta text-ink-2">
@@ -398,6 +399,62 @@ function Categories({ stored, guess, disabled, onChange }: { stored: string | nu
           );
         })}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Where the pin is, a link to check it on Google Maps, and a way to move it: paste the right
+ * coordinates (Google Maps: right-click the spot, click the numbers to copy them).
+ */
+function Location({ lat, lng, disabled, onSave }: { lat: number; lng: number; disabled: boolean; onSave: (l: { lat: number; lng: number }) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState("");
+  const parsed = parseLatLng(text);
+  const here = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+  return (
+    <div className="flex flex-col gap-2 rounded-2xl border border-line px-4 py-3.5 @md:col-span-2 @3xl:col-span-3">
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <span className="font-semibold">Pin location</span>
+        <span className="text-meta text-muted tabular-nums">{here}</span>
+        <a href={`https://www.google.com/maps?q=${lat},${lng}`} target="_blank" rel="noreferrer" className="text-meta font-semibold text-accent hover:underline">
+          Check on Google Maps ↗
+        </a>
+        {!editing && (
+          <button type="button" disabled={disabled} onClick={() => setEditing(true)} className="ms-auto text-meta font-semibold text-accent hover:underline disabled:opacity-50">
+            Move pin
+          </button>
+        )}
+      </div>
+      {editing && (
+        <form
+          className="flex flex-wrap items-center gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!parsed) return;
+            onSave(parsed);
+            setEditing(false);
+            setText("");
+          }}
+        >
+          <input
+            id="pin-location"
+            autoFocus
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder="Paste coordinates, e.g. 23.7104, 90.4074"
+            aria-label="New coordinates"
+            className="min-w-0 flex-1 rounded-xl border border-line bg-card px-3 py-2 text-meta outline-none focus:border-accent"
+          />
+          <button type="submit" disabled={!parsed || disabled} className="h-9 rounded-full bg-accent px-4 text-meta font-semibold text-on-accent hover:bg-accent-hover disabled:opacity-50">
+            Save
+          </button>
+          <button type="button" onClick={() => setEditing(false)} className="h-9 rounded-full px-3 text-meta font-semibold text-ink-2 hover:bg-hover">
+            Cancel
+          </button>
+          <span className="basis-full text-micro text-muted">In Google Maps, right-click the right spot and click the numbers at the top to copy them.</span>
+        </form>
+      )}
     </div>
   );
 }

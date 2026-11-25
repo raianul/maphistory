@@ -122,6 +122,8 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
   const [collAt, setCollAt] = useState<number | null>(null);
   /** The সংগ্রহ list is open. */
   const [picker, setPicker] = useState(false);
+  /** The "সব ধরন" panel is open (the On this day card steps aside meanwhile). */
+  const [kindsPanel, setKindsPanel] = useState(false);
   const closePicker = useCallback(() => setPicker(false), []);
   /** Desktop: the pin under the pointer, previewed in a small card. */
   const [preview, setPreview] = useState<PinPreviewData | null>(null);
@@ -1079,9 +1081,10 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
             <CollectionBar c={coll} at={collAt} onStep={stepCollection} onClose={closeCollection} />
           </div>
         ) : (
-          pinsShown && (
+          pinsShown &&
+          !picker && (
             <div className={panelOpen ? "hidden md:block" : undefined}>
-              <CategoryChips kinds={pinKinds} videos={pinVideos} value={pinFilter} onChange={setPinFilter} />
+              <CategoryChips kinds={pinKinds} videos={pinVideos} value={pinFilter} onChange={setPinFilter} onPanel={setKindsPanel} />
             </div>
           )
         )}
@@ -1196,7 +1199,7 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
       )}
 
       {/* "On this day": the day's first story, bottom left (phones: above the tab bar). */}
-      {!panelOpen && !showTip && nearest.length === 0 && (
+      {!panelOpen && !showTip && nearest.length === 0 && !kindsPanel && !picker && (
         <div className="pointer-events-none absolute inset-x-3 bottom-[calc(var(--tabbar-h)+2rem)] z-10 md:inset-x-auto md:start-4 md:bottom-4">
           <OnThisDayCard
             onPick={(e) => openOtd(e.slug, e.lat !== null && e.lng !== null ? { lat: e.lat, lng: e.lng } : null, { md: e.md, step: e.step })}

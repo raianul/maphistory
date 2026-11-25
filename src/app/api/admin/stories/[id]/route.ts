@@ -1,6 +1,7 @@
 import { AiStoryData } from "@/lib/ai/place-story";
 import { CoverImage } from "@/lib/events/schema";
 import { requireAdmin } from "@/lib/admin-auth";
+import { inRegion } from "@/lib/region";
 import { isCategory, NO_CATEGORY, storeCategories } from "@/lib/categories";
 import { clearReports, ensureSlug, getStoryForAdmin, refreshPlacePage, updateStory } from "@/lib/db";
 
@@ -16,18 +17,27 @@ export async function GET(req: Request, { params }: RouteContext<"/api/admin/sto
  * Change a story: { action: "verify" | "unverify" | "hide" | "unhide" | "clear_reports" |
  * "show_on_map" | "hide_from_map" }, { story: <edited story JSON> }, { image: <Commons image> | null }, or
  * { category: <id>[] | "none" | null } (the map's filter chips; null = guessed from the story's kind)
+ * { location: { lat, lng } } (moves the pin)
  * (a Wikimedia Commons picture chosen in the admin's picker, licence already checked; null removes it).
  */
 export async function PATCH(req: Request, { params }: RouteContext<"/api/admin/stories/[id]">) {
   const admin = await requireAdmin(req);
   if (admin instanceof Response) return admin;
   const { id } = await params;
-  const body = (await req.json().catch(() => null)) as { action?: string; story?: unknown; image?: unknown; category?: unknown } | null;
+  const body = (await req.json().catch(() => null)) as { action?: string; story?: unknown; image?: unknown; category?: unknown; location?: unknown } | null;
   const current = await getStoryForAdmin(id);
   if (!current) return Response.json({ error: "Not found" }, { status: 404 });
 
   try {
-    if (body && "category" in body) {
+    if (body && "location" in body) {
+      // Moving the pin (a wrong spot from the map search or the AI): { location: { lat, lng } }.
+      const l = body.location as { lat?: unknown; lng?: unknown } | null;
+      if (!l || typeof l.lat !== "number" || typeof l.lng !== "number" || !Number.isFinite(l.lat) || !Number.isFinite(l.lng)) {
+        return Response.json({ error: "Location must be { lat, lng } numbers" }, { status: 400 });
+      }
+      if (!inRegion(l.lat, l.lng)) return Response.json({ error: "That point is outside Bangladesh" }, { status: 400 });
+      await updateStory(id, { lat: Math.round(l.lat * 1e6) / 1e6, lng: Math.round(l.lng * 1e6) / 1e6 });
+    } else if (body && "category" in body) {
       const c = body.category;
       const ok = c === null || c === NO_CATEGORY || isCategory(c) || (Array.isArray(c) && c.every(isCategory));
       if (!ok) return Response.json({ error: "Unknown category" }, { status: 400 });

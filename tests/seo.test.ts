@@ -23,11 +23,11 @@ describe("seo", () => {
     expect(c).not.toMatch(/\s…$/);
   });
 
-  it("builds '<name> — <hook> | Ondor' near 60 characters", () => {
-    expect(seoTitle({ ...base, hook: "সংসদ ভবন · ১৯৮২" })).toBe("জাতীয় সংসদ ভবন — সংসদ ভবন · ১৯৮২ | Ondor");
+  it("builds '<name> — <hook> | Place & Past' near 60 characters", () => {
+    expect(seoTitle({ ...base, hook: "সংসদ ভবন · ১৯৮২" })).toBe("জাতীয় সংসদ ভবন — সংসদ ভবন · ১৯৮২ | Place & Past");
     // Too long: whole parts are dropped, never cut.
-    expect(seoTitle({ ...base, hook: "স্থাপত্য ও সরকারি ভবন · ১৯৫৯ (পরিকল্পনা) / ১৯৮২ (উদ্বোধন) আরও অনেক কথা" })).toBe("জাতীয় সংসদ ভবন — স্থাপত্য ও সরকারি ভবন | Ondor");
-    expect(seoTitle({ ...base, hook: undefined })).toBe("জাতীয় সংসদ ভবন | Ondor");
+    expect(seoTitle({ ...base, hook: "স্থাপত্য ও সরকারি ভবন · ১৯৫৯ (পরিকল্পনা) / ১৯৮২ (উদ্বোধন) আরও অনেক কথা" })).toBe("জাতীয় সংসদ ভবন — স্থাপত্য ও সরকারি ভবন | Place & Past");
+    expect(seoTitle({ ...base, hook: undefined })).toBe("জাতীয় সংসদ ভবন | Place & Past");
   });
 
   it("writes ISO 8601 durations", () => {

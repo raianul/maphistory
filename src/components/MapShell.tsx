@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { CATEGORY_GROUPS, categoryLabel, type CategoryId } from "@/lib/categories";
 import type { OnThisDay, PublicEventCard } from "@/lib/events/public";
@@ -275,8 +275,30 @@ const ROW_CHIPS = 4;
  * rest are in a panel ("সব ধরন ▾"), grouped (ধর্মীয় স্থান, শহর ও স্থাপত্য…), with counts.
  * Choosing the chosen one again shows every pin.
  */
-export function CategoryChips({ kinds, videos, value, onChange }: { kinds: PinKind[]; videos: number; value: PinFilter | null; onChange: (f: PinFilter | null) => void }) {
-  const [open, setOpen] = useState(false);
+export function CategoryChips({
+  kinds,
+  videos,
+  value,
+  onChange,
+  onPanel,
+}: {
+  kinds: PinKind[];
+  videos: number;
+  value: PinFilter | null;
+  onChange: (f: PinFilter | null) => void;
+  /** The "সব ধরন" panel opened or closed (the map hides what it would cover). */
+  onPanel?: (open: boolean) => void;
+}) {
+  const [open, setOpenState] = useState(false);
+  const setOpen = useCallback(
+    (v: boolean | ((o: boolean) => boolean)) =>
+      setOpenState((o) => {
+        const next = typeof v === "function" ? v(o) : v;
+        if (next !== o) queueMicrotask(() => onPanel?.(next));
+        return next;
+      }),
+    [onPanel],
+  );
   // Where the desktop card goes: under the chips' row (measured when it opens).
   const rowRef = useRef<HTMLDivElement>(null);
   const [at, setAt] = useState({ top: 0, left: 0 });
@@ -291,7 +313,7 @@ export function CategoryChips({ kinds, videos, value, onChange }: { kinds: PinKi
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open]);
+  }, [open, setOpen]);
 
   // The row: the commonest kinds (and the chosen one, wherever it is), then ভিডিও.
   const row = kinds.slice(0, ROW_CHIPS);
