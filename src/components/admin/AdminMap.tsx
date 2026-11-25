@@ -2,11 +2,10 @@
 
 import type { GeoJSONSource, Map as MLMap, MapLayerMouseEvent } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AiStoryDataT } from "@/lib/ai/types";
 import { loadStyle, MIN_ZOOM, lockFlat } from "@/lib/map-style";
-import { adminFetch, browserSupabase } from "@/lib/supabase-browser";
+import { adminFetch } from "@/lib/supabase-browser";
 import { aiShareUrl } from "../AiPanel";
 import { AiStory } from "../AiStory";
 import { SidePanel } from "../SidePanel";
@@ -64,17 +63,28 @@ const pinColor = (r: Pick<Row, "status" | "show_on_map">) => (r.show_on_map && r
 
 type Filter = "all" | Status | "reported" | "on_map";
 
+/** A value from the page's address (the admin renders in the browser only, after login). */
+const param = (key: string) => (typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get(key));
+
 /** The admin map: every saved story as a pin; click to check, edit, regenerate, verify or hide. */
-export function AdminMap({ email }: { email?: string }) {
+export function AdminMap() {
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MLMap | null>(null);
   const [ready, setReady] = useState(false);
   const [rows, setRows] = useState<Row[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [filter, setFilter] = useState<Filter>("all");
-  const [sort, setSort] = useState<"views" | "reports" | "recent">("views");
-  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<Filter>(() => {
+    const f = param("filter");
+    return f && ["all", "ai", "verified", "hidden", "reported", "on_map"].includes(f) ? (f as Filter) : "all";
+  });
+  const [sort, setSort] = useState<"views" | "reports" | "recent">(() => {
+    const so = param("sort");
+    return so === "reports" || so === "recent" ? so : "views";
+  });
+  const [query, setQuery] = useState(() => param("q") ?? "");
   const [selected, setSelected] = useState<string | null>(null);
+  /** Opened from Home: /admin/places?filter=reported, ?q=…, ?sort=views, ?id=<story> (that place opens). */
+  const wanted = useRef<string | null>(param("id"));
 
   // Refetched after every change in the story panel.
   const [version, setVersion] = useState(0);
@@ -200,27 +210,25 @@ export function AdminMap({ email }: { email?: string }) {
     if (ready) mapRef.current?.setFilter("story-selected", ["==", ["get", "id"], selected ?? ""]);
   }, [ready, selected]);
 
+  // A place asked for in the address opens once the list and the map are there.
+  useEffect(() => {
+    const r = wanted.current && ready ? rows.find((x) => x.id === wanted.current) : undefined;
+    if (!r) return;
+    wanted.current = null;
+    select(r);
+  }, [ready, rows]);
+
   function select(r: Row) {
     setSelected(r.id);
     mapRef.current?.easeTo({ center: [r.lng, r.lat], zoom: Math.max(mapRef.current.getZoom(), 14), offset: [-240, 0] });
   }
 
   return (
-    <div className="flex h-[calc(100dvh-var(--header-h))]">
+    <div className="flex h-[calc(100dvh-var(--header-h)-var(--admin-tabbar))]">
       {/* List */}
       <aside className="hidden w-80 shrink-0 flex-col border-e border-line bg-paper md:flex">
         <div className="border-b border-line p-3">
-          <div className="flex items-center justify-between text-sm">
-            <span className="flex items-center gap-3">
-              <span className="font-bold">Admin</span>
-              <Link href="/admin/events" className="font-semibold text-accent hover:underline">
-                Historical events →
-              </Link>
-            </span>
-            <button type="button" onClick={() => browserSupabase().auth.signOut()} className="text-muted underline" title={email}>
-              Log out
-            </button>
-          </div>
+          <h1 className="text-lead font-bold">Places</h1>
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}

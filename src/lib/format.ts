@@ -120,3 +120,14 @@ export function haversine(a: { lat: number; lng: number }, b: { lat: number; lng
   const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLng / 2) ** 2;
   return 2 * R * Math.asin(Math.sqrt(h));
 }
+
+/** "2 hours ago", "Yesterday", "3 days ago", "12 Nov". */
+export function ago(iso: string, now = Date.now()): string {
+  const s = Math.max(0, (now - new Date(iso).getTime()) / 1000);
+  if (s < 60) return "Just now";
+  if (s < 3600) return `${Math.floor(s / 60)} min ago`;
+  if (s < 86_400) return `${Math.floor(s / 3600)} ${Math.floor(s / 3600) === 1 ? "hour" : "hours"} ago`;
+  if (s < 2 * 86_400) return "Yesterday";
+  if (s < 7 * 86_400) return `${Math.floor(s / 86_400)} days ago`;
+  return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "Asia/Dhaka" });
+}

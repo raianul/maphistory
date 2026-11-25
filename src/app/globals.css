@@ -94,6 +94,21 @@
     --tabbar-h: calc(4rem + env(safe-area-inset-bottom));
   }
 }
+/* The admin draws its own menu (AdminShell): the site header steps aside there too. */
+:root {
+  --admin-tabbar: 0px;
+}
+:root:has(.admin-shell) {
+  --header-h: 0px;
+}
+:root:has(.admin-shell) .site-header {
+  display: none;
+}
+@media (max-width: 767px) {
+  :root:has(.admin-shell) {
+    --admin-tabbar: calc(4rem + env(safe-area-inset-bottom));
+  }
+}
 /* The map's attribution stays above the phone tab bar. */
 .map-shell .maplibregl-ctrl-bottom-left,
 .map-shell .maplibregl-ctrl-bottom-right {

@@ -4,18 +4,22 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { EVENT_STATUSES, STATUS_EN, type EventListRow, type EventStatus } from "@/lib/events/schema";
-import { adminFetch, browserSupabase } from "@/lib/supabase-browser";
+import { adminFetch } from "@/lib/supabase-browser";
 import { dateBn, StatusBadge } from "./shared";
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const field = "h-10 rounded-control border border-line-strong bg-card px-3 text-meta outline-none focus:border-accent focus:ring-2 focus:ring-accent-ring";
 
 /** /admin/events: every historical event, with search and filters, and a way to start a new one. */
-export function EventList({ email }: { email?: string }) {
+export function EventList() {
   const [rows, setRows] = useState<EventListRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [q, setQ] = useState("");
-  const [status, setStatus] = useState<EventStatus | "">("");
+  // Home links here with ?status=review.
+  const [status, setStatus] = useState<EventStatus | "">(() => {
+    const s = typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("status");
+    return s && (EVENT_STATUSES as readonly string[]).includes(s) ? (s as EventStatus) : "";
+  });
   const [month, setMonth] = useState("");
   const [country, setCountry] = useState("");
   const [creating, setCreating] = useState(false);
@@ -47,16 +51,7 @@ export function EventList({ email }: { email?: string }) {
   return (
     <div className="mx-auto max-w-5xl px-4 py-6 md:px-6">
       <header className="flex flex-wrap items-center gap-3">
-        <Link href="/admin" className="text-meta text-muted hover:text-ink">
-          ← Admin map
-        </Link>
         <h1 className="text-display font-bold tracking-tight">Historical events</h1>
-        <span className="ms-auto flex items-center gap-3 text-meta text-muted">
-          {email}
-          <button type="button" onClick={() => browserSupabase().auth.signOut()} className="hover:text-ink hover:underline">
-            Log out
-          </button>
-        </span>
       </header>
       <p className="mt-1 text-meta text-muted">Visitors only see published events.</p>
 

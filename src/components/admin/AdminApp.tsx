@@ -3,13 +3,14 @@
 import type { Session } from "@supabase/supabase-js";
 import { useEffect, useState } from "react";
 import { adminFetch, browserSupabase } from "@/lib/supabase-browser";
-import { AdminMap } from "./AdminMap";
+import { AdminHome } from "./AdminHome";
+import { AdminShell } from "./AdminShell";
 
 type Access = { state: "checking" } | { state: "admin"; email?: string } | { state: "denied"; message: string; userId?: string };
 
 /**
- * Login, then the admin, for users listed in the `admins` table. Shows the admin map by default;
- * other admin pages (e.g. /admin/events) pass their own content as `children`.
+ * Login, then the admin (inside its menu, AdminShell), for users listed in the `admins` table.
+ * Shows Home by default; other admin pages (Places, Events…) pass their own content as `children`.
  */
 export function AdminApp({ children }: { children?: (email?: string) => React.ReactNode } = {}) {
   const [session, setSession] = useState<Session | null | undefined>(undefined);
@@ -47,7 +48,7 @@ export function AdminApp({ children }: { children?: (email?: string) => React.Re
       </div>
     );
   }
-  return children ? children(access.email) : <AdminMap email={access.email} />;
+  return <AdminShell email={access.email}>{children ? children(access.email) : <AdminHome email={access.email} />}</AdminShell>;
 }
 
 function LoginForm() {

@@ -13,8 +13,8 @@ export function EventsAdmin({ id, view }: { id?: string; view?: "today" | "previ
   const v: View = view === "today" ? { kind: "today" } : id ? (view === "preview" ? { kind: "preview", id } : { kind: "edit", id }) : { kind: "list" };
   return (
     <AdminApp>
-      {(email) =>
-        v.kind === "today" ? <OnThisDayAdmin /> : v.kind === "preview" ? <EventPreview id={v.id} /> : v.kind === "edit" ? <EventEditor id={v.id} /> : <EventList email={email} />
+      {() =>
+        v.kind === "today" ? <OnThisDayAdmin /> : v.kind === "preview" ? <EventPreview id={v.id} /> : v.kind === "edit" ? <EventEditor id={v.id} /> : <EventList />
       }
     </AdminApp>
   );
