@@ -413,6 +413,8 @@ export type EventListRow = Pick<
 > & {
   source_count: number;
   step_count: number;
+  /** The days it shows in "On this day" once published (its approved dates). */
+  shown_on: { month: number; day: number }[];
   /** In-review events on the admin board: what still blocks publishing ([] = ready). */
   problems?: string[];
 };

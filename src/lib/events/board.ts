@@ -1,6 +1,6 @@
 // Client-safe: the admin's Events board (draft → review → live).
 
-import type { EventListRow, EventStatus } from "./schema";
+import type { EventStatus } from "./schema";
 
 export type Column = "drafts" | "review" | "live";
 
@@ -13,18 +13,22 @@ export function columnOf(status: EventStatus): Column | null {
 }
 
 /**
- * When a published event next shows in "On this day": every year on its day when it recurs and
- * its exact day is known (29 Feb → 28 Feb in other years, as the public rule); otherwise never by
- * itself (its extra dates, if any, are set in the editor).
+ * When a published event next shows in "On this day": the soonest of its approved dates (an event
+ * can have several), 29 February on the 28th in years without one, as visitors see it.
  */
-export function nextShown(e: Pick<EventListRow, "recurring" | "date_precision" | "event_month" | "event_day">, today: { year: number; month: number; day: number }): { month: number; day: number; inDays: number } | null {
-  if (!e.recurring || e.date_precision !== "day" || !e.event_month || !e.event_day) return null;
+export function nextShown(dates: { month: number; day: number }[], today: { year: number; month: number; day: number }): { month: number; day: number; inDays: number } | null {
   const t = Date.UTC(today.year, today.month - 1, today.day);
-  for (const year of [today.year, today.year + 1]) {
-    const leap = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
-    const day = e.event_month === 2 && e.event_day === 29 && !leap ? 28 : e.event_day;
-    const at = Date.UTC(year, e.event_month - 1, day);
-    if (at >= t) return { month: e.event_month, day, inDays: Math.round((at - t) / 86_400_000) };
+  let best: { month: number; day: number; inDays: number } | null = null;
+  for (const d of dates) {
+    for (const year of [today.year, today.year + 1]) {
+      const leap = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+      const day = d.month === 2 && d.day === 29 && !leap ? 28 : d.day;
+      const at = Date.UTC(year, d.month - 1, day);
+      if (at < t) continue;
+      const inDays = Math.round((at - t) / 86_400_000);
+      if (!best || inDays < best.inDays) best = { month: d.month, day, inDays };
+      break;
+    }
   }
-  return null;
+  return best;
 }

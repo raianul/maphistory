@@ -4,9 +4,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { STATUS_EN, todayInDhaka, type EventStatus } from "@/lib/events/schema";
+import type { DayCoverage } from "@/lib/events/db";
 import { adminFetch } from "@/lib/supabase-browser";
 import { StatusBadge } from "./shared";
 
+const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const COUNTRIES = [{ code: "BD", name: "Bangladesh" }];
 /** A year for the admin list: 1971, or 500 BC. */
@@ -58,7 +60,30 @@ export function OnThisDayAdmin() {
   const [stage, setStage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
-  const days = new Date(Date.UTC(2000, month, 0)).getUTCDate();
+  // The calendar's month (starts at the chosen date's) and what each of its days has.
+  const [view, setView] = useState(() => ({ year: today.year, month }));
+  const [cover, setCover] = useState<{ key: string; days: DayCoverage[] } | null>(null);
+  const viewKey = `${view.year}-${view.month}`;
+  useEffect(() => {
+    let live = true;
+    adminFetch(`/api/admin/on-this-day/month?month=${view.month}&year=${view.year}`)
+      .then(async (r) => {
+        const d = await r.json().catch(() => ({}));
+        if (live && r.ok) setCover({ key: `${view.year}-${view.month}`, days: d.days });
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [view.year, view.month]);
+  const coverage = cover?.key === viewKey ? cover.days : null;
+  const pickedYear = month === view.month ? view.year : today.year;
+  const picked = month === view.month ? coverage?.[day - 1] : undefined;
+  const shift = (by: 1 | -1) =>
+    setView((v) => {
+      const m = v.month + by;
+      return m < 1 ? { year: v.year - 1, month: 12 } : m > 12 ? { year: v.year + 1, month: 1 } : { year: v.year, month: m };
+    });
 
   /**
    * Finds events for the chosen date. "find": the saved search, else a new AI search; "fresh":
@@ -176,74 +201,76 @@ export function OnThisDayAdmin() {
   }
 
   const busy = state === "finding" || state === "generating" || state === "loading";
-  return (
-    <div className="mx-auto max-w-3xl px-4 py-6 md:px-6">
-      <Link href="/admin/events" className="text-meta text-muted hover:text-ink">
-        ← All events
-      </Link>
-      <h1 className="mt-2 text-display font-bold tracking-tight">On this day</h1>
-      <p className="mt-1 text-meta text-muted">Pick a date and country to find events, then choose one. AI drafts it with a timeline. Review it and publish.</p>
+  const weekday = WEEKDAYS[new Date(Date.UTC(pickedYear, month - 1, day)).getUTCDay()];
+  const offset = Math.round((Date.UTC(pickedYear, month - 1, day) - Date.UTC(today.year, today.month - 1, today.day)) / 86_400_000);
+  const when = offset === 0 ? "today" : offset === 1 ? "tomorrow" : offset === -1 ? "yesterday" : null;
 
-      <form onSubmit={find} className="mt-5 flex flex-wrap items-end gap-2 rounded-2xl bg-card p-4 shadow-float">
-        <label className="grid gap-1 text-meta font-semibold text-ink-2">
-          Day
-          <select value={day} onChange={(e) => setDay(Number(e.target.value))} className={field} disabled={busy}>
-            {Array.from({ length: days }, (_, i) => (
-              <option key={i + 1} value={i + 1}>
-                {i + 1}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="grid gap-1 text-meta font-semibold text-ink-2">
-          Month
-          <select
-            value={month}
-            onChange={(e) => {
-              const m = Number(e.target.value);
-              setMonth(m);
-              setDay((d) => Math.min(d, new Date(Date.UTC(2000, m, 0)).getUTCDate()));
-            }}
-            className={field}
-            disabled={busy}
-          >
-            {MONTHS.map((m, i) => (
-              <option key={m} value={i + 1}>
-                {m}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="grid gap-1 text-meta font-semibold text-ink-2">
-          Country
-          <select value={country} onChange={(e) => setCountry(e.target.value)} className={field} disabled={busy}>
+  return (
+    <main className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-6 md:px-8 md:py-7 lg:flex-row lg:items-start">
+      <Calendar
+        view={view}
+        today={today}
+        picked={{ day, month }}
+        days={coverage}
+        onShift={shift}
+        onPick={(d) => {
+          if (busy) return;
+          setMonth(view.month);
+          setDay(d);
+        }}
+      />
+
+      {/* The chosen day: what it has, and finding more */}
+      <aside aria-label={`${day} ${MONTHS[month - 1]}`} className="flex flex-col gap-4 rounded-[20px] border border-line bg-card p-5 lg:sticky lg:top-6 lg:w-[460px] lg:shrink-0">
+        <div>
+          <p className="text-meta text-muted">
+            {weekday}
+            {when ? ` · ${when}` : ""}
+          </p>
+          <h2 className="text-display font-bold tracking-tight">
+            {day} {MONTHS[month - 1]}
+          </h2>
+        </div>
+        {picked &&
+          (picked.live > 0 ? (
+            <p className="rounded-2xl bg-success-soft px-4 py-3 text-meta text-success">
+              <span className="font-semibold">
+                ✓ {picked.live} {picked.live === 1 ? "story" : "stories"} live
+              </span>
+              {picked.drafts > 0 ? ` · ${picked.drafts} more in draft` : ""}. You can still add more.
+            </p>
+          ) : (
+            <p className="rounded-2xl bg-warning-soft px-4 py-3 text-meta text-warning">
+              <span className="font-semibold">Nothing live for this day.</span> Visitors would see the next date instead
+              {picked.drafts > 0 ? `; ${picked.drafts} waiting in draft` : ""}.
+            </p>
+          ))}
+        <form onSubmit={find} className="flex gap-2">
+          <select value={country} onChange={(e) => setCountry(e.target.value)} className={`${field} rounded-full`} disabled={busy} aria-label="Country">
             {COUNTRIES.map((c) => (
               <option key={c.code} value={c.code}>
                 {c.name}
               </option>
             ))}
           </select>
-        </label>
-        <button type="submit" disabled={busy} className="h-10 rounded-full bg-accent px-5 text-meta font-semibold text-on-accent hover:bg-accent-hover disabled:opacity-50">
-          {state === "finding" ? "Searching…" : state === "loading" ? "…" : "Find events"}
-        </button>
-        {day === today.day && month === today.month && <span className="pb-2.5 text-micro text-muted">Today</span>}
-      </form>
-
+          <button type="submit" disabled={busy} className="h-10 flex-1 rounded-full bg-accent px-5 text-meta font-bold text-on-accent hover:bg-accent-hover disabled:opacity-50">
+            {state === "finding" ? "Searching…" : state === "loading" ? "…" : "Find events with AI"}
+          </button>
+        </form>
       {state === "finding" && (
-        <p className="mt-5 flex items-center gap-2 text-meta text-accent" role="status">
+        <p className="flex items-center gap-2 text-meta text-accent" role="status">
           <span className="size-3.5 animate-spin rounded-full border-2 border-accent-soft-hover border-t-accent" aria-hidden />
           AI is searching the web, then each source page is opened to check the date… (30–60 seconds)
         </p>
       )}
       {error && (
-        <p role="alert" className="mt-4 rounded-control bg-warning-soft px-3 py-2 text-meta text-warning">
+        <p role="alert" className="rounded-control bg-warning-soft px-3 py-2 text-meta text-warning">
           {error}
         </p>
       )}
 
       {result && (
-        <section className="mt-5 rounded-2xl bg-card p-4 shadow-float" aria-label="Events found">
+        <section className="flex flex-col" aria-label="Events found">
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
             <h2 className="font-semibold">
               {day} {MONTHS[month - 1]}:{" "}
@@ -264,7 +291,7 @@ export function OnThisDayAdmin() {
             )}
           </div>
           {result.searched_at && !result.candidates.length && <p className="mt-1 text-meta text-muted">Try another date, or search again later.</p>}
-          {!result.searched_at && <p className="mt-1 text-meta text-muted">Press &ldquo;Find events&rdquo; and AI will search; the results are saved for this date.</p>}
+          {!result.searched_at && <p className="mt-1 text-meta text-muted">Press &ldquo;Find events with AI&rdquo; and it will search; the results are saved for this date.</p>}
           <ul className="mt-3 grid gap-2">
             {result.candidates.map((c, i) => (
               <li key={`${c.year}-${c.title_bn}`}>
@@ -366,6 +393,104 @@ export function OnThisDayAdmin() {
           )}
         </section>
       )}
-    </div>
+      </aside>
+    </main>
+  );
+}
+
+/** The month: each day live (green), with drafts (amber), or empty (dashed); past days step back. */
+function Calendar({
+  view,
+  today,
+  picked,
+  days,
+  onShift,
+  onPick,
+}: {
+  view: { year: number; month: number };
+  today: { year: number; month: number; day: number };
+  picked: { day: number; month: number };
+  days: DayCoverage[] | null;
+  onShift: (by: 1 | -1) => void;
+  onPick: (day: number) => void;
+}) {
+  const count = new Date(Date.UTC(view.year, view.month, 0)).getUTCDate();
+  const lead = new Date(Date.UTC(view.year, view.month - 1, 1)).getUTCDay();
+  const t = Date.UTC(today.year, today.month - 1, today.day);
+  const arrow = "grid size-10 place-items-center rounded-full border border-line-strong bg-card text-ink transition-colors hover:bg-hover";
+  return (
+    <section aria-label="Calendar" className="flex min-w-0 flex-1 flex-col gap-4">
+      <header className="flex flex-wrap items-center gap-3">
+        <h1 className="flex-1 text-display font-bold tracking-tight">On this day</h1>
+        <div className="flex items-center gap-1">
+          <button type="button" onClick={() => onShift(-1)} aria-label="Previous month" className={arrow}>
+            <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="m15 6-6 6 6 6" />
+            </svg>
+          </button>
+          <span className="min-w-40 text-center text-lead font-bold" aria-live="polite">
+            {MONTHS[view.month - 1]} {view.year !== today.year ? view.year : ""}
+          </span>
+          <button type="button" onClick={() => onShift(1)} aria-label="Next month" className={arrow}>
+            <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="m9 6 6 6-6 6" />
+            </svg>
+          </button>
+        </div>
+      </header>
+      <p className="flex flex-wrap gap-x-4 gap-y-1 text-micro text-ink-2">
+        <span className="flex items-center gap-1.5">
+          <span className="size-2.5 rounded-full bg-success" aria-hidden /> Live stories
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="size-2.5 rounded-full bg-[#c9a25f]" aria-hidden /> Draft to review
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="size-2.5 rounded-[3px] border-[1.5px] border-dashed border-[#c9a25f]" aria-hidden /> Empty: visitors see the next date
+        </span>
+      </p>
+      <div className="grid grid-cols-7 gap-1 md:gap-2">
+        {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((w) => (
+          <span key={w} className="px-1 text-micro font-semibold tracking-wide text-muted uppercase">
+            {w}
+          </span>
+        ))}
+        {Array.from({ length: lead }, (_, i) => (
+          <span key={`lead-${i}`} aria-hidden />
+        ))}
+        {Array.from({ length: count }, (_, i) => {
+          const d = i + 1;
+          const c = days?.[i];
+          const at = Date.UTC(view.year, view.month - 1, d);
+          const past = at < t;
+          const isToday = at === t;
+          const on = picked.day === d && picked.month === view.month;
+          const empty = c ? c.live === 0 : false;
+          const label = !c ? "" : c.live > 0 ? `● ${c.live} live` : c.drafts > 0 ? `${c.drafts} draft` : past ? "—" : "Empty";
+          const tone = !c ? "" : c.live > 0 ? "text-success" : past ? "text-muted" : "text-warning";
+          return (
+            <button
+              key={d}
+              type="button"
+              onClick={() => onPick(d)}
+              aria-pressed={on}
+              aria-label={`${d} ${MONTHS[view.month - 1]}${c ? `: ${c.live} live, ${c.drafts} draft` : ""}`}
+              className={`flex h-14 flex-col items-start justify-between rounded-xl p-1.5 text-start transition-colors md:h-[104px] md:rounded-2xl md:p-3 ${
+                on
+                  ? "border-2 border-accent bg-accent-soft"
+                  : empty && !past
+                    ? "border-[1.5px] border-dashed border-[#d9b77a] bg-[#fdf9f1] hover:bg-warning-soft"
+                    : "border border-line bg-card hover:border-line-strong"
+              } ${past && !on ? "opacity-55" : ""}`}
+            >
+              <span className={`grid min-w-6 place-items-center font-bold ${isToday ? "h-6 rounded-full bg-accent px-1 text-on-accent" : ""}`}>{d}</span>
+              <span className={`hidden text-micro font-semibold md:block ${tone}`}>{label}</span>
+              {/* Phones: a dot says it all */}
+              {c && (c.live > 0 || c.drafts > 0) && <span className={`size-1.5 rounded-full md:hidden ${c.live > 0 ? "bg-success" : "bg-[#c9a25f]"}`} aria-hidden />}
+            </button>
+          );
+        })}
+      </div>
+    </section>
   );
 }

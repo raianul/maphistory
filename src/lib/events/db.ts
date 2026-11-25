@@ -4,6 +4,7 @@
  * before it gets here.
  */
 import { db } from "../db";
+import { inRegion } from "../region";
 import { publishProblems } from "./schema";
 import type { DateFieldsT, EventDate, EventFieldsT, EventListRow, EventSource, EventStatus, HistoricalEvent, PhaseT, SourceFieldsT, StepFieldsT, TimelineStep } from "./schema";
 
@@ -42,7 +43,7 @@ export async function listEvents(f: EventListFilters = {}): Promise<EventListRow
   let q = db()
     .from("historical_events")
     .select(
-      "id,slug,title,status,event_year,event_month,event_day,date_precision,date_label,recurring,place_name,city,country,updated_at,published_at,historical_event_sources(count),historical_event_timeline_steps(count)",
+      "id,slug,title,status,event_year,event_month,event_day,date_precision,date_label,recurring,place_name,city,country,updated_at,published_at,historical_event_sources(count),historical_event_timeline_steps(count),historical_event_dates(month,day,status)",
     )
     .order("updated_at", { ascending: false })
     .limit(500);
@@ -57,11 +58,16 @@ export async function listEvents(f: EventListFilters = {}): Promise<EventListRow
   }
   const { data, error } = await q;
   if (error) fail(error);
-  type Raw = Omit<EventListRow, "source_count" | "step_count"> & { historical_event_sources: { count: number }[]; historical_event_timeline_steps: { count: number }[] };
-  return (data as unknown as Raw[]).map(({ historical_event_sources, historical_event_timeline_steps, ...r }) => ({
+  type Raw = Omit<EventListRow, "source_count" | "step_count" | "shown_on"> & {
+    historical_event_sources: { count: number }[];
+    historical_event_timeline_steps: { count: number }[];
+    historical_event_dates: { month: number; day: number; status: string }[] | null;
+  };
+  return (data as unknown as Raw[]).map(({ historical_event_sources, historical_event_timeline_steps, historical_event_dates, ...r }) => ({
     ...r,
     source_count: historical_event_sources[0]?.count ?? 0,
     step_count: historical_event_timeline_steps[0]?.count ?? 0,
+    shown_on: (historical_event_dates ?? []).filter((d) => d.status === "published").map(({ month, day }) => ({ month, day })),
   }));
 }
 
@@ -297,4 +303,36 @@ export async function reorderSteps(eventId: string, stepIds: string[]): Promise<
     if (error.code === "22023") throw new Error("The step list is out of date; reload the page and try again");
     failTimeline(error);
   }
+}
+
+export type DayCoverage = { day: number; live: number; drafts: number };
+
+/**
+ * A month of "On this day" for the admin's calendar: per day, how many anniversaries visitors see
+ * (published dates of published stories, inside the map's region: the public rule) and how many
+ * are still drafts (a draft date, or a story not published yet). Archived stories count for nothing.
+ * 29 February counts on the 28th in years without one, as visitors see it.
+ */
+export async function monthCoverage(month: number, year: number): Promise<DayCoverage[]> {
+  const { data, error } = await db()
+    .from("historical_event_dates")
+    .select("month,day,status,historical_events!inner(status,lat,lng)")
+    .eq("month", month)
+    .neq("historical_events.status", "archived");
+  if (error) fail(error);
+  const leap = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+  const days = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  const out: DayCoverage[] = Array.from({ length: days }, (_, i) => ({ day: i + 1, live: 0, drafts: 0 }));
+  type Row = { day: number; status: string; historical_events: { status: string; lat: number | null; lng: number | null } | { status: string; lat: number | null; lng: number | null }[] };
+  for (const r of (data ?? []) as unknown as Row[]) {
+    const e = Array.isArray(r.historical_events) ? r.historical_events[0] : r.historical_events;
+    if (!e) continue;
+    const day = month === 2 && r.day === 29 && !leap ? 28 : r.day;
+    const slot = out[day - 1];
+    if (!slot) continue;
+    const shown = r.status === "published" && e.status === "published" && e.lat !== null && e.lng !== null && inRegion(e.lat, e.lng);
+    if (shown) slot.live++;
+    else if (r.status !== "published" || e.status !== "published") slot.drafts++;
+  }
+  return out;
 }

@@ -67,7 +67,7 @@ export function EventList() {
   const today = todayInDhaka();
   const by = (c: Column) => (rows ?? []).filter((r) => columnOf(r.status) === c);
   // Live: what visitors see soonest first; the rest by their date.
-  const live = by("live").sort((a, b) => (nextShown(a, today)?.inDays ?? 999) - (nextShown(b, today)?.inDays ?? 999));
+  const live = by("live").sort((a, b) => (nextShown(a.shown_on, today)?.inDays ?? 999) - (nextShown(b.shown_on, today)?.inDays ?? 999));
   const lists: Record<Column, EventListRow[]> = { drafts: by("drafts"), review: by("review"), live };
   const old = (rows ?? []).filter((r) => r.status === "archived");
 
@@ -245,8 +245,8 @@ function ReviewCard({ r, cls, onPublished }: { r: EventListRow; cls: string; onP
 }
 
 function LiveCard({ r, cls, today }: { r: EventListRow; cls: string; today: { year: number; month: number; day: number } }) {
-  const next = nextShown(r, today);
-  const when = !next ? "Not on a yearly day" : next.inDays === 0 ? "Showing today" : next.inDays === 1 ? "Shown tomorrow" : `Shown next: ${next.day} ${SHORT[next.month - 1]} · in ${next.inDays} days`;
+  const next = nextShown(r.shown_on, today);
+  const when = !next ? "No approved date yet" : next.inDays === 0 ? "Showing today" : next.inDays === 1 ? "Shown tomorrow" : `Shown next: ${next.day} ${SHORT[next.month - 1]} · in ${next.inDays} days`;
   return (
     <Link href={`/admin/events/${r.id}/preview`} className={`flex flex-col gap-1 rounded-2xl border bg-card px-3.5 py-3 transition-colors hover:border-line-strong ${cls}`}>
       <span className="text-micro text-muted">{dateBn(r)}</span>

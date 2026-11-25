@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { columnOf, nextShown } from "../src/lib/events/board";
 
-const day = (month: number, d: number) => ({ recurring: true, date_precision: "day" as const, event_month: month, event_day: d });
 const today = { year: 2026, month: 11, day: 25 };
 
 describe("events board", () => {
@@ -13,13 +12,14 @@ describe("events board", () => {
     expect(columnOf("archived")).toBeNull();
   });
 
-  it("knows when a live event shows next", () => {
-    expect(nextShown(day(12, 16), today)).toEqual({ month: 12, day: 16, inDays: 21 });
-    expect(nextShown(day(11, 25), today)).toEqual({ month: 11, day: 25, inDays: 0 });
-    expect(nextShown(day(3, 26), today)).toEqual({ month: 3, day: 26, inDays: 121 });
+  it("knows when a live event shows next, from its approved dates", () => {
+    expect(nextShown([{ month: 12, day: 16 }], today)).toEqual({ month: 12, day: 16, inDays: 21 });
+    expect(nextShown([{ month: 11, day: 25 }], today)).toEqual({ month: 11, day: 25, inDays: 0 });
+    expect(nextShown([{ month: 3, day: 26 }], today)).toEqual({ month: 3, day: 26, inDays: 121 });
+    // The soonest of several dates.
+    expect(nextShown([{ month: 3, day: 26 }, { month: 12, day: 14 }, { month: 1, day: 2 }], today)).toEqual({ month: 12, day: 14, inDays: 19 });
     // 29 Feb shows on 28 Feb in 2027.
-    expect(nextShown(day(2, 29), today)).toEqual({ month: 2, day: 28, inDays: 95 });
-    expect(nextShown({ ...day(12, 16), recurring: false }, today)).toBeNull();
-    expect(nextShown({ ...day(12, 16), date_precision: "year" }, today)).toBeNull();
+    expect(nextShown([{ month: 2, day: 29 }], today)).toEqual({ month: 2, day: 28, inDays: 95 });
+    expect(nextShown([], today)).toBeNull();
   });
 });
