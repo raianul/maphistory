@@ -28,6 +28,9 @@ type Row = {
   status: Status;
   views: number;
   reports: number;
+  /** Visitors' 👍 and 👎 (the public sees only the likes). */
+  likes: number;
+  dislikes: number;
   updated_at: string;
   /** Has a pin on the public map (undefined before the show_on_map migration). */
   show_on_map?: boolean;
@@ -282,6 +285,11 @@ export function AdminMap({ email }: { email?: string }) {
                 </span>
                 <span className="shrink-0 text-end text-xs text-muted">
                   👁 {r.views}
+                  {(r.likes > 0 || r.dislikes > 0) && (
+                    <span className="block">
+                      👍 {r.likes} · 👎 {r.dislikes}
+                    </span>
+                  )}
                   {r.reports > 0 && <span className="block font-semibold text-red-700">⚑ {r.reports}</span>}
                 </span>
               </button>
@@ -374,6 +382,9 @@ function StoryPanel({ id, onClose, onChanged }: { id: string; onClose: () => voi
                 {STATUS[detail.status].bn}
               </span>
               <span className="text-muted">👁 {detail.views} views</span>
+              <span className="text-muted">
+                👍 {detail.likes ?? 0} · 👎 {detail.dislikes ?? 0}
+              </span>
               {detail.reports > 0 && <span className="font-semibold text-red-700">⚑ {detail.reports} {detail.reports === 1 ? "report" : "reports"}</span>}
               <a
                 href={aiShareUrl({ name: detail.name_bn, lat: detail.lat, lng: detail.lng, kind: detail.kind ?? undefined, slug: detail.slug ?? undefined })}

@@ -1,6 +1,7 @@
 import Image from "next/image";
-import { ActionRow } from "@/components/ActionRow";
 import { EraTag } from "@/components/EraTag";
+import { PlaceActions } from "@/components/PlaceActions";
+import { StoryTabs } from "@/components/StoryTabs";
 import { bnYear, builtLabel, SITE } from "@/lib/places";
 import type { Place, ResolvedImage, StoryBlockT, TextT } from "@/lib/schema";
 
@@ -18,53 +19,11 @@ export function PlaceStory({ place }: { place: Place }) {
   const people = of("person");
   const facts = of("fact");
 
-  return (
-    <article className="@container pb-16">
-      {place.status !== "published" && (
-        <p className="mt-4 rounded-control bg-warning-soft px-3.5 py-2 text-meta text-warning">
-          খসড়া · status: {place.status}. এই পাতা এখনো যাচাই হয়নি, প্রকাশিত সাইটে দেখা যাবে না।
-        </p>
-      )}
+  const chip = "rounded-full px-2.5 py-0.5 text-meta";
 
-      <header className="pt-1">
-        <div className="flex items-start gap-3">
-          <div className="min-w-0 flex-1">
-            <h1 className="text-display font-bold tracking-tight text-balance @2xl:text-4xl">{place.name.bn}</h1>
-            {place.name.en && <p className="mt-1 text-meta text-muted">{place.name.en}</p>}
-          </div>
-          <ActionRow compact title={place.name.bn} url={`/place/${place.slug}`} lat={place.location.lat} lng={place.location.lng} />
-        </div>
-        <p className="mt-2.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-meta text-ink-2">
-          <EraTag era={place.era} />
-          <span className="size-[3px] rounded-full bg-subtle" aria-hidden />
-          {place.city.bn}
-          <span className="size-[3px] rounded-full bg-subtle" aria-hidden />
-          {builtLabel(place)}
-        </p>
-        {place.status === "published" && (
-          <p className="mt-3 text-meta">
-            <span className="font-semibold text-success">✓ যাচাই করা</span>
-            <span className="text-muted"> · উৎস মিলিয়ে লেখা</span>
-          </p>
-        )}
-      </header>
-
-      <p className="mt-4 text-lead">{place.summary.bn}</p>
-
-      {place.hero && (
-        <Figure image={place.images[place.hero.image]} alt={place.hero.alt} priority className="mt-6" />
-      )}
-
-      {place.keyNumbers && (
-        <dl className="mt-6 grid grid-cols-2 gap-x-6 gap-y-4 @lg:grid-cols-4">
-          {place.keyNumbers.map((k) => (
-            <div key={k.label.bn} className="flex flex-col-reverse">
-              <dt className="text-meta text-muted">{k.label.bn}</dt>
-              <dd className="text-xl leading-tight font-bold">{k.value.bn}</dd>
-            </div>
-          ))}
-        </dl>
-      )}
+  const storyTab = (
+    <>
+      <p className="mt-2 text-lead">{place.summary.bn}</p>
 
       {stages.length > 0 && (
         <Section title="কীভাবে গড়ে উঠল">
@@ -78,21 +37,6 @@ export function PlaceStory({ place }: { place: Place }) {
                 <h3 className="font-semibold">{s.title.bn}</h3>
                 {s.image && <Figure image={place.images[s.image.image]} alt={s.image.alt} className="mt-2" />}
                 {s.body && <p className="mt-1 text-body text-ink-2">{s.body.bn}</p>}
-              </li>
-            ))}
-          </ol>
-        </Section>
-      )}
-
-      {events.length > 0 && (
-        <Section title="সময়রেখা">
-          <ol className="relative border-s border-line ps-5">
-            {events.map((e, i) => (
-              <li key={i} className="relative pb-5 last:pb-0">
-                <span className="absolute -start-[25px] top-2 size-2 rounded-full border-2 border-paper bg-accent" aria-hidden />
-                <p className="text-meta font-semibold text-accent">{bnYear(e.year)}</p>
-                <h3 className="leading-snug font-medium">{e.title.bn}</h3>
-                {e.body && <p className="mt-0.5 text-body text-ink-2">{e.body.bn}</p>}
               </li>
             ))}
           </ol>
@@ -140,8 +84,70 @@ export function PlaceStory({ place }: { place: Place }) {
           </ul>
         </Section>
       )}
+    </>
+  );
 
-      <Sources place={place} />
+  const datesTab = (
+    <ol className="relative mt-4 border-s border-line ps-5">
+      {events.map((e, i) => (
+        <li key={i} className="relative pb-5 last:pb-0">
+          <span className="absolute -start-[25px] top-2 size-2 rounded-full border-2 border-paper bg-accent" aria-hidden />
+          <p className="text-meta font-semibold text-accent">{bnYear(e.year)}</p>
+          <h3 className="leading-snug font-medium">{e.title.bn}</h3>
+          {e.body && <p className="mt-0.5 text-body text-ink-2">{e.body.bn}</p>}
+        </li>
+      ))}
+    </ol>
+  );
+
+  return (
+    <article className="@container pb-16">
+      {place.status !== "published" && (
+        <p className="mt-4 rounded-control bg-warning-soft px-3.5 py-2 text-meta text-warning">
+          খসড়া · status: {place.status}. এই পাতা এখনো যাচাই হয়নি, প্রকাশিত সাইটে দেখা যাবে না।
+        </p>
+      )}
+
+      <header className="pt-1">
+        <h1 className="text-display font-bold tracking-tight text-balance @2xl:text-4xl">{place.name.bn}</h1>
+        {place.name.en && <p className="mt-1 text-meta text-muted">{place.name.en}</p>}
+        <div className="mt-3 flex flex-wrap items-center gap-1.5">
+          {place.status === "published" && (
+            <span className={`${chip} bg-success-soft font-semibold text-success`} title="উৎস মিলিয়ে লেখা">
+              ✓ যাচাইকৃত
+            </span>
+          )}
+          <span className={`${chip} bg-hover`}>
+            <EraTag era={place.era} />
+          </span>
+          <span className={`${chip} bg-hover text-ink-2`}>{place.city.bn}</span>
+          <span className={`${chip} bg-hover text-ink-2`}>{builtLabel(place)}</span>
+        </div>
+      </header>
+
+      {place.hero && <Figure image={place.images[place.hero.image]} alt={place.hero.alt} priority crop className="mt-5" />}
+
+      <PlaceActions title={place.name.bn} path={`/place/${place.slug}`} slug={place.slug} lat={place.location.lat} lng={place.location.lng} />
+
+      {place.keyNumbers && (
+        <dl className="mt-4 grid grid-cols-[repeat(auto-fit,minmax(7.5rem,1fr))] gap-2">
+          {place.keyNumbers.map((k) => (
+            <div key={k.label.bn} className="flex flex-col-reverse rounded-2xl border border-line px-3 py-2.5">
+              <dt className="text-micro text-muted">{k.label.bn}</dt>
+              <dd className="text-lg leading-tight font-bold">{k.value.bn}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+
+      <StoryTabs
+        resetKey={place.slug}
+        tabs={[
+          { id: "story", label: "গল্প", content: storyTab },
+          ...(events.length > 0 ? [{ id: "dates", label: "সময়রেখা", content: datesTab }] : []),
+          { id: "sources", label: "সূত্র", count: place.sources.length || undefined, content: <Sources place={place} /> },
+        ]}
+      />
     </article>
   );
 }
@@ -160,12 +166,15 @@ function Figure({
   alt,
   label,
   priority,
+  crop,
   className = "",
 }: {
   image: ResolvedImage | undefined;
   alt: TextT;
   label?: string | 0;
   priority?: boolean;
+  /** Cropped to 16:9 (the main photo), so a tall picture doesn't push the story down. */
+  crop?: boolean;
   className?: string;
 }) {
   if (!image) return null;
@@ -179,7 +188,7 @@ function Figure({
           alt={alt.bn}
           priority={priority}
           sizes="(min-width: 768px) 720px, 100vw"
-          className="h-auto max-h-[70vh] w-full rounded-media object-cover"
+          className={`w-full rounded-media object-cover ${crop ? "aspect-video" : "h-auto max-h-[70vh]"}`}
         />
         {label ? (
           <span className="absolute start-2 top-2 rounded-md bg-card/90 px-2 text-meta font-semibold">{label}</span>
@@ -201,9 +210,8 @@ function Figure({
 
 function Sources({ place }: { place: Place }) {
   return (
-    <section className="mt-10 border-t border-line pt-4 text-meta">
-      <h2 className="mb-2 font-semibold">সূত্র</h2>
-      <ol className="grid list-decimal gap-0.5 ps-5 text-muted">
+    <section className="mt-4 text-body">
+      <ol className="grid list-decimal gap-1.5 ps-5 text-ink-2">
         {place.sources.map((s) => (
           <li key={s.id}>
             <a href={s.url} className="hover:text-ink hover:underline">

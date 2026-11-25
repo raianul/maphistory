@@ -6,8 +6,10 @@ import { ERA_META, periodDisplay, periodStart, readableText } from "@/lib/format
 import type { AiPlace, PartialStory } from "@/lib/ai/types";
 import { ERAS, type Era } from "@/lib/schema";
 import type { PlaceVideo } from "@/lib/video";
-import { ActionRow } from "./ActionRow";
+import { slugOf } from "@/lib/analytics";
+import { PlaceActions } from "./PlaceActions";
 import { ReportMistake } from "./ReportMistake";
+import { StoryTabs } from "./StoryTabs";
 import { VideoPlayer } from "./VideoPlayer";
 
 type Confidence = "high" | "medium" | "low";
@@ -88,95 +90,17 @@ export function AiStory({
   const sources = (s.sources ?? []).filter((src) => src?.title);
   const verified = status === "verified";
   const name = s.name_bn || fallbackName;
-  const meta = [s.kind_bn, eraLabel, s.origin_bn].filter(Boolean);
   // Supporting sections start open when the story is the main content, folded under a video.
   const open = !hasVideo;
 
-  return (
-    <article className="pb-16">
-      {/* A. Location header: name, where, what kind and when (one quiet line), actions. */}
-      <header className="pt-1">
-        <div className="flex items-start gap-3">
-          <div className="min-w-0 flex-1">
-            <h1 className="text-display font-bold tracking-tight text-balance">{name}</h1>
-            {/* Reserved height, so the line arriving doesn't push the story down. */}
-            <p className="mt-1 min-h-[1.25rem] text-meta text-muted">
-              {s.locality_en ?? (streaming ? <span className="skeleton mt-1 block h-3 w-40 rounded" aria-hidden /> : s.name_en)}
-              {s.locality_en && s.name_en && !s.locality_en.startsWith(s.name_en) && <span> · {s.name_en}</span>}
-            </p>
-          </div>
-          <ActionRow
-            compact
-            title={name}
-            url={shareUrl}
-            lat={at.lat}
-            lng={at.lng}
-            destination={!streaming ? directionsQuery(s.name_en, s.locality_en) : undefined}
-          />
-        </div>
-        <p className="mt-2.5 flex min-h-[1.25rem] flex-wrap items-center gap-x-2 text-meta text-ink-2">
-          {meta.map((m, i) => (
-            <span key={i} className="flex items-center gap-2">
-              {i > 0 && <span className="size-[3px] rounded-full bg-subtle" aria-hidden />}
-              {m}
-            </span>
-          ))}
-          {streaming && meta.length === 0 && <span className="skeleton block h-3 w-28 rounded" aria-hidden />}
-        </p>
-      </header>
+  const slug = slugOf(shareUrl);
+  const chip = "rounded-full px-2.5 py-0.5 text-meta";
 
-      {notice}
+  // The story itself: introduction, then the supporting sections.
+  const storyTab = (
+    <>
+      {s.summary_bn ? <p className="mt-2 text-lead">{s.summary_bn}</p> : streaming ? <SkeletonLines lines={3} className="mt-3" tall /> : null}
 
-      <StatusLine streaming={streaming} status={status} verifiedAt={verifiedAt} />
-
-      {/* Short introduction */}
-      {s.summary_bn ? (
-        <p className="mt-4 text-lead">{s.summary_bn}</p>
-      ) : streaming ? (
-        <SkeletonLines lines={3} className="mt-5" tall />
-      ) : null}
-
-      {/* B. Video: the main content when the place has one; otherwise the photo */}
-      {hasVideo ? (
-        <VideoPlayer videos={videos} />
-      ) : image ? (
-        <figure className="mt-6">
-          {/* Commons photo, licence checked on the server. */}
-          <div className="aspect-video w-full overflow-hidden rounded-media bg-hover">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={image.src} alt={name} className="size-full animate-[fadein_.6s_ease] object-cover" />
-          </div>
-          <figcaption className="mt-1.5 truncate text-micro text-muted" title={`${image.credit.author}, ${image.credit.license}`}>
-            ছবি:{" "}
-            <a href={image.credit.sourceUrl} className="hover:text-ink hover:underline" target="_blank" rel="noreferrer">
-              {image.credit.author}
-            </a>
-            {" · "}
-            {image.credit.licenseUrl ? (
-              <a href={image.credit.licenseUrl} className="hover:text-ink hover:underline" target="_blank" rel="noreferrer">
-                {image.credit.license}
-              </a>
-            ) : (
-              image.credit.license
-            )}
-          </figcaption>
-        </figure>
-      ) : streaming ? (
-        <div className="skeleton mt-6 aspect-video w-full rounded-media" aria-hidden />
-      ) : null}
-
-      {keyNumbers.length > 0 && (
-        <dl className="mt-6 grid animate-[fadein_.4s_ease] grid-cols-2 gap-x-6 gap-y-4">
-          {keyNumbers.map((k, i) => (
-            <div key={i} className="flex flex-col-reverse">
-              <dt className="text-meta text-muted">{k.label_bn}</dt>
-              <dd className="text-xl leading-tight font-bold">{k.value_bn}</dd>
-            </div>
-          ))}
-        </dl>
-      )}
-
-      {/* C. Supporting historical information */}
       {(s.name_story_bn || oldNames.length > 0 || s.historical_significance_bn) && (
         <Disclosure title="নাম ও পরিচয়" open={open}>
           {s.name_story_bn && <p className="text-body">{s.name_story_bn}</p>}
@@ -201,28 +125,10 @@ export function AiStory({
         </Disclosure>
       )}
 
-      {/* Dates an editor checked against the sources. */}
-      {keyDates.length > 0 && (
-        <Disclosure title="মূল তারিখ" count={keyDates.length} open={open}>
-          {/* One grid for all rows, so the text column lines up. */}
-          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2.5 text-body">
-            {keyDates.map((k, i) => (
-              <Fragment key={i}>
-                <dt className="font-semibold text-ink-2 tabular-nums">{k.date_bn}</dt>
-                <dd>{k.text_bn}</dd>
-              </Fragment>
-            ))}
-          </dl>
-        </Disclosure>
-      )}
-
       {shown.length > 0 ? (
         <Disclosure title="ইতিহাস, আমল ধরে" count={shown.length} open={open}>
           {/* Period chips: the whole history at a glance; tap to jump */}
-          <nav
-            className="sticky top-0 z-10 -mx-5 flex gap-1.5 overflow-x-auto bg-paper/95 px-5 py-2 backdrop-blur [scrollbar-width:none] md:-mx-6 md:px-6"
-            aria-label="আমল"
-          >
+          <nav className="-mx-1 flex gap-1.5 overflow-x-auto px-1 py-2 [scrollbar-width:none]" aria-label="আমল">
             {shown.map(({ d }, i) => (
               <a
                 key={i}
@@ -293,26 +199,6 @@ export function AiStory({
         </Disclosure>
       )}
 
-      {sources.length > 0 && (
-        <Disclosure title="সূত্র" count={sources.length} open={false}>
-          <ul className="grid gap-2 text-meta">
-            {sources.map((src, i) => (
-              <li key={i}>
-                {src.url ? (
-                  <a href={src.url} className="text-accent underline underline-offset-2 hover:text-accent-hover" target="_blank" rel="noreferrer">
-                    {src.title}
-                  </a>
-                ) : (
-                  src.title
-                )}
-                {src.author_or_institution && <span className="text-muted"> · {src.author_or_institution}</span>}
-                {src.year !== undefined && <span className="text-muted"> · {src.year}</span>}
-              </li>
-            ))}
-          </ul>
-        </Disclosure>
-      )}
-
       {/* While writing: a quiet marker where the next part will appear. */}
       {streaming && s.summary_bn && (
         <p className="mt-8 flex items-center gap-2 text-meta text-muted" aria-hidden>
@@ -322,42 +208,147 @@ export function AiStory({
       )}
 
       {!streaming && id && <ReportMistake storyId={id} />}
+    </>
+  );
+
+  // Dates an editor checked against the sources.
+  const datesTab = (
+    <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-3 text-body">
+      {keyDates.map((k, i) => (
+        <Fragment key={i}>
+          <dt className="font-semibold text-ink-2 tabular-nums">{k.date_bn}</dt>
+          <dd>{k.text_bn}</dd>
+        </Fragment>
+      ))}
+    </dl>
+  );
+
+  // Where it comes from: sources, corrections, what the tags mean.
+  const sourcesTab = (
+    <div className="mt-3 grid gap-4">
+      {sources.length > 0 ? (
+        <ul className="grid gap-2.5 text-body">
+          {sources.map((src, i) => (
+            <li key={i}>
+              {src.url ? (
+                <a href={src.url} className="text-accent underline underline-offset-2 hover:text-accent-hover" target="_blank" rel="noreferrer">
+                  {src.title}
+                </a>
+              ) : (
+                src.title
+              )}
+              {src.author_or_institution && <span className="text-meta text-muted"> · {src.author_or_institution}</span>}
+              {src.year !== undefined && <span className="text-meta text-muted"> · {src.year}</span>}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-body text-ink-2">উৎস: AI মডেলের নিজস্ব জ্ঞান; কোনো বাইরের সূত্র মিলিয়ে দেখা হয়নি।</p>
+      )}
+      {verified && s.corrections_bn && (
+        <p className="text-meta text-ink-2">
+          <span className="font-semibold">সংশোধন: </span>
+          {s.corrections_bn}
+        </p>
+      )}
+      <p className="text-micro text-muted">
+        <span className="font-semibold">সম্ভবত</span> = প্রচলিত তথ্য, খুঁটিনাটিতে ভিন্নমত আছে · <span className="font-semibold">অনিশ্চিত</span> = নিশ্চিত হওয়া যায়নি ·{" "}
+        <span className="font-semibold">গবেষকদের ব্যাখ্যা</span> = নথি নয়, ঐতিহাসিকদের বিশ্লেষণ · <span className="font-semibold">লোকঐতিহ্য / কিংবদন্তি</span> = মুখে মুখে চলে
+        আসা কাহিনি · <span className="font-semibold">বিতর্কিত</span> = ঐতিহাসিকরা একমত নন
+      </p>
+    </div>
+  );
+
+  return (
+    <article className="pb-16">
+      {/* A. Name, where, and what it is (status, era, kind, when) as chips. */}
+      <header className="pt-1">
+        <h1 className="text-display font-bold tracking-tight text-balance">{name}</h1>
+        {/* Reserved height, so the line arriving doesn't push the story down. */}
+        <p className="mt-1 min-h-[1.25rem] text-meta text-muted">
+          {s.locality_en ?? (streaming ? <span className="skeleton mt-1 block h-3 w-40 rounded" aria-hidden /> : s.name_en)}
+          {s.locality_en && s.name_en && !s.locality_en.startsWith(s.name_en) && <span> · {s.name_en}</span>}
+        </p>
+        <div className="mt-3 flex min-h-7 flex-wrap items-center gap-1.5">
+          <StatusChip streaming={streaming} status={status} verifiedAt={verifiedAt} />
+          {eraLabel && <span className={`${chip} bg-accent-soft text-accent`}>{eraLabel}</span>}
+          {s.kind_bn && <span className={`${chip} bg-hover text-ink-2`}>{s.kind_bn}</span>}
+          {s.origin_bn && <span className={`${chip} bg-hover text-ink-2`}>{s.origin_bn}</span>}
+        </div>
+      </header>
+
+      {notice}
+
+      {/* B. Video: the main content when the place has one; otherwise the photo */}
+      {hasVideo ? (
+        <VideoPlayer videos={videos} />
+      ) : image ? (
+        <figure className="mt-5">
+          {/* Commons photo, licence checked on the server. */}
+          <div className="aspect-video w-full overflow-hidden rounded-media bg-hover">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={image.src} alt={name} className="size-full animate-[fadein_.6s_ease] object-cover" />
+          </div>
+          <figcaption className="mt-1.5 truncate text-micro text-muted" title={`${image.credit.author}, ${image.credit.license}`}>
+            ছবি:{" "}
+            <a href={image.credit.sourceUrl} className="hover:text-ink hover:underline" target="_blank" rel="noreferrer">
+              {image.credit.author}
+            </a>
+            {" · "}
+            {image.credit.licenseUrl ? (
+              <a href={image.credit.licenseUrl} className="hover:text-ink hover:underline" target="_blank" rel="noreferrer">
+                {image.credit.license}
+              </a>
+            ) : (
+              image.credit.license
+            )}
+          </figcaption>
+        </figure>
+      ) : streaming ? (
+        <div className="skeleton mt-5 aspect-video w-full rounded-media" aria-hidden />
+      ) : null}
+
+      {/* C. Share · directions · 👍 · 👎 */}
+      <PlaceActions title={name} path={shareUrl} slug={streaming ? undefined : slug} lat={at.lat} lng={at.lng} destination={!streaming ? directionsQuery(s.name_en, s.locality_en) : undefined} />
+
+      {keyNumbers.length > 0 && (
+        <dl className="mt-4 grid animate-[fadein_.4s_ease] grid-cols-[repeat(auto-fit,minmax(7.5rem,1fr))] gap-2">
+          {keyNumbers.map((k, i) => (
+            <div key={i} className="flex flex-col-reverse rounded-2xl border border-line px-3 py-2.5">
+              <dt className="text-micro text-muted">{k.label_bn}</dt>
+              <dd className="text-lg leading-tight font-bold">{k.value_bn}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+
+      {/* D. The story in tabs: গল্প · মূল তারিখ · সূত্র */}
+      <StoryTabs
+        resetKey={name}
+        tabs={[
+          { id: "story", label: "গল্প", content: storyTab },
+          ...(keyDates.length > 0 ? [{ id: "dates", label: "মূল তারিখ", content: datesTab }] : []),
+          ...(!streaming ? [{ id: "sources", label: "সূত্র", count: sources.length || undefined, content: sourcesTab }] : []),
+        ]}
+      />
 
       {!streaming && (
         <footer className="mt-10 animate-[fadein_.4s_ease] border-t border-line pt-4 text-micro text-muted">
-          <p>
-            <span className="font-semibold">সম্ভবত</span> = প্রচলিত তথ্য, খুঁটিনাটিতে ভিন্নমত আছে ·{" "}
-            <span className="font-semibold">অনিশ্চিত</span> = নিশ্চিত হওয়া যায়নি ·{" "}
-            <span className="font-semibold">গবেষকদের ব্যাখ্যা</span> = নথি নয়, ঐতিহাসিকদের বিশ্লেষণ ·{" "}
-            <span className="font-semibold">লোকঐতিহ্য / কিংবদন্তি</span> = মুখে মুখে চলে আসা কাহিনি ·{" "}
-            <span className="font-semibold">বিতর্কিত</span> = ঐতিহাসিকরা একমত নন
-          </p>
           {verified ? (
-            <>
-              {s.corrections_bn && (
-                <p className="mt-2">
-                  <span className="font-semibold">সংশোধন: </span>
-                  {s.corrections_bn}
-                </p>
-              )}
-              <p className="mt-2 font-semibold text-ink-2">
-                খসড়াটি AI (Google Gemini) লিখেছে; সম্পাদক তথ্যগুলো {sources.length > 0 ? "ওপরের সূত্রের সঙ্গে " : ""}মিলিয়ে দেখেছেন
-                {verifiedAt && bnDate(verifiedAt) ? ` (${bnDate(verifiedAt)})` : ""}।{" "}
-                <a href="/about" className="font-normal text-accent underline">
-                  আরও জানুন
-                </a>
-              </p>
-            </>
+            <p className="font-semibold text-ink-2">
+              খসড়াটি AI (Google Gemini) লিখেছে; সম্পাদক তথ্যগুলো {sources.length > 0 ? "সূত্রের সঙ্গে " : ""}মিলিয়ে দেখেছেন
+              {verifiedAt && bnDate(verifiedAt) ? ` (${bnDate(verifiedAt)})` : ""}।{" "}
+              <a href="/about" className="font-normal text-accent underline">
+                আরও জানুন
+              </a>
+            </p>
           ) : (
-            <>
-              {sources.length === 0 && <p className="mt-1">উৎস: AI মডেলের নিজস্ব জ্ঞান; কোনো বাইরের সূত্র মিলিয়ে দেখা হয়নি।</p>}
-              <p className="mt-2 font-semibold text-ink-2">
-                এই গল্পটি AI (Google Gemini{model ? `, ${model}` : ""}) লিখেছে; কেউ যাচাই করেনি, ভুল থাকতে পারে।{" "}
-                <a href="/about" className="font-normal text-accent underline">
-                  আরও জানুন
-                </a>
-              </p>
-            </>
+            <p className="font-semibold text-ink-2">
+              এই গল্পটি AI (Google Gemini{model ? `, ${model}` : ""}) লিখেছে; কেউ যাচাই করেনি, ভুল থাকতে পারে।{" "}
+              <a href="/about" className="font-normal text-accent underline">
+                আরও জানুন
+              </a>
+            </p>
           )}
           <p className="mt-3">
             <a href={FACEBOOK_URL} target="_blank" rel="noreferrer" className="font-semibold text-ink-2 underline hover:text-accent">
@@ -370,31 +361,26 @@ export function AiStory({
   );
 }
 
-/** One line under the header: being written, or how far the story can be trusted. */
-function StatusLine({ streaming, status, verifiedAt }: { streaming: boolean; status?: AiPlace["status"]; verifiedAt?: string }) {
-  // One fixed-height line in every state, so nothing below it moves when writing finishes.
-  const line = "mt-3 flex min-h-5 items-center gap-2 text-meta";
+/** The first chip: being written, checked by an editor (date on hover), or written by AI. */
+function StatusChip({ streaming, status, verifiedAt }: { streaming: boolean; status?: AiPlace["status"]; verifiedAt?: string }) {
+  const chip = "flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-meta font-semibold";
   if (streaming) {
     return (
-      <p className={`${line} text-accent`} role="status" aria-live="polite">
+      <span className={`${chip} text-accent`} role="status" aria-live="polite">
         <TypingDots />
         ইতিহাস লেখা হচ্ছে…
-      </p>
+      </span>
     );
   }
   const date = verifiedAt ? bnDate(verifiedAt) : undefined;
   return status === "verified" ? (
-    <p className={`${line} animate-[fadein_.3s_ease] text-muted`}>
-      <span className="font-semibold text-success" title={date ? `যাচাই করা হয়েছে ${date}` : undefined}>
-        ✓ যাচাইকৃত
-      </span>
-      <span className="truncate">· সম্পাদক তথ্যগুলো সূত্রের সঙ্গে মিলিয়ে দেখেছেন</span>
-    </p>
+    <span className={`${chip} animate-[fadein_.3s_ease] bg-success-soft text-success`} title={date ? `সম্পাদক সূত্রের সঙ্গে মিলিয়ে দেখেছেন · ${date}` : "সম্পাদক সূত্রের সঙ্গে মিলিয়ে দেখেছেন"}>
+      ✓ যাচাইকৃত
+    </span>
   ) : (
-    <p className={`${line} animate-[fadein_.3s_ease] text-muted`}>
-      <span className="font-semibold text-accent">✦ AI দিয়ে লেখা</span>
-      <span className="truncate">· এখনো যাচাই করা হয়নি</span>
-    </p>
+    <span className={`${chip} animate-[fadein_.3s_ease] bg-accent-soft text-accent`} title="এখনো যাচাই করা হয়নি">
+      ✦ AI দিয়ে লেখা
+    </span>
   );
 }
 

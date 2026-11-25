@@ -169,12 +169,15 @@ const missingColumn = (code?: string) => code === "42703" || code === "PGRST204"
 /** Every saved story, for the admin map (hidden ones too). */
 export async function listStories() {
   const list = (columns: string) => db().from("stories").select(columns).order("views", { ascending: false }).limit(5000);
-  const base = "id,name_bn,name_en,lat,lng,kind,status,views,reports,updated_at";
+  const base = "id,slug,name_bn,name_en,lat,lng,kind,status,views,reports,updated_at";
   let { data, error } = await list(`${base},show_on_map`);
   // Before the show_on_map migration: list them anyway, all off the map.
   if (missingColumn(error?.code)) ({ data, error } = await list(base));
   if (error) throw new Error(`Database: ${error.message}`);
-  return data ?? [];
+  // 👍 / 👎 per place (the admin sees both).
+  const { reactionTotals } = await import("./reactions");
+  const totals = await reactionTotals();
+  return ((data ?? []) as unknown as { slug: string | null }[]).map((r) => ({ ...r, likes: 0, dislikes: 0, ...(r.slug ? totals.get(r.slug) : {}) }));
 }
 
 
@@ -227,7 +230,9 @@ export async function getStoryForAdmin(id: string) {
   ]);
   if (story.error) throw new Error(`Database: ${story.error.message}`);
   if (!story.data) return undefined;
-  return { ...story.data, report_list: reports.data ?? [], videos: await listVideos(id) };
+  const { reactionTotals } = await import("./reactions");
+  const votes = story.data.slug ? (await reactionTotals()).get(story.data.slug) : undefined;
+  return { ...story.data, likes: votes?.likes ?? 0, dislikes: votes?.dislikes ?? 0, report_list: reports.data ?? [], videos: await listVideos(id) };
 }
 
 export async function updateStory(id: string, patch: Record<string, unknown>) {
