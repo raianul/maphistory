@@ -203,7 +203,7 @@ export function AiStory({
       {streaming && s.summary_bn && (
         <p className="mt-8 flex items-center gap-2 text-meta text-muted" aria-hidden>
           <TypingDots />
-          আরও লেখা হচ্ছে
+          আরও আসছে…
         </p>
       )}
 
@@ -326,7 +326,7 @@ export function AiStory({
       <StoryTabs
         resetKey={name}
         tabs={[
-          { id: "story", label: "গল্প", content: storyTab },
+          { id: "story", label: "বিবরণ", content: storyTab },
           ...(keyDates.length > 0 ? [{ id: "dates", label: "মূল তারিখ", content: datesTab }] : []),
           ...(!streaming ? [{ id: "sources", label: "সূত্র", count: sources.length || undefined, content: sourcesTab }] : []),
         ]}
@@ -368,7 +368,7 @@ function StatusChip({ streaming, status, verifiedAt }: { streaming: boolean; sta
     return (
       <span className={`${chip} text-accent`} role="status" aria-live="polite">
         <TypingDots />
-        ইতিহাস লেখা হচ্ছে…
+        বিস্তারিত আসছে…
       </span>
     );
   }

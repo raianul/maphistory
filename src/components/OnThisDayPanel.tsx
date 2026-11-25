@@ -264,12 +264,12 @@ function EventBody({ e, onTimeline }: { e: PublicEvent; onTimeline: (t: { event:
       {/* Wide screens: the card is a popup on the map (PlaceMap); here, the steps to jump between. */}
       {/* Through STEP_REQUEST, so the map's popup also hears it (and reopens, even for the same step). */}
       {hasTimeline && step >= 0 && (
-        <StepList e={e} step={step} onStep={(i) => window.dispatchEvent(new CustomEvent(STEP_REQUEST, { detail: i }))} onStoryOnly={() => setStep(-1)} className="hidden md:block" />
+        <StepList e={e} step={step} onStep={(i) => window.dispatchEvent(new CustomEvent(STEP_REQUEST, { detail: i }))} className="hidden md:block" />
       )}
       {/* Phones: the card stays in the sheet (a popup would cover the small map). */}
       {hasTimeline && step >= 0 && (
         <div className="md:hidden">
-          <TimelineCard e={e} step={step} onStep={setStep} onStoryOnly={() => setStep(-1)} />
+          <TimelineCard e={e} step={step} onStep={setStep} />
         </div>
       )}
       {hasTimeline && step < 0 && (
@@ -340,7 +340,7 @@ function EventBody({ e, onTimeline }: { e: PublicEvent; onTimeline: (t: { event:
  * The current step (title, when, where, story, image) with previous/next, a step slider and the
  * phase legend. The map follows (PlaceMap draws and frames the step). Unknown places say so.
  */
-function TimelineCard({ e, step, onStep, onStoryOnly }: { e: PublicEvent; step: number; onStep: (n: number) => void; onStoryOnly: () => void }) {
+function TimelineCard({ e, step, onStep }: { e: PublicEvent; step: number; onStep: (n: number) => void }) {
   const s = e.steps[step];
   const n = e.steps.length;
   const phase = e.phases.find((p) => p.id === s.phase_id);
@@ -389,9 +389,6 @@ function TimelineCard({ e, step, onStep, onStoryOnly }: { e: PublicEvent; step: 
             পরের ›
           </button>
         </div>
-        <button type="button" onClick={onStoryOnly} className="justify-self-center text-meta text-muted hover:text-ink hover:underline">
-          শুধু গল্প পড়ুন (সময়রেখা বন্ধ)
-        </button>
       </div>
     </section>
   );
@@ -477,10 +474,10 @@ export function StepContent({ e, step, compact = false }: { e: PublicEvent; step
  * Wide screens: the timeline's steps as a numbered list (the current one's card is a popup on the
  * map). Steps without a place on the map say so; they open their card in the map's corner.
  */
-function StepList({ e, step, onStep, onStoryOnly, className = "" }: { e: PublicEvent; step: number; onStep: (n: number) => void; onStoryOnly: () => void; className?: string }) {
+function StepList({ e, step, onStep, className = "" }: { e: PublicEvent; step: number; onStep: (n: number) => void; className?: string }) {
   return (
     <section aria-label="সময়রেখা" className={`mt-4 rounded-2xl bg-card p-3 shadow-float ${className}`}>
-      <p className="px-1 text-micro font-semibold text-muted">সময়রেখা · মানচিত্রে চিহ্নে বা এখানে ধাপে চাপুন</p>
+      <p className="px-1 text-micro font-semibold text-muted">সময়রেখা · মানচিত্রে চিহ্নে বা এখানে ধাপে ক্লিক করুন</p>
       <ol className="mt-2 grid gap-0.5">
         {e.steps.map((s, i) => {
           const phase = e.phases.find((p) => p.id === s.phase_id);
@@ -513,9 +510,6 @@ function StepList({ e, step, onStep, onStoryOnly, className = "" }: { e: PublicE
           );
         })}
       </ol>
-      <button type="button" onClick={onStoryOnly} className="mt-1 w-full text-center text-micro text-muted hover:text-ink hover:underline">
-        শুধু গল্প পড়ুন (সময়রেখা বন্ধ)
-      </button>
     </section>
   );
 }

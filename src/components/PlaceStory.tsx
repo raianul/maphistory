@@ -143,7 +143,7 @@ export function PlaceStory({ place }: { place: Place }) {
       <StoryTabs
         resetKey={place.slug}
         tabs={[
-          { id: "story", label: "গল্প", content: storyTab },
+          { id: "story", label: "বিবরণ", content: storyTab },
           ...(events.length > 0 ? [{ id: "dates", label: "সময়রেখা", content: datesTab }] : []),
           { id: "sources", label: "সূত্র", count: place.sources.length || undefined, content: <Sources place={place} /> },
         ]}

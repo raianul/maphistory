@@ -100,7 +100,7 @@ function Votes({ slug, className, neutral }: { slug?: string; className: string;
     }
   }
 
-  const wait = slug ? undefined : "গল্পটি লেখা শেষ হলে";
+  const wait = slug ? undefined : "পুরো বিবরণ এলে";
   return (
     <>
       <button

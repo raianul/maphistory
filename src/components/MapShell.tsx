@@ -312,7 +312,7 @@ export function PinPreview({ p }: { p: PinPreviewData }) {
         <p className="mt-2 flex items-center gap-2.5 text-meta">
           {p.verified && <span className="font-semibold text-accent">✓ যাচাইকৃত</span>}
           {!!p.likes && <span className="text-ink-2">👍 {p.likes.toLocaleString("bn-BD")}</span>}
-          <span className="ms-auto font-semibold text-accent">গল্প পড়ুন →</span>
+          <span className="ms-auto font-semibold text-accent">বিস্তারিত →</span>
         </p>
       </div>
     </div>

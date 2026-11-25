@@ -607,7 +607,7 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
           ].slice(0, 6);
           aiRef.current({ name, lat, lng, kind, nearby });
         });
-        // Hover hint: the label's name and "গল্প পড়ুন", following the pointer (not over the blank-out).
+        // Hover hint: the label's name and "বিস্তারিত", following the pointer (not over the blank-out).
         map.on("mousemove", labelLayers, (e: MapLayerMouseEvent) => {
           const tip = tooltip.current;
           const name = shownLabel(e.features?.[0]?.properties);
@@ -974,7 +974,7 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
         hidden
         className="pointer-events-none absolute top-0 left-0 z-10 rounded-lg bg-card px-2.5 py-1 text-meta text-ink shadow-menu"
       >
-        <span className="font-semibold" /> <span className="text-accent">· গল্প পড়ুন →</span>
+        <span className="font-semibold" /> <span className="text-accent">· বিস্তারিত →</span>
       </div>
 
       {/* First-visit tip: what makes this map different (above the attribution line). */}
@@ -987,7 +987,7 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
             </span>
             <p className="flex-1 text-meta">
               <span className="font-semibold">মানচিত্রের যেকোনো নামে ট্যাপ করুন।</span>{" "}
-              <span className="text-muted">এলাকা, রাস্তা, মসজিদ বা নদী: প্রতিটির পেছনের গল্প জানুন।</span>
+              <span className="text-muted">এলাকা, রাস্তা, মসজিদ বা নদী: প্রতিটির পেছনের ইতিহাস জানুন।</span>
             </p>
             <button
               type="button"

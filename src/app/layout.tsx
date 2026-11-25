@@ -15,7 +15,7 @@ const hind = Hind_Siliguri({
 export const metadata: Metadata = {
   metadataBase: new URL(SITE.url),
   title: { default: `${SITE.name} — ${SITE.tagline}`, template: `%s · ${SITE.name}` },
-  description: "বাংলাদেশের ঐতিহাসিক স্থানের মানচিত্র। প্রতিটি পিনে সেই জায়গার ছবি-সহ গল্প।",
+  description: "বাংলাদেশের ঐতিহাসিক স্থানের মানচিত্র। প্রতিটি পিনে সেই জায়গার ইতিহাস, ছবি ও ভিডিও।",
   openGraph: {
     siteName: SITE.name,
     locale: "bn_BD",

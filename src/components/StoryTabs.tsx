@@ -32,7 +32,7 @@ export function StoryTabs({ tabs, resetKey }: { tabs: StoryTab[]; /** A new plac
       {tabs.length > 1 && (
         // Stays at the top while reading (on a solid ground, so text doesn't show through).
         <div className="sticky top-0 z-10 -mx-1 bg-paper px-1 py-2">
-        <div role="tablist" aria-label="গল্পের অংশ" className="flex gap-1 rounded-full bg-hover p-1">
+        <div role="tablist" aria-label="বিবরণের অংশ" className="flex gap-1 rounded-full bg-hover p-1">
           {tabs.map((t, i) => {
             const on = t.id === active;
             return (

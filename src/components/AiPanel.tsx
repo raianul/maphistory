@@ -143,7 +143,7 @@ export function AiPanel({
         }
         // The connection closed without a final event (network drop, server restart): say so,
         // keep what was shown, and offer a retry, instead of "being written" forever.
-        if (!finished && !ctrl.signal.aborted) update({ error: "লেখা মাঝপথে থেমে গেছে। আবার চেষ্টা করুন।", done: true });
+        if (!finished && !ctrl.signal.aborted) update({ error: "মাঝপথে থেমে গেছে। আবার চেষ্টা করুন।", done: true });
       } catch (e) {
         if (!ctrl.signal.aborted) update({ error: readableError(e), done: true });
       }
@@ -220,7 +220,7 @@ function FailedEmpty({ name, message, onRetry }: { name: string; message: string
             <circle cx="10" cy="10" r="7.5" />
           </svg>
         </span>
-        <p className="mt-4 font-semibold">গল্পটি এখন আনা গেল না</p>
+        <p className="mt-4 font-semibold">বিস্তারিত এখন আনা গেল না</p>
         <p className="mt-1 max-w-xs text-meta text-muted">{message}</p>
         <button
           type="button"
