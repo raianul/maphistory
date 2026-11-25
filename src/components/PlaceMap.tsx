@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { GeoJSONSource, Map as MLMap, MapLayerMouseEvent, MapMouseEvent, Marker } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { pinTarget, type MapPin } from "@/lib/map-pin";
@@ -19,7 +19,7 @@ import { StepPopup } from "./StepPopup";
 import { SHEET_EVENT, SHEET_REQUEST } from "./SidePanel";
 import { SearchBox } from "./SearchBox";
 import { Brand, BrandMark, CategoryChips, LangSwitch, MoreMenu, OnThisDayCard, PinPreview, SectionNav, TabBar, ZoomButtons, type MapSection, type PinFilter, type PinPreviewData } from "./MapShell";
-import { CollectionBar, CollectionsPicker } from "./Collections";
+import { CollectionBar, CollectionsPanel } from "./Collections";
 import type { PublicCollection } from "@/lib/collections";
 import type { CategoryId } from "@/lib/categories";
 import { THEME } from "@/lib/theme";
@@ -120,11 +120,11 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
   /** The collection shown on the map (only its places, numbered), and which of them is open. */
   const [coll, setColl] = useState<PublicCollection | null>(null);
   const [collAt, setCollAt] = useState<number | null>(null);
-  /** The সংগ্রহ list is open. */
-  const [picker, setPicker] = useState(false);
+  /** The সংগ্রহ panel is open (the list, or the open collection). */
+  const [collPanel, setCollPanel] = useState(false);
+  const [collLoading, setCollLoading] = useState(false);
   /** The "সব ধরন" panel is open (the On this day card steps aside meanwhile). */
   const [kindsPanel, setKindsPanel] = useState(false);
-  const closePicker = useCallback(() => setPicker(false), []);
   /** Desktop: the pin under the pointer, previewed in a small card. */
   const [preview, setPreview] = useState<PinPreviewData | null>(null);
   /** The floating search, so the map knows where its visible area begins. */
@@ -282,6 +282,7 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
   /** EXPERIMENT: opens a live AI story for any named place on the base map. */
   function openAi(target: AiTarget, zoom?: number, source: PlaceSource = "map") {
     track("place_open", { slug: target.slug, place_name: target.name, source });
+    setCollPanel(false);
     // A place with a hand-written page (e.g. Ahsan Manzil): that page, in its own panel.
     if (target.slug && curated.includes(target.slug)) {
       dismissTip();
@@ -318,6 +319,7 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
     slug ? `/?event=${encodeURIComponent(slug)}${at ? `&on=${at.md}${at.step ? `&step=${at.step}` : ""}` : ""}` : "/?day=today";
   /** Opens the list (from the button) or an event (from the list or a shared link). */
   function openOtd(slug: string | null, place?: { lat: number; lng: number } | null, at?: { md: string; step: number | null }) {
+    setCollPanel(false);
     if (selected) router.replace("/", { scroll: false });
     dismissTip();
     const url = otdUrl(slug, at);
@@ -454,17 +456,33 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
   // ── Collections ────────────────────────────────────────────────────────────────────────
   /** Shows a published collection on the map: only its places, numbered, framed together. */
   async function openCollection(slug: string) {
+    setCollLoading(true);
     const r = await fetch(`/api/collections/${encodeURIComponent(slug)}`).catch(() => null);
     const c = r?.ok ? ((await r.json()).collection as PublicCollection) : null;
-    setPicker(false);
+    setCollLoading(false);
     if (!c || !c.places.length) return;
-    goToMap();
+    leavePanels();
+    setCollPanel(true);
     setPinFilter(null);
     setPreview(null);
     setColl(c);
     setCollAt(null);
     track("collection_open", { slug: c.slug });
     if (window.location.pathname === "/") window.history.replaceState(window.history.state, "", withCampaign(`/?collection=${c.slug}`));
+  }
+  /** The সংগ্রহ panel with its list (from the menu). */
+  function openCollections() {
+    leavePanels();
+    setCollPanel(true);
+  }
+  /** Closes a place, the day's events or a hand-written page, for the সংগ্রহ panel (no history games). */
+  function leavePanels() {
+    if (selected) router.replace("/", { scroll: false });
+    setAiTarget(null);
+    setOtd(null);
+    setOtdPlace(null);
+    setTimeline(null);
+    dismissTip();
   }
   /** Back to every pin. */
   function closeCollection() {
@@ -481,6 +499,7 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
     const p = coll?.places[i];
     if (!p) return;
     setCollAt(i);
+    setCollPanel(false);
     openAi(pinTarget(p), Math.max(mapRef.current?.getZoom() ?? 15, 15), "collection");
   }
   // A shared link (/?collection=<slug>): open it once the map is ready.
@@ -953,8 +972,8 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
     if (!timeline) framedEvent.current = null;
   }, [timeline]);
 
-  const panelOpen = Boolean(selected || aiTarget || otd);
-  const section: MapSection = otd ? "otd" : coll || picker ? "collections" : "map";
+  const panelOpen = Boolean(selected || aiTarget || otd || collPanel);
+  const section: MapSection = otd ? "otd" : coll || collPanel ? "collections" : "map";
   const tabBar = !panelOpen;
 
   /** The plain map: closes whatever panel is open. */
@@ -966,6 +985,7 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
 
   /** "মানচিত্র": the plain map, every pin (closes a panel and the collection). */
   function plainMap() {
+    setCollPanel(false);
     goToMap();
     if (coll) closeCollection();
   }
@@ -1032,7 +1052,7 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
       >
         <div className="flex flex-wrap items-center gap-2 md:gap-3">
         <Brand />
-        <SectionNav section={section} onMap={plainMap} onCollections={() => setPicker(true)} onOtd={() => openOtd(null)} />
+        <SectionNav section={section} onMap={plainMap} onCollections={openCollections} onOtd={() => openOtd(null)} />
         <div className="pointer-events-auto w-full min-w-0 md:w-[360px] md:max-w-full md:flex-initial">
           <SearchBox
             leading={
@@ -1076,13 +1096,24 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
         </div>
 
         {coll ? (
-          // Phones: not while a story's sheet is open (desktop keeps it beside the panel).
-          <div className={panelOpen ? "hidden md:block" : undefined}>
-            <CollectionBar c={coll} at={collAt} onStep={stepCollection} onClose={closeCollection} />
-          </div>
+          // While its panel is closed (a place is open, or the map alone). Phones: not over a sheet.
+          !collPanel && (
+            <div className={panelOpen ? "hidden md:block" : undefined}>
+              <CollectionBar
+                c={coll}
+                at={collAt}
+                onStep={stepCollection}
+                onList={() => {
+                  leavePanels();
+                  setCollPanel(true);
+                  window.history.replaceState(window.history.state, "", withCampaign(`/?collection=${coll.slug}`));
+                }}
+                onClose={closeCollection}
+              />
+            </div>
+          )
         ) : (
-          pinsShown &&
-          !picker && (
+          pinsShown && (
             <div className={panelOpen ? "hidden md:block" : undefined}>
               <CategoryChips kinds={pinKinds} videos={pinVideos} value={pinFilter} onChange={setPinFilter} onPanel={setKindsPanel} />
             </div>
@@ -1172,6 +1203,17 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
           }}
         />
       )}
+      {collPanel && (
+        <CollectionsPanel
+          open={coll}
+          at={collAt}
+          loading={collLoading}
+          onPick={openCollection}
+          onPlace={stepCollection}
+          onBack={closeCollection}
+          onClose={() => setCollPanel(false)}
+        />
+      )}
       {otd && (
         <OnThisDayPanel
           slug={otd.slug}
@@ -1199,7 +1241,7 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
       )}
 
       {/* "On this day": the day's first story, bottom left (phones: above the tab bar). */}
-      {!panelOpen && !showTip && nearest.length === 0 && !kindsPanel && !picker && (
+      {!panelOpen && !showTip && nearest.length === 0 && !kindsPanel && (
         <div className="pointer-events-none absolute inset-x-3 bottom-[calc(var(--tabbar-h)+2rem)] z-10 md:inset-x-auto md:start-4 md:bottom-4">
           <OnThisDayCard
             onPick={(e) => openOtd(e.slug, e.lat !== null && e.lng !== null ? { lat: e.lat, lng: e.lng } : null, { md: e.md, step: e.step })}
@@ -1214,8 +1256,7 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
       </div>
 
       {/* Phones: the tab bar, while nothing covers the map. */}
-      {tabBar && <TabBar section={section} onMap={plainMap} onCollections={() => setPicker(true)} onOtd={() => openOtd(null)} lang={mapLang} onLang={chooseLang} />}
-      {picker && <CollectionsPicker onPick={openCollection} onClose={closePicker} />}
+      {tabBar && <TabBar section={section} onMap={plainMap} onCollections={openCollections} onOtd={() => openOtd(null)} lang={mapLang} onLang={chooseLang} />}
     </div>
   );
 }

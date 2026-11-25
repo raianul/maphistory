@@ -54,20 +54,30 @@ async function placesOf(ids: string[]): Promise<Map<string, CollectionPlace[]>> 
   return out;
 }
 
-/** Published collections, for the map's সংগ্রহ list and the sitemap. */
+const toCard = (r: Row, list: CollectionPlace[]): CollectionCard => {
+  const thumb = list.find((p) => p.thumb)?.thumb;
+  return { slug: r.slug, title_bn: r.title_bn, title_en: r.title_en, intro_bn: r.intro_bn, count: list.length, ...(thumb ? { thumb } : {}) };
+};
+
+/** Every published collection (the sitemap). */
 export async function publishedCollections(): Promise<CollectionCard[]> {
-  const { data, error } = await db().from("collections").select("*").eq("status", "published").order("sort_order").order("created_at", { ascending: false });
-  if (missingTable(error?.code)) return [];
+  return (await publishedPage(0, 1000)).collections;
+}
+
+/** One page of published collections, in the visitors' order, and how many there are in all. */
+export async function publishedPage(offset: number, limit: number): Promise<{ collections: CollectionCard[]; total: number }> {
+  const { data, error, count } = await db()
+    .from("collections")
+    .select("*", { count: "exact" })
+    .eq("status", "published")
+    .order("sort_order")
+    .order("created_at", { ascending: false })
+    .range(offset, offset + limit - 1);
+  if (missingTable(error?.code)) return { collections: [], total: 0 };
   if (error) throw new Error(`Database: ${error.message}`);
   const rows = (data ?? []) as Row[];
   const places = await placesOf(rows.map((r) => r.id));
-  return rows
-    .map((r) => {
-      const list = places.get(r.id) ?? [];
-      const thumb = list.find((p) => p.thumb)?.thumb;
-      return { slug: r.slug, title_bn: r.title_bn, title_en: r.title_en, intro_bn: r.intro_bn, count: list.length, ...(thumb ? { thumb } : {}) };
-    })
-    .filter((c) => c.count > 0);
+  return { collections: rows.map((r) => toCard(r, places.get(r.id) ?? [])), total: count ?? rows.length };
 }
 
 /** One published collection with its places (undefined: no such collection, or not published). */

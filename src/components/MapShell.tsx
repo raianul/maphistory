@@ -199,13 +199,24 @@ export function TabBar({ section, onMap, onCollections, onOtd, lang, onLang }: {
  * "On this day" on the map: the day's first story (or the next day that has one), and a way to
  * all of them. Nothing when there are none at all.
  */
+/** The day whose card the visitor closed ("MM-DD"): it stays closed that day, and comes back the next. */
+const OTD_CLOSED_KEY = "otd-card-closed";
+
 export function OnThisDayCard({ onPick, onAll }: { onPick: (e: PublicEventCard) => void; onAll: () => void }) {
   const [day, setDay] = useState<OnThisDay | null>(null);
   useEffect(() => {
     let live = true;
     fetch("/api/events/on-this-day")
       .then((r) => (r.ok ? (r.json() as Promise<OnThisDay>) : null))
-      .then((d) => live && setDay(d))
+      .then((d) => {
+        let closed: string | null = null;
+        try {
+          closed = localStorage.getItem(OTD_CLOSED_KEY);
+        } catch {
+          // storage blocked: the card simply shows
+        }
+        if (live) setDay(d && closed === d.date ? null : d);
+      })
       .catch(() => {});
     return () => {
       live = false;
@@ -214,18 +225,39 @@ export function OnThisDayCard({ onPick, onAll }: { onPick: (e: PublicEventCard) 
   const first = day?.events[0];
   if (!day || !first) return null;
   const more = day.events.length - 1;
+  const close = () => {
+    try {
+      localStorage.setItem(OTD_CLOSED_KEY, day.date);
+    } catch {
+      // storage blocked: closed for this visit only
+    }
+    setDay(null);
+  };
   return (
     <section
       aria-label="আজকের দিনে"
       className="pointer-events-auto w-full animate-[rise_.3s_var(--ease-out)] rounded-[1.25rem] bg-card p-3 shadow-menu md:w-[380px] md:p-4"
     >
-      <div className="flex items-baseline justify-between gap-2 px-1">
+      <div className="flex items-center justify-between gap-2 px-1">
         <p className="text-micro font-semibold text-accent">
           {day.next ? "পরের ঘটনা" : "আজকের দিনে"} · {dayBn(day.shown)}
         </p>
-        <button type="button" onClick={onAll} className="text-micro font-semibold text-accent hover:text-accent-hover">
-          {more > 0 ? `আরও ${bn(more)}টি →` : "সব দেখুন →"}
-        </button>
+        <span className="flex items-center gap-1">
+          <button type="button" onClick={onAll} className="text-micro font-semibold text-accent hover:text-accent-hover">
+            {more > 0 ? `আরও ${bn(more)}টি →` : "সব দেখুন →"}
+          </button>
+          <button
+            type="button"
+            onClick={close}
+            aria-label="আজকের দিনের কার্ড বন্ধ করুন"
+            title="বন্ধ করুন (কাল আবার দেখা যাবে)"
+            className="-my-2 -me-2 grid size-9 place-items-center rounded-full text-muted transition-colors hover:bg-hover hover:text-ink"
+          >
+            <svg viewBox="0 0 20 20" className="size-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
+              <path d="M5 5l10 10M15 5 5 15" />
+            </svg>
+          </button>
+        </span>
       </div>
       <button type="button" onClick={() => onPick(first)} className="mt-2 flex w-full items-center gap-3 rounded-xl p-1 text-start transition-colors hover:bg-hover">
         <span className="grid size-14 shrink-0 place-items-center rounded-2xl bg-accent-soft text-body font-bold text-accent">{first.year ? bn(first.year) : "—"}</span>
