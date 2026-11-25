@@ -6,7 +6,7 @@ import { createHash } from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { AiPlace } from "./ai/types";
 import type { StoryTarget } from "./ai/place-story";
-import { categoryLabel, categoryOf, guessCategory } from "./categories";
+import { categoriesOf, categoryLabels, guessCategories } from "./categories";
 import type { MapPin } from "./map-pin";
 import { smallPicture } from "./pictures";
 
@@ -184,8 +184,7 @@ export async function listStories() {
   const totals = await reactionTotals();
   type Raw = { slug: string | null; kind_bn: string | null; era: string | null; category?: string | null };
   return ((data ?? []) as unknown as Raw[]).map(({ kind_bn, era, category, ...r }) => {
-    const cat = categoryOf(category, guessCategory({ kind_bn, era }));
-    return { ...r, kind_bn, category_label: cat ? categoryLabel(cat) : null, likes: 0, dislikes: 0, ...(r.slug ? totals.get(r.slug) : {}) };
+    return { ...r, kind_bn, category_label: categoryLabels(categoriesOf(category, guessCategories({ kind_bn, era }))), likes: 0, dislikes: 0, ...(r.slug ? totals.get(r.slug) : {}) };
   });
 }
 
@@ -247,7 +246,7 @@ export async function listMapPins(b: Bounds, limit = PINS_PER_TILE): Promise<Map
     const videos = [...(r.videos ?? [])].sort((a, b) => a.sort_order - b.sort_order);
     const thumb = smallPicture(r.photo) ?? smallPicture(videos.find((v) => v.thumbnail_url)?.thumbnail_url);
     const line = [r.kind_bn?.trim(), r.era?.trim()].filter(Boolean).join(" · ");
-    const category = categoryOf(r.category, guessCategory({ kind_bn: r.kind_bn, era: r.era }));
+    const categories = categoriesOf(r.category, guessCategories({ kind_bn: r.kind_bn, era: r.era }));
     const n = r.slug ? likes.get(r.slug) : undefined;
     return {
       label: r.label?.trim() || r.name_bn,
@@ -258,7 +257,7 @@ export async function listMapPins(b: Bounds, limit = PINS_PER_TILE): Promise<Map
       lng: r.lng,
       kind: r.kind ?? undefined,
       verified: r.status === "verified",
-      ...(category ? { category } : {}),
+      ...(categories.length ? { categories } : {}),
       ...(videos.length ? { video: true } : {}),
       ...(thumb ? { thumb } : {}),
       ...(line ? { line } : {}),
@@ -277,9 +276,9 @@ export async function getStoryForAdmin(id: string) {
   if (!story.data) return undefined;
   const { reactionTotals } = await import("./reactions");
   const votes = story.data.slug ? (await reactionTotals()).get(story.data.slug) : undefined;
-  // The category the map would guess, so the admin shows what "automatic" means for this place.
+  // The categories the map would guess, so the admin shows what "automatic" means for this place.
   const st = story.data.story as { kind_bn?: string; era_label_bn?: string } | null;
-  const category_guess = guessCategory({ kind_bn: st?.kind_bn, era: st?.era_label_bn }) ?? null;
+  const category_guess = guessCategories({ kind_bn: st?.kind_bn, era: st?.era_label_bn });
   return { ...story.data, category_guess, likes: votes?.likes ?? 0, dislikes: votes?.dislikes ?? 0, report_list: reports.data ?? [], videos: await listVideos(id) };
 }
 

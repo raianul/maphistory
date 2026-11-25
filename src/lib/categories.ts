@@ -1,16 +1,22 @@
 // Client-safe: what kind of place a story is, for the chips that filter the map's pins.
 
 /**
- * The categories, in chip order. Each place has at most one. It is worked out from the story's
- * own words (its kind and era) unless an editor picked one in the admin.
- * Order matters for the guess: the first match wins (a জমিদার বাড়ি is often called a প্রাসাদ).
+ * The categories, in chip order. A place can be in several (সোহরাওয়ার্দী উদ্যান is a park and a
+ * 1971 site). They are worked out from the story's own words (its kind and era) unless an editor
+ * picked them in the admin.
+ * Short Bangla words must end there: দুর্গ is not দুর্গাপুর, মহল is not মহল্লা, হল is not হলুদ.
  */
 export const CATEGORIES = [
   { id: "mosque", bn: "মসজিদ", en: "Mosques", match: /মসজিদ|ঈদগাহ|mosque|masjid/i },
   { id: "temple", bn: "মন্দির", en: "Temples", match: /মন্দির(?![\u0980-\u09FF])|দেউল|temple/i },
   { id: "church", bn: "গির্জা", en: "Churches", match: /গির্জা|চার্চ|church|cathedral/i },
+  { id: "shrine", bn: "মাজার ও সমাধি", en: "Shrines & tombs", match: /মাজার|দরগা|সমাধি|কবরস্থান|শাহী কবর|shrine|mausoleum|\btomb|dargah/i },
   { id: "zamindar", bn: "জমিদার বাড়ি", en: "Zamindar houses", match: /জমিদার|রাজবাড়ি|রাজবাড়ী|zamindar|rajbari/i },
   { id: "fort", bn: "দুর্গ ও প্রাসাদ", en: "Forts & palaces", match: /দুর্গ(?![\u0980-\u09FF])|কেল্লা|প্রাসাদ|মঞ্জিল|মহল(?![\u0980-\u09FF])|\bfort\b|palace/i },
+  { id: "building", bn: "ঐতিহাসিক ভবন", en: "Landmark buildings", match: /ভবন|দালান|কাটরা|হল(?![\u0980-\u09FF])|আদালত|সচিবালয়|সংসদ|building|\bhall\b|parliament|\bcourt\b/i },
+  { id: "museum", bn: "জাদুঘর", en: "Museums", match: /জাদুঘর|যাদুঘর|সংগ্রহশালা|museum/i },
+  { id: "education", bn: "স্কুল ও বিশ্ববিদ্যালয়", en: "Schools & universities", match: /বিদ্যাল|কলেজ|স্কুল|মাদ্রাসা|শিক্ষা প্রতিষ্ঠান|university|college|school|madrasa/i },
+  { id: "park", bn: "পার্ক ও উদ্যান", en: "Parks & gardens", match: /উদ্যান|পার্ক(?![\u0980-\u09FF])|বাগান(?![\u0980-\u09FF])|ময়দান|\bpark\b|garden/i },
   { id: "liberation", bn: "মুক্তিযুদ্ধ", en: "1971", match: /মুক্তিযুদ্ধ|স্মৃতিসৌধ|শহীদ মিনার|বধ্যভূমি|liberation war|1971|১৯৭১/i },
   { id: "archaeology", bn: "প্রত্নস্থল", en: "Archaeological sites", match: /প্রত্ন|বিহার(?![\u0980-\u09FF])|স্তূপ|archaeolog|vihara|stupa/i },
 ] as const;
@@ -24,22 +30,39 @@ export const isCategory = (v: unknown): v is CategoryId => CATEGORIES.some((c) =
 
 export const categoryLabel = (id: CategoryId) => CATEGORIES.find((c) => c.id === id)!.bn;
 
+/** Several categories as one line, e.g. "পার্ক ও উদ্যান, মুক্তিযুদ্ধ" (null when none). */
+export const categoryLabels = (ids: readonly CategoryId[]) => (ids.length ? ids.map(categoryLabel).join(", ") : null);
+
+// য় and ড় can be typed as one letter or two: compare both sides in the same (NFC) form.
+const MATCHERS = CATEGORIES.map((c) => ({ id: c.id as CategoryId, re: new RegExp(c.match.source.normalize("NFC"), c.match.flags) }));
+
 /**
- * The guess from the story's own words: its kind ("মসজিদ", "দুর্গ"…), then its era (a 1971
- * memorial's era is the Liberation War). Never the name: "মসজিদ রোড" is a road.
- * Short words must end there: দুর্গ is not দুর্গাপুর, মহল is not মহল্লা.
+ * The guess from the story's own words: every category its kind ("মসজিদ", "উদ্যান"…) or era (a
+ * 1971 memorial's era is the Liberation War) names, in chip order. Never the name: "মসজিদ রোড"
+ * is a road. A জমিদার বাড়ি is often called a প্রাসাদ: that's the zamindar house, not a palace.
  */
-export function guessCategory(s: { kind_bn?: string | null; era?: string | null }): CategoryId | undefined {
-  for (const text of [s.kind_bn, s.era]) {
-    if (!text) continue;
-    const hit = CATEGORIES.find((c) => c.match.test(text));
-    if (hit) return hit.id;
-  }
-  return undefined;
+export function guessCategories(s: { kind_bn?: string | null; era?: string | null }): CategoryId[] {
+  const text = [s.kind_bn, s.era].filter(Boolean).join(" · ").normalize("NFC");
+  if (!text) return [];
+  const hits = MATCHERS.filter((m) => m.re.test(text)).map((m) => m.id);
+  return hits.includes("zamindar") ? hits.filter((c) => c !== "fort") : hits;
 }
 
-/** A place's category: the editor's choice when there is one, otherwise the guess. */
-export function categoryOf(override: string | null | undefined, guess: CategoryId | undefined): CategoryId | undefined {
-  if (override === NO_CATEGORY) return undefined;
-  return isCategory(override) ? override : guess;
+/**
+ * The editor's choice as stored in stories.category: null = the guess, "none" = no category,
+ * else ids joined by commas ("park,liberation"; an older single id is the same thing).
+ */
+export function parseCategories(stored: string | null | undefined): CategoryId[] | undefined {
+  if (stored == null || stored === "") return undefined;
+  if (stored === NO_CATEGORY) return [];
+  const ids = stored.split(",").map((x) => x.trim()).filter(isCategory);
+  return ids.length ? CATEGORIES.map((c) => c.id).filter((id) => ids.includes(id)) : undefined;
+}
+
+/** How the editor's choice is stored (see parseCategories). */
+export const storeCategories = (ids: readonly CategoryId[]) => (ids.length ? CATEGORIES.map((c) => c.id).filter((id) => ids.includes(id)).join(",") : NO_CATEGORY);
+
+/** A place's categories: the editor's choice when there is one, otherwise the guess. */
+export function categoriesOf(stored: string | null | undefined, guess: CategoryId[]): CategoryId[] {
+  return parseCategories(stored) ?? guess;
 }

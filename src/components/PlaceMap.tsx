@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { GeoJSONSource, Map as MLMap, MapLayerMouseEvent, MapMouseEvent, Marker } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { pinTarget, type MapPin } from "@/lib/map-pin";
@@ -45,7 +45,8 @@ function toGeoJSON(pins: MapPin[]): GeoData {
         kind: p.kind ?? "",
         slug: p.slug ?? "",
         // For the chips and the hover preview.
-        category: p.category ?? "",
+        // ",park,liberation," so a chip's filter can look for ",park," (properties are plain values).
+        categories: p.categories?.length ? `,${p.categories.join(",")},` : "",
         video: !!p.video,
         thumb: p.thumb ?? "",
         line: p.line ?? "",
@@ -164,12 +165,16 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
   useEffect(() => {
     const map = mapRef.current;
     if (!ready || !map) return;
-    const only = pinFilter === null ? null : pinFilter === "video" ? ["get", "video"] : ["==", ["get", "category"], pinFilter];
+    const only = pinFilter === null ? null : pinFilter === "video" ? ["get", "video"] : ["in", `,${pinFilter},`, ["get", "categories"]];
     for (const id of ["pins", "pin-labels"]) map.setFilter(id, only as Parameters<MLMap["setFilter"]>[1]);
     setPreview(null);
   }, [ready, pinFilter]);
-  /** The chips: the kinds of place among the pins loaded so far. */
-  const pinKinds = [...new Set(pins.flatMap((p) => (p.category ? [p.category] : [])))] as CategoryId[];
+  /** The chips: the kinds of place among the pins loaded so far, the commonest first. */
+  const pinKinds = useMemo(() => {
+    const n = new Map<CategoryId, number>();
+    for (const p of pins) for (const c of p.categories ?? []) n.set(c, (n.get(c) ?? 0) + 1);
+    return [...n.keys()].sort((a, b) => n.get(b)! - n.get(a)!);
+  }, [pins]);
   const pinVideos = pins.some((p) => p.video);
 
   // The open place comes from the URL: /place/<slug> shows its story in the side panel.

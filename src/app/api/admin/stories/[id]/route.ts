@@ -1,7 +1,7 @@
 import { AiStoryData } from "@/lib/ai/place-story";
 import { CoverImage } from "@/lib/events/schema";
 import { requireAdmin } from "@/lib/admin-auth";
-import { isCategory, NO_CATEGORY } from "@/lib/categories";
+import { isCategory, NO_CATEGORY, storeCategories } from "@/lib/categories";
 import { clearReports, ensureSlug, getStoryForAdmin, refreshPlacePage, updateStory } from "@/lib/db";
 
 /** One story with its reports. */
@@ -15,7 +15,7 @@ export async function GET(req: Request, { params }: RouteContext<"/api/admin/sto
 /**
  * Change a story: { action: "verify" | "unverify" | "hide" | "unhide" | "clear_reports" |
  * "show_on_map" | "hide_from_map" }, { story: <edited story JSON> }, { image: <Commons image> | null }, or
- * { category: <id> | "none" | null } (the map's filter chips; null = guessed from the story's kind)
+ * { category: <id>[] | "none" | null } (the map's filter chips; null = guessed from the story's kind)
  * (a Wikimedia Commons picture chosen in the admin's picker, licence already checked; null removes it).
  */
 export async function PATCH(req: Request, { params }: RouteContext<"/api/admin/stories/[id]">) {
@@ -29,9 +29,10 @@ export async function PATCH(req: Request, { params }: RouteContext<"/api/admin/s
   try {
     if (body && "category" in body) {
       const c = body.category;
-      if (c !== null && c !== NO_CATEGORY && !isCategory(c)) return Response.json({ error: "Unknown category" }, { status: 400 });
+      const ok = c === null || c === NO_CATEGORY || isCategory(c) || (Array.isArray(c) && c.every(isCategory));
+      if (!ok) return Response.json({ error: "Unknown category" }, { status: 400 });
       // The map's square for this place refreshes within about a minute (see /api/pins).
-      await updateStory(id, { category: c });
+      await updateStory(id, { category: Array.isArray(c) ? storeCategories(c) : c });
     } else if (body && "image" in body) {
       // Only Commons images, with their credit (the same rule as event covers).
       const parsed = body.image === null ? null : CoverImage.safeParse(body.image);

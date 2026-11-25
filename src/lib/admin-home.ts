@@ -4,7 +4,7 @@
  * it never breaks the page.
  */
 import { db } from "./db";
-import { categoryLabel, categoryOf, guessCategory } from "./categories";
+import { categoriesOf, categoryLabels, guessCategories } from "./categories";
 import { eventsOnDay } from "./events/public";
 import { todayInDhaka } from "./events/schema";
 
@@ -121,13 +121,13 @@ export async function adminHome(now = new Date()): Promise<AdminHome> {
   ]);
 
   const place = (r: StoryRow): HomePlace => {
-    const cat = categoryOf(r.category, guessCategory({ kind_bn: r.kind_bn, era: r.era }));
+    const cat = categoryLabels(categoriesOf(r.category, guessCategories({ kind_bn: r.kind_bn, era: r.era })));
     return {
       id: r.id,
       slug: r.slug,
       name_bn: r.name_bn,
       name_en: r.name_en,
-      ...(cat ? { category: categoryLabel(cat) } : {}),
+      ...(cat ? { category: cat } : {}),
       status: r.status,
       show_on_map: !!r.show_on_map,
       week: week ? (week.get(r.id) ?? 0) : null,

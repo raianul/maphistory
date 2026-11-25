@@ -16,8 +16,8 @@ export type MapPin = {
   lng: number;
   kind?: string;
   verified: boolean;
-  /** For the chips that filter the pins (see categories.ts). */
-  category?: CategoryId;
+  /** For the chips that filter the pins (see categories.ts); a place can be in several. */
+  categories?: CategoryId[];
   /** Has at least one video ("ভিডিও আছে"). */
   video?: boolean;
   /** For the hover preview: a small picture (the story's photo, else its video's), what it is, likes. */

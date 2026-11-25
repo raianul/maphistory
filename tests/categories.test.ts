@@ -1,36 +1,65 @@
 import { describe, expect, it } from "vitest";
-import { categoryOf, guessCategory, isCategory, NO_CATEGORY } from "../src/lib/categories";
+import { categoriesOf, guessCategories, isCategory, NO_CATEGORY, parseCategories, storeCategories } from "../src/lib/categories";
 import { smallPicture } from "../src/lib/db";
 
 describe("place categories", () => {
+  const g = (kind_bn?: string, era?: string) => guessCategories({ kind_bn, era });
+
   it("guesses from the story's kind", () => {
-    expect(guessCategory({ kind_bn: "মসজিদ" })).toBe("mosque");
-    expect(guessCategory({ kind_bn: "হিন্দু মন্দির" })).toBe("temple");
-    expect(guessCategory({ kind_bn: "দুর্গ" })).toBe("fort");
-    expect(guessCategory({ kind_bn: "প্রাসাদ" })).toBe("fort");
-    expect(guessCategory({ kind_bn: "জমিদার বাড়ির প্রাসাদ" })).toBe("zamindar");
-    expect(guessCategory({ kind_bn: "বৌদ্ধ বিহার" })).toBe("archaeology");
-    expect(guessCategory({ kind_bn: "প্রত্নস্থল" })).toBe("archaeology");
-    expect(guessCategory({ kind_bn: "গির্জা" })).toBe("church");
+    expect(g("মসজিদ")).toEqual(["mosque"]);
+    expect(g("হিন্দু মন্দির")).toEqual(["temple"]);
+    expect(g("দুর্গ")).toEqual(["fort"]);
+    expect(g("প্রাসাদ")).toEqual(["fort"]);
+    expect(g("বৌদ্ধ বিহার")).toEqual(["archaeology"]);
+    expect(g("প্রত্নস্থল")).toEqual(["archaeology"]);
+    expect(g("গির্জা")).toEqual(["church"]);
   });
 
-  it("falls back to the era, never the name", () => {
-    expect(guessCategory({ kind_bn: "স্মারক", era: "মুক্তিযুদ্ধ (১৯৭১)" })).toBe("liberation");
-    expect(guessCategory({ kind_bn: "সড়ক" })).toBeUndefined();
-    expect(guessCategory({})).toBeUndefined();
+  it("knows the new kinds: buildings, parks, schools, museums, shrines", () => {
+    expect(g("সংসদ ভবন")).toEqual(["building"]);
+    expect(g("ঐতিহাসিক হল")).toEqual(["building"]);
+    expect(g("উদ্যান")).toEqual(["park"]);
+    expect(g("পার্ক")).toEqual(["park"]);
+    expect(g("বাগান")).toEqual(["park"]);
+    expect(g("বিশ্ববিদ্যালয়")).toEqual(["education"]);
+    expect(g("উচ্চ বিদ্যালয়")).toEqual(["education"]);
+    expect(g("কলেজ")).toEqual(["education"]);
+    expect(g("জাদুঘর")).toEqual(["museum"]);
+    expect(g("মাজার")).toEqual(["shrine"]);
+    expect(g("সমাধিসৌধ")).toEqual(["shrine"]);
   });
 
-  it("doesn't match words that only start the same", () => {
-    expect(guessCategory({ kind_bn: "মহল্লা" })).toBeUndefined();
-    expect(guessCategory({ kind_bn: "দুর্গাপূজার মণ্ডপ" })).toBeUndefined();
-    expect(guessCategory({ kind_bn: "বিহারী ক্যাম্প" })).toBeUndefined();
+  it("gives every category the kind and era name", () => {
+    expect(g("উদ্যান", "মুক্তিযুদ্ধ (১৯৭১)")).toEqual(["park", "liberation"]);
+    expect(g("বিশ্ববিদ্যালয়ের ভবন")).toEqual(["building", "education"]);
+    expect(g("স্মারক", "মুক্তিযুদ্ধ (১৯৭১)")).toEqual(["liberation"]);
   });
 
-  it("the editor's choice wins, and 'none' clears the guess", () => {
-    expect(categoryOf("temple", "mosque")).toBe("temple");
-    expect(categoryOf(NO_CATEGORY, "mosque")).toBeUndefined();
-    expect(categoryOf(null, "mosque")).toBe("mosque");
-    expect(categoryOf("nonsense", "fort")).toBe("fort");
+  it("a zamindar's palace is a zamindar house, not a palace too", () => {
+    expect(g("জমিদার বাড়ির প্রাসাদ")).toEqual(["zamindar"]);
+  });
+
+  it("matches whole words and ignores how য় / ড় were typed", () => {
+    expect(g("সড়ক")).toEqual([]);
+    expect(g()).toEqual([]);
+    expect(g("মহল্লা")).toEqual([]);
+    expect(g("দুর্গাপূজার মণ্ডপ")).toEqual([]);
+    expect(g("বিহারী ক্যাম্প")).toEqual([]);
+    expect(g("হলুদ খেত")).toEqual([]);
+    expect(g("বাগানবাড়ি")).toEqual([]);
+    expect(g("ময়দান".normalize("NFD"))).toEqual(["park"]);
+    expect(g("ময়দান".normalize("NFC"))).toEqual(["park"]);
+  });
+
+  it("the editor's choice wins over the guess", () => {
+    expect(categoriesOf("temple", ["mosque"])).toEqual(["temple"]);
+    expect(categoriesOf("liberation,park", ["park"])).toEqual(["park", "liberation"]);
+    expect(categoriesOf(NO_CATEGORY, ["mosque"])).toEqual([]);
+    expect(categoriesOf(null, ["mosque"])).toEqual(["mosque"]);
+    expect(categoriesOf("nonsense", ["fort"])).toEqual(["fort"]);
+    expect(parseCategories("park,nonsense")).toEqual(["park"]);
+    expect(storeCategories(["liberation", "park"])).toBe("park,liberation");
+    expect(storeCategories([])).toBe(NO_CATEGORY);
     expect(isCategory("mosque")).toBe(true);
     expect(isCategory("none")).toBe(false);
   });

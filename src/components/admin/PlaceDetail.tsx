@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { AiStoryDataT } from "@/lib/ai/types";
-import { CATEGORIES, categoryLabel, NO_CATEGORY, type CategoryId } from "@/lib/categories";
+import { CATEGORIES, categoryLabels, parseCategories, type CategoryId } from "@/lib/categories";
 import { ago } from "@/lib/format";
 import { smallPicture } from "@/lib/pictures";
 import { adminFetch } from "@/lib/supabase-browser";
@@ -37,9 +37,9 @@ type Detail = {
   verified_at: string | null;
   report_list: { id: number; message: string | null; created_at: string }[];
   videos: PlaceVideo[];
-  /** The editor's category (null = guessed; undefined before the category migration). */
+  /** The editor's categories, stored as "park,liberation" / "none" (null = guessed; undefined before the category migration). */
   category?: string | null;
-  category_guess: CategoryId | null;
+  category_guess: CategoryId[];
 };
 
 type Tab = "story" | "media" | "reports";
@@ -192,24 +192,12 @@ export function PlaceDetail({ id, onClose, onChanged }: { id: string; onClose: (
             <span className={`absolute top-[3px] size-[22px] rounded-full bg-white shadow-sm transition-all ${d.show_on_map ? "start-[23px]" : "start-[3px]"}`} />
           </button>
         </div>
-        <label className="flex flex-col gap-1 rounded-2xl border border-line px-4 py-3.5">
-          <span className="font-semibold">Category</span>
-          <select
-            value={d.category ?? ""}
-            disabled={!!busy || d.category === undefined}
-            title={d.category === undefined ? "Run the story_category migration first" : "The map chip this place appears under"}
-            onChange={(e) => patch("category", { category: e.target.value || null })}
-            className="-ms-1 bg-transparent text-meta text-ink-2 outline-none disabled:opacity-50"
-          >
-            <option value="">Automatic ({d.category_guess ? categoryLabel(d.category_guess) : "none"})</option>
-            {CATEGORIES.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.bn} · {c.en}
-              </option>
-            ))}
-            <option value={NO_CATEGORY}>None</option>
-          </select>
-        </label>
+<Categories
+          stored={d.category}
+          guess={d.category_guess ?? []}
+          disabled={!!busy}
+          onChange={(category) => patch("category", { category })}
+        />
         <div className="flex flex-col gap-1 rounded-2xl border border-line px-4 py-3.5">
           <span className="font-semibold">What visitors think</span>
           <span className="text-meta text-ink-2">
@@ -359,5 +347,57 @@ function ShieldIcon() {
       <path d="M12 3l7 3v6c0 4.5-3 7.7-7 9-4-1.3-7-4.5-7-9V6z" />
       <path d="m9 12 2 2 4-4" />
     </svg>
+  );
+}
+
+/**
+ * Which map chips the place appears under: several can be ticked (a park that is also a 1971 site).
+ * Untouched, it follows the guess from the story's kind and era; ticking a box makes it the editor's
+ * choice, and "Back to automatic" returns to the guess.
+ */
+function Categories({ stored, guess, disabled, onChange }: { stored: string | null | undefined; guess: CategoryId[]; disabled: boolean; onChange: (c: CategoryId[] | null) => void }) {
+  const chosen = parseCategories(stored);
+  const on = chosen ?? guess;
+  const missing = stored === undefined;
+  const toggle = (id: CategoryId) => onChange(on.includes(id) ? on.filter((c) => c !== id) : [...on, id]);
+  return (
+    <div className="flex flex-col gap-2 rounded-2xl border border-line px-4 py-3.5 @md:col-span-2 @3xl:col-span-3">
+      <div className="flex flex-wrap items-baseline gap-x-3">
+        <span className="font-semibold">Categories</span>
+        <span className="text-meta text-muted">
+          {missing
+            ? "Run the story_category migration first"
+            : chosen
+              ? `Chosen by you · ${categoryLabels(chosen) ?? "none"}`
+              : `Automatic · ${categoryLabels(guess) ?? "none"}`}
+        </span>
+        {chosen && !missing && (
+          <button type="button" disabled={disabled} onClick={() => onChange(null)} className="ms-auto text-meta font-semibold text-accent hover:underline disabled:opacity-50">
+            Back to automatic
+          </button>
+        )}
+      </div>
+      <div role="group" aria-label="Categories" className="flex flex-wrap gap-1.5">
+        {CATEGORIES.map((c) => {
+          const ticked = on.includes(c.id);
+          return (
+            <button
+              key={c.id}
+              type="button"
+              aria-pressed={ticked}
+              disabled={disabled || missing}
+              title={c.en}
+              onClick={() => toggle(c.id)}
+              className={`h-8 rounded-full border px-3 text-meta transition-colors disabled:opacity-50 ${
+                ticked ? (chosen ? "border-accent bg-accent text-on-accent" : "border-accent bg-accent-soft text-accent") : "border-line text-ink-2 hover:bg-hover"
+              }`}
+            >
+              {ticked ? "✓ " : ""}
+              {c.bn}
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
 }

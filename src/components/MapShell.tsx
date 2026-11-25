@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { CATEGORIES, type CategoryId } from "@/lib/categories";
+import { categoryLabel, type CategoryId } from "@/lib/categories";
 import type { OnThisDay, PublicEventCard } from "@/lib/events/public";
 import { FACEBOOK_URL } from "@/lib/links";
 import type { MapLang } from "@/lib/map-style";
@@ -258,11 +258,11 @@ export type PinFilter = CategoryId | "video";
 
 /**
  * Chips under the search that filter the pins: only kinds the loaded pins have (no chip that
- * would empty the map), plus "ভিডিও আছে". Tapping the chosen chip again shows every pin.
+ * would empty the map), in the order given (the commonest first), plus "ভিডিও আছে". Tapping the chosen chip again shows every pin.
  */
 export function CategoryChips({ available, video, value, onChange }: { available: CategoryId[]; video: boolean; value: PinFilter | null; onChange: (f: PinFilter | null) => void }) {
   const chips: { id: PinFilter; label: string }[] = [
-    ...CATEGORIES.filter((c) => available.includes(c.id)).map((c) => ({ id: c.id as PinFilter, label: c.bn })),
+    ...available.map((id) => ({ id: id as PinFilter, label: categoryLabel(id) })),
     ...(video ? [{ id: "video" as const, label: "▶ ভিডিও আছে" }] : []),
   ];
   if (chips.length === 0) return null;
