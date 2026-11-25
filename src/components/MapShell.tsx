@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { categoryLabel, type CategoryId } from "@/lib/categories";
+import { createPortal } from "react-dom";
+import { CATEGORY_GROUPS, categoryLabel, type CategoryId } from "@/lib/categories";
 import type { OnThisDay, PublicEventCard } from "@/lib/events/public";
 import { FACEBOOK_URL } from "@/lib/links";
 import { LogoBadge, Wordmark } from "./Logo";
@@ -250,39 +251,149 @@ export function ZoomButtons({ onZoom }: { onZoom: (by: 1 | -1) => void }) {
 /** A chip's filter: one category, or places with a video. */
 export type PinFilter = CategoryId | "video";
 
+/** A kind of place among the loaded pins, and how many pins have it. */
+export type PinKind = { id: CategoryId; n: number };
+
+/** How many chips show in the row; the rest are in the "সব ধরন" panel. */
+const ROW_CHIPS = 4;
+
 /**
  * Chips under the search that filter the pins: only kinds the loaded pins have (no chip that
- * would empty the map), in the order given (the commonest first), plus "ভিডিও আছে". Tapping the chosen chip again shows every pin.
+ * would empty the map), the commonest first, then "ভিডিও আছে". With more kinds than fit, the
+ * rest are in a panel ("সব ধরন ▾"), grouped (ধর্মীয় স্থান, শহর ও স্থাপত্য…), with counts.
+ * Choosing the chosen one again shows every pin.
  */
-export function CategoryChips({ available, video, value, onChange }: { available: CategoryId[]; video: boolean; value: PinFilter | null; onChange: (f: PinFilter | null) => void }) {
+export function CategoryChips({ kinds, videos, value, onChange }: { kinds: PinKind[]; videos: number; value: PinFilter | null; onChange: (f: PinFilter | null) => void }) {
+  const [open, setOpen] = useState(false);
+  // Where the desktop card goes: under the chips' row (measured when it opens).
+  const rowRef = useRef<HTMLDivElement>(null);
+  const [at, setAt] = useState({ top: 0, left: 0 });
+  const toggle = () => {
+    const r = rowRef.current?.getBoundingClientRect();
+    if (r) setAt({ top: r.bottom + 4, left: r.left });
+    setOpen((o) => !o);
+  };
+  // Escape closes the panel.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
+
+  // The row: the commonest kinds (and the chosen one, wherever it is), then ভিডিও.
+  const row = kinds.slice(0, ROW_CHIPS);
+  const chosen = kinds.find((k) => k.id === value);
+  if (chosen && !row.includes(chosen)) row.push(chosen);
   const chips: { id: PinFilter; label: string }[] = [
-    ...available.map((id) => ({ id: id as PinFilter, label: categoryLabel(id) })),
-    ...(video ? [{ id: "video" as const, label: "▶ ভিডিও আছে" }] : []),
+    ...row.map((k) => ({ id: k.id as PinFilter, label: categoryLabel(k.id) })),
+    ...(videos ? [{ id: "video" as const, label: "▶ ভিডিও আছে" }] : []),
   ];
+  const more = kinds.length > ROW_CHIPS;
   if (chips.length === 0) return null;
+  const pick = (f: PinFilter) => {
+    onChange(f === value ? null : f);
+    setOpen(false);
+  };
   const chip = "h-9 shrink-0 rounded-full px-3.5 text-meta font-semibold whitespace-nowrap shadow-float transition-colors";
+  const count = new Map(kinds.map((k) => [k.id, k.n]));
   return (
-    <div role="group" aria-label="জায়গার ধরন" className="no-scrollbar pointer-events-auto -mx-3 mt-2 flex w-fit max-w-[calc(100%+1.5rem)] gap-2 overflow-x-auto px-3 pb-2 md:mx-0 md:max-w-full md:px-0">
-      {value && (
-        <button type="button" onClick={() => onChange(null)} className={`${chip} bg-card text-ink-2 hover:text-ink`}>
-          সব
-        </button>
-      )}
-      {chips.map((c) => {
-        const on = c.id === value;
-        return (
-          <button
-            key={c.id}
-            type="button"
-            aria-pressed={on}
-            onClick={() => onChange(on ? null : c.id)}
-            className={`${chip} ${on ? "bg-accent text-on-accent hover:bg-accent-hover" : "bg-card text-ink hover:bg-hover"}`}
-          >
-            {c.label}
+    <div className="relative">
+      <div ref={rowRef} role="group" aria-label="জায়গার ধরন" className="no-scrollbar pointer-events-auto -mx-3 mt-2 flex w-fit max-w-[calc(100%+1.5rem)] gap-2 overflow-x-auto px-3 pb-2 md:mx-0 md:max-w-full md:px-0">
+        {value && (
+          <button type="button" onClick={() => onChange(null)} className={`${chip} bg-card text-ink-2 hover:text-ink`}>
+            সব
           </button>
-        );
-      })}
+        )}
+        {chips.map((c) => {
+          const on = c.id === value;
+          return (
+            <button
+              key={c.id}
+              type="button"
+              aria-pressed={on}
+              onClick={() => pick(c.id)}
+              className={`${chip} ${on ? "bg-accent text-on-accent hover:bg-accent-hover" : "bg-card text-ink hover:bg-hover"}`}
+            >
+              {c.label}
+            </button>
+          );
+        })}
+        {more && (
+          <button
+            type="button"
+            aria-expanded={open}
+            aria-haspopup="dialog"
+            onClick={toggle}
+            className={`${chip} flex items-center gap-1 ${open ? "bg-accent-soft text-accent" : "bg-card text-ink-2 hover:bg-hover hover:text-ink"}`}
+          >
+            সব ধরন
+            <svg viewBox="0 0 20 20" className={`size-4 transition-transform ${open ? "rotate-180" : ""}`} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="m5 8 5 5 5-5" />
+            </svg>
+          </button>
+        )}
+      </div>
+
+      {open &&
+        // On the page itself (over the tab bar and everything else): phones get a sheet from the
+        // bottom over a dimmed map; desktop a card under the chips' row.
+        createPortal(
+        <div className="fixed inset-0 z-[60]">
+          <button type="button" aria-label="বন্ধ করুন" onClick={() => setOpen(false)} className="absolute inset-0 bg-black/35 md:bg-transparent" />
+          <div
+            role="dialog"
+            aria-label="সব ধরন"
+            style={{ "--top": `${at.top}px`, "--left": `${at.left}px` } as React.CSSProperties}
+            className="absolute inset-x-0 bottom-0 max-h-[75dvh] overflow-y-auto rounded-t-3xl bg-card px-5 pt-4 pb-[calc(1.25rem+env(safe-area-inset-bottom))] shadow-float md:inset-x-auto md:top-[var(--top)] md:left-[var(--left)] md:bottom-auto md:max-h-[min(70dvh,560px)] md:w-[22rem] md:rounded-3xl md:pb-5"
+          >
+            <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-line-strong md:hidden" aria-hidden />
+            <div className="mb-3 flex items-center justify-between">
+              <p className="text-body font-semibold">জায়গার ধরন</p>
+              {value && (
+                <button type="button" onClick={() => pick(value)} className="text-meta font-semibold text-accent hover:underline">
+                  সব দেখান
+                </button>
+              )}
+            </div>
+            <div className="flex flex-col gap-4">
+              {videos > 0 && <PanelGroup title="বিশেষ" items={[{ id: "video", label: "▶ ভিডিও আছে", n: videos }]} value={value} onPick={pick} />}
+              {CATEGORY_GROUPS.map((g) => {
+                const items = g.ids.filter((id) => count.has(id)).map((id) => ({ id: id as PinFilter, label: categoryLabel(id), n: count.get(id)! }));
+                return items.length ? <PanelGroup key={g.bn} title={g.bn} items={items} value={value} onPick={pick} /> : null;
+              })}
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
     </div>
+  );
+}
+
+/** One group in the "সব ধরন" panel: its name, then its kinds with how many places each. */
+function PanelGroup({ title, items, value, onPick }: { title: string; items: { id: PinFilter; label: string; n: number }[]; value: PinFilter | null; onPick: (f: PinFilter) => void }) {
+  return (
+    <section>
+      <h3 className="mb-1.5 text-micro font-semibold text-muted">{title}</h3>
+      <div className="flex flex-wrap gap-1.5">
+        {items.map((it) => {
+          const on = it.id === value;
+          return (
+            <button
+              key={it.id}
+              type="button"
+              aria-pressed={on}
+              onClick={() => onPick(it.id)}
+              className={`flex h-9 items-center gap-1.5 rounded-full border px-3 text-meta transition-colors ${on ? "border-accent bg-accent font-semibold text-on-accent" : "border-line text-ink hover:bg-hover"}`}
+            >
+              {it.label}
+              <span className={on ? "text-on-accent/80" : "text-muted"}>{bn(it.n)}</span>
+            </button>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 

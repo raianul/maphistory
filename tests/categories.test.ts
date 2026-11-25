@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { categoriesOf, guessCategories, isCategory, NO_CATEGORY, parseCategories, storeCategories } from "../src/lib/categories";
+import { CATEGORIES, CATEGORY_GROUPS, categoriesOf, guessCategories, isCategory, NO_CATEGORY, parseCategories, storeCategories } from "../src/lib/categories";
 import { smallPicture } from "../src/lib/db";
 
 describe("place categories", () => {
@@ -41,6 +41,18 @@ describe("place categories", () => {
     expect(g("উদ্যান", "মুক্তিযুদ্ধ (১৯৭১)")).toEqual(["park", "liberation"]);
     expect(g("বিশ্ববিদ্যালয়ের ভবন")).toEqual(["building", "education"]);
     expect(g("স্মারক", "মুক্তিযুদ্ধ (১৯৭১)")).toEqual(["liberation"]);
+  });
+
+  it("the language movement is its own category", () => {
+    expect(g("শহীদ মিনার")).toEqual(["language"]);
+    expect(g("স্মারক", "ভাষা আন্দোলন (১৯৫২)")).toEqual(["language"]);
+    expect(g("স্মৃতিসৌধ")).toEqual(["liberation"]);
+  });
+
+  it("every category is in one group of the panel", () => {
+    const all = CATEGORY_GROUPS.flatMap((x) => x.ids);
+    expect([...all].sort()).toEqual(CATEGORIES.map((c) => c.id).sort());
+    expect(new Set(all).size).toBe(all.length);
   });
 
   it("a zamindar's palace is a zamindar house, not a palace too", () => {

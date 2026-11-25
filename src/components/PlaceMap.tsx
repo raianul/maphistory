@@ -173,9 +173,9 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
   const pinKinds = useMemo(() => {
     const n = new Map<CategoryId, number>();
     for (const p of pins) for (const c of p.categories ?? []) n.set(c, (n.get(c) ?? 0) + 1);
-    return [...n.keys()].sort((a, b) => n.get(b)! - n.get(a)!);
+    return [...n].map(([id, count]) => ({ id, n: count })).sort((a, b) => b.n - a.n);
   }, [pins]);
-  const pinVideos = pins.some((p) => p.video);
+  const pinVideos = pins.filter((p) => p.video).length;
 
   // The open place comes from the URL: /place/<slug> shows its story in the side panel.
   const router = useRouter();
@@ -960,7 +960,7 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
         {pinsShown && (
           // Phones: not while a story's sheet is open (desktop keeps them beside the panel).
           <div className={panelOpen ? "hidden md:block" : undefined}>
-            <CategoryChips available={pinKinds} video={pinVideos} value={pinFilter} onChange={setPinFilter} />
+            <CategoryChips kinds={pinKinds} videos={pinVideos} value={pinFilter} onChange={setPinFilter} />
           </div>
         )}
 

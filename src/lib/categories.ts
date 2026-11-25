@@ -20,11 +20,21 @@ export const CATEGORIES = [
   { id: "education", bn: "স্কুল ও বিশ্ববিদ্যালয়", en: "Schools & universities", match: /বিদ্যাল|কলেজ|স্কুল|মাদ্রাসা|শিক্ষা প্রতিষ্ঠান|university|college|school|madrasa/i },
   { id: "park", bn: "পার্ক ও উদ্যান", en: "Parks & gardens", match: /উদ্যান|পার্ক(?![\u0980-\u09FF])|বাগান(?![\u0980-\u09FF])|ময়দান|\bpark\b|garden/i },
   { id: "stadium", bn: "স্টেডিয়াম", en: "Stadiums", match: /স্টেডিয়াম|ক্রীড়া|খেলার মাঠ|stadium|sports/i },
-  { id: "liberation", bn: "মুক্তিযুদ্ধ", en: "1971", match: /মুক্তিযুদ্ধ|স্মৃতিসৌধ|শহীদ মিনার|বধ্যভূমি|liberation war|1971|১৯৭১/i },
+  { id: "language", bn: "ভাষা আন্দোলন", en: "Language Movement", match: /ভাষা আন্দোলন|ভাষা-আন্দোলন|শহীদ মিনার|১৯৫২|1952|language movement|shaheed minar/i },
+  { id: "liberation", bn: "মুক্তিযুদ্ধ", en: "1971", match: /মুক্তিযুদ্ধ|স্মৃতিসৌধ|বধ্যভূমি|liberation war|1971|১৯৭১/i },
   { id: "archaeology", bn: "প্রত্নস্থল", en: "Archaeological sites", match: /প্রত্ন|বিহার(?![\u0980-\u09FF])|স্তূপ|archaeolog|vihara|stupa/i },
 ] as const;
 
 export type CategoryId = (typeof CATEGORIES)[number]["id"];
+
+/** The categories in groups, for the "সব ধরন" panel (every category is in exactly one). */
+export const CATEGORY_GROUPS: { bn: string; ids: CategoryId[] }[] = [
+  { bn: "ধর্মীয় স্থান", ids: ["mosque", "temple", "church", "shrine"] },
+  { bn: "ঐতিহ্য ও প্রত্নতত্ত্ব", ids: ["zamindar", "fort", "archaeology"] },
+  { bn: "শহর ও স্থাপত্য", ids: ["building", "government", "education", "hospital", "museum", "stadium"] },
+  { bn: "ইতিহাসের ঘটনা", ids: ["language", "liberation"] },
+  { bn: "প্রকৃতি", ids: ["park"] },
+];
 
 /** Stored in the admin's override when an editor says "no category" (the guess was wrong). */
 export const NO_CATEGORY = "none";
