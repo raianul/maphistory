@@ -13,10 +13,12 @@ export const CATEGORIES = [
   { id: "shrine", bn: "মাজার ও সমাধি", en: "Shrines & tombs", match: /মাজার|দরগা|সমাধি|কবরস্থান|শাহী কবর|shrine|mausoleum|\btomb|dargah/i },
   { id: "zamindar", bn: "জমিদার বাড়ি", en: "Zamindar houses", match: /জমিদার|রাজবাড়ি|রাজবাড়ী|zamindar|rajbari/i },
   { id: "fort", bn: "দুর্গ ও প্রাসাদ", en: "Forts & palaces", match: /দুর্গ(?![\u0980-\u09FF])|কেল্লা|প্রাসাদ|মঞ্জিল|মহল(?![\u0980-\u09FF])|\bfort\b|palace/i },
-  { id: "building", bn: "ঐতিহাসিক ভবন", en: "Landmark buildings", match: /ভবন|দালান|কাটরা|হল(?![\u0980-\u09FF])|আদালত|সচিবালয়|সংসদ|building|\bhall\b|parliament|\bcourt\b/i },
+  { id: "building", bn: "ঐতিহাসিক ভবন", en: "Landmark buildings", match: /ভবন|দালান|কাটরা|হল(?![\u0980-\u09FF])|building|\bhall\b/i },
+  { id: "government", bn: "সরকারি ভবন", en: "Government buildings", match: /সরকারি|সংসদ|সচিবালয়|আদালত|হাইকোর্ট|মন্ত্রণালয়|বঙ্গভবন|গণভবন|parliament|secretariat|\bcourt\b|ministry|government/i },
   { id: "museum", bn: "জাদুঘর", en: "Museums", match: /জাদুঘর|যাদুঘর|সংগ্রহশালা|museum/i },
   { id: "education", bn: "স্কুল ও বিশ্ববিদ্যালয়", en: "Schools & universities", match: /বিদ্যাল|কলেজ|স্কুল|মাদ্রাসা|শিক্ষা প্রতিষ্ঠান|university|college|school|madrasa/i },
   { id: "park", bn: "পার্ক ও উদ্যান", en: "Parks & gardens", match: /উদ্যান|পার্ক(?![\u0980-\u09FF])|বাগান(?![\u0980-\u09FF])|ময়দান|\bpark\b|garden/i },
+  { id: "stadium", bn: "স্টেডিয়াম", en: "Stadiums", match: /স্টেডিয়াম|ক্রীড়া|খেলার মাঠ|stadium|sports/i },
   { id: "liberation", bn: "মুক্তিযুদ্ধ", en: "1971", match: /মুক্তিযুদ্ধ|স্মৃতিসৌধ|শহীদ মিনার|বধ্যভূমি|liberation war|1971|১৯৭১/i },
   { id: "archaeology", bn: "প্রত্নস্থল", en: "Archaeological sites", match: /প্রত্ন|বিহার(?![\u0980-\u09FF])|স্তূপ|archaeolog|vihara|stupa/i },
 ] as const;
@@ -39,13 +41,15 @@ const MATCHERS = CATEGORIES.map((c) => ({ id: c.id as CategoryId, re: new RegExp
 /**
  * The guess from the story's own words: every category its kind ("মসজিদ", "উদ্যান"…) or era (a
  * 1971 memorial's era is the Liberation War) names, in chip order. Never the name: "মসজিদ রোড"
- * is a road. A জমিদার বাড়ি is often called a প্রাসাদ: that's the zamindar house, not a palace.
+ * is a road. Some kinds win over another (see below).
  */
 export function guessCategories(s: { kind_bn?: string | null; era?: string | null }): CategoryId[] {
   const text = [s.kind_bn, s.era].filter(Boolean).join(" · ").normalize("NFC");
   if (!text) return [];
   const hits = MATCHERS.filter((m) => m.re.test(text)).map((m) => m.id);
-  return hits.includes("zamindar") ? hits.filter((c) => c !== "fort") : hits;
+  // A জমিদার বাড়ি is not also a palace, a সরকারি ভবন is not also a landmark building, a stadium not a park.
+  const over: [CategoryId, CategoryId][] = [["zamindar", "fort"], ["government", "building"], ["stadium", "park"]];
+  return hits.filter((c) => !over.some(([wins, loses]) => c === loses && hits.includes(wins)));
 }
 
 /**

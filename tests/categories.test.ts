@@ -16,7 +16,13 @@ describe("place categories", () => {
   });
 
   it("knows the new kinds: buildings, parks, schools, museums, shrines", () => {
-    expect(g("সংসদ ভবন")).toEqual(["building"]);
+    expect(g("সংসদ ভবন")).toEqual(["government"]);
+    expect(g("স্থাপত্য ও সরকারি ভবন")).toEqual(["government"]);
+    expect(g("সচিবালয়")).toEqual(["government"]);
+    expect(g("হাইকোর্ট ভবন")).toEqual(["government"]);
+    expect(g("স্টেডিয়াম")).toEqual(["stadium"]);
+    expect(g("ক্রীড়া কমপ্লেক্স")).toEqual(["stadium"]);
+    expect(g("খেলার মাঠ")).toEqual(["stadium"]);
     expect(g("ঐতিহাসিক হল")).toEqual(["building"]);
     expect(g("উদ্যান")).toEqual(["park"]);
     expect(g("পার্ক")).toEqual(["park"]);
