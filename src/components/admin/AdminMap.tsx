@@ -3,20 +3,10 @@
 import type { GeoJSONSource, Map as MLMap, MapLayerMouseEvent } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { AiStoryDataT } from "@/lib/ai/types";
 import { loadStyle, MIN_ZOOM, lockFlat } from "@/lib/map-style";
 import { adminFetch } from "@/lib/supabase-browser";
-import { aiShareUrl } from "../AiPanel";
-import { AiStory } from "../AiStory";
-import { SidePanel } from "../SidePanel";
-import { ImagePicker } from "./events/ImagePicker";
-import { StoryEditor } from "./StoryEditor";
-import { VideoManager } from "./VideoManager";
-import type { PlaceVideo } from "@/lib/video";
 import { THEME } from "@/lib/theme";
-import { CATEGORIES, categoryLabel, NO_CATEGORY, type CategoryId } from "@/lib/categories";
-
-type Status = "ai" | "verified" | "hidden";
+import { PlaceDetail, type PlaceStatus } from "./PlaceDetail";
 
 type Row = {
   id: string;
@@ -25,68 +15,73 @@ type Row = {
   lat: number;
   lng: number;
   kind: string | null;
-  status: Status;
+  status: PlaceStatus;
   views: number;
   reports: number;
   /** Visitors' 👍 and 👎 (the public sees only the likes). */
   likes: number;
   dislikes: number;
+  created_at: string;
   updated_at: string;
+  /** The map chip it falls under (Bangla), if any. */
+  category_label: string | null;
   /** Has a pin on the public map (undefined before the show_on_map migration). */
   show_on_map?: boolean;
 };
 
-type Detail = Row & {
-  story: AiStoryDataT;
-  image: { src: string; credit: { author: string; license: string; sourceUrl: string; licenseUrl?: string } } | null;
-  model: string | null;
-  slug: string | null;
-  verified_at: string | null;
-  report_list: { id: number; message: string | null; created_at: string }[];
-  videos: PlaceVideo[];
-  /** The editor's category for the map's chips (null = guessed; undefined before the category migration). */
-  category?: string | null;
-  /** What the guess from the story's kind gives. */
-  category_guess: CategoryId | null;
-};
-
-const STATUS: Record<Status, { bn: string; color: string }> = {
-  ai: { bn: "AI · not verified", color: "#8a8178" },
-  verified: { bn: "✓ Verified", color: "#b8860b" },
-  hidden: { bn: "Hidden", color: "#cfc6b8" },
-};
-const REPORTED = "#c0392b";
-/** Shown on the public map (show_on_map): blue, whatever its status; grey/gold pins are off the public map. */
+/** Pin and dot colours: blue = on the public map; grey = AI only, off it; gold = verified, off it. */
 const ON_MAP = "#2563eb";
-/** A story's pin colour: blue when it is on the public map, else its status colour. */
-const pinColor = (r: Pick<Row, "status" | "show_on_map">) => (r.show_on_map && r.status !== "hidden" ? ON_MAP : STATUS[r.status].color);
+const OFF: Record<PlaceStatus, string> = { ai: "#8a8178", verified: "#b8860b", hidden: "#cfc6b8" };
+const REPORTED = "#c0392b";
+const pinColor = (r: Pick<Row, "status" | "show_on_map">) => (r.show_on_map && r.status !== "hidden" ? ON_MAP : OFF[r.status]);
 
-type Filter = "all" | Status | "reported" | "on_map";
+type Filter = "all" | "ai" | "verified" | "on_map" | "reported" | "hidden";
+type Sort = "views" | "recent" | "new" | "disliked";
+
+const FILTERS: { id: Filter; label: string; tone?: string; test: (r: Row) => boolean }[] = [
+  { id: "all", label: "All", test: (r) => r.status !== "hidden" },
+  { id: "ai", label: "To check", tone: "text-warning", test: (r) => r.status === "ai" },
+  { id: "verified", label: "Verified", tone: "text-success", test: (r) => r.status === "verified" },
+  { id: "on_map", label: "On map", test: (r) => !!r.show_on_map && r.status !== "hidden" },
+  { id: "reported", label: "Reported", tone: "text-danger", test: (r) => r.reports > 0 },
+  { id: "hidden", label: "Hidden", tone: "text-muted", test: (r) => r.status === "hidden" },
+];
+
+const SORTS: Record<Sort, { label: string; by: (a: Row, b: Row) => number }> = {
+  views: { label: "Most opened", by: (a, b) => b.views - a.views },
+  recent: { label: "Recently changed", by: (a, b) => b.updated_at.localeCompare(a.updated_at) },
+  new: { label: "Newest", by: (a, b) => b.created_at.localeCompare(a.created_at) },
+  disliked: { label: "Most disliked", by: (a, b) => b.dislikes - b.likes - (a.dislikes - a.likes) || b.dislikes - a.dislikes },
+};
 
 /** A value from the page's address (the admin renders in the browser only, after login). */
 const param = (key: string) => (typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get(key));
 
-/** The admin map: every saved story as a pin; click to check, edit, regenerate, verify or hide. */
+/**
+ * /admin/places: every saved place. A list on the left (filters, search, sort) and, beside it,
+ * the chosen place (List) or every pin (Map). Phones show one at a time: list, then the place.
+ * Home links here with ?filter=reported, ?sort=views, ?q=… or ?id=<place>.
+ */
 export function AdminMap() {
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MLMap | null>(null);
   const [ready, setReady] = useState(false);
   const [rows, setRows] = useState<Row[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [view, setView] = useState<"list" | "map">(() => (param("view") === "map" ? "map" : "list"));
   const [filter, setFilter] = useState<Filter>(() => {
     const f = param("filter");
-    return f && ["all", "ai", "verified", "hidden", "reported", "on_map"].includes(f) ? (f as Filter) : "all";
+    return FILTERS.some((x) => x.id === f) ? (f as Filter) : "all";
   });
-  const [sort, setSort] = useState<"views" | "reports" | "recent">(() => {
-    const so = param("sort");
-    return so === "reports" || so === "recent" ? so : "views";
+  const [sort, setSort] = useState<Sort>(() => {
+    const s = param("sort");
+    return s && s in SORTS ? (s as Sort) : "views";
   });
   const [query, setQuery] = useState(() => param("q") ?? "");
-  const [selected, setSelected] = useState<string | null>(null);
-  /** Opened from Home: /admin/places?filter=reported, ?q=…, ?sort=views, ?id=<story> (that place opens). */
-  const wanted = useRef<string | null>(param("id"));
+  const [selected, setSelected] = useState<string | null>(() => param("id"));
 
-  // Refetched after every change in the story panel.
+  // Refetched after every change in the place view.
   const [version, setVersion] = useState(0);
   const load = useCallback(() => setVersion((v) => v + 1), []);
 
@@ -95,34 +90,38 @@ export function AdminMap() {
       const data = await r.json().catch(() => ({}));
       if (r.ok) setRows(data.stories);
       else setError(data.error ?? `HTTP ${r.status}`);
+      setLoaded(true);
     });
   }, [version]);
 
-  const counts = useMemo(
-    () => ({
-      all: rows.length,
-      ai: rows.filter((r) => r.status === "ai").length,
-      verified: rows.filter((r) => r.status === "verified").length,
-      hidden: rows.filter((r) => r.status === "hidden").length,
-      reported: rows.filter((r) => r.reports > 0).length,
-      on_map: rows.filter((r) => r.show_on_map).length,
-    }),
-    [rows],
-  );
+  // The address follows what's open, so a reload or a shared link comes back to it.
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    for (const [k, v] of [
+      ["id", selected],
+      ["filter", filter === "all" ? null : filter],
+      ["sort", sort === "views" ? null : sort],
+      ["view", view === "map" ? "map" : null],
+    ] as const) {
+      if (v) url.searchParams.set(k, v);
+      else url.searchParams.delete(k);
+    }
+    url.searchParams.delete("q");
+    if (url.href !== window.location.href) window.history.replaceState(null, "", url);
+  }, [selected, filter, sort, view]);
+
+  const counts = useMemo(() => Object.fromEntries(FILTERS.map((f) => [f.id, rows.filter(f.test).length])) as Record<Filter, number>, [rows]);
 
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
+    const test = FILTERS.find((f) => f.id === filter)!.test;
     return rows
-      .filter((r) =>
-        filter === "all" ? true : filter === "reported" ? r.reports > 0 : filter === "on_map" ? !!r.show_on_map : r.status === filter,
-      )
+      .filter(test)
       .filter((r) => !q || r.name_bn.includes(q) || r.name_en?.toLowerCase().includes(q))
-      .sort((a, b) =>
-        sort === "views" ? b.views - a.views : sort === "reports" ? b.reports - a.reports : b.updated_at.localeCompare(a.updated_at),
-      );
+      .sort(SORTS[sort].by);
   }, [rows, filter, sort, query]);
 
-  // The map, created once.
+  // The map, created once (it waits out of sight while the list view is on).
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -210,343 +209,172 @@ export function AdminMap() {
     if (ready) mapRef.current?.setFilter("story-selected", ["==", ["get", "id"], selected ?? ""]);
   }, [ready, selected]);
 
-  // A place asked for in the address opens once the list and the map are there.
+  // The map was out of sight (or another size): fit it to its box again, and show the chosen place.
+  const chosen = selected ? rows.find((x) => x.id === selected) : undefined;
   useEffect(() => {
-    const r = wanted.current && ready ? rows.find((x) => x.id === wanted.current) : undefined;
-    if (!r) return;
-    wanted.current = null;
-    select(r);
-  }, [ready, rows]);
+    const map = mapRef.current;
+    if (!ready || !map || view !== "map") return;
+    map.resize();
+    if (chosen) map.easeTo({ center: [chosen.lng, chosen.lat], zoom: Math.max(map.getZoom(), 14), padding: { right: window.innerWidth >= 1024 ? 560 : 0, left: 0, top: 0, bottom: 0 } });
+  }, [ready, view, chosen]);
 
-  function select(r: Row) {
-    setSelected(r.id);
-    mapRef.current?.easeTo({ center: [r.lng, r.lat], zoom: Math.max(mapRef.current.getZoom(), 14), offset: [-240, 0] });
-  }
+  const mapView = view === "map";
 
   return (
     <div className="flex h-[calc(100dvh-var(--header-h)-var(--admin-tabbar))]">
-      {/* List */}
-      <aside className="hidden w-80 shrink-0 flex-col border-e border-line bg-paper md:flex">
-        <div className="border-b border-line p-3">
-          <h1 className="text-lead font-bold">Places</h1>
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search the list…"
-            className="mt-2 w-full rounded-lg border border-line bg-card px-2.5 py-1.5 text-sm outline-none focus:border-accent"
-          />
-          <div className="mt-2 flex flex-wrap gap-1 text-xs">
-            {(
-              [
-                ["all", "All"],
-                ["ai", "AI"],
-                ["verified", "Verified"],
-                ["on_map", "On map"],
-                ["reported", "Reported"],
-                ["hidden", "Hidden"],
-              ] as [Filter, string][]
-            ).map(([f, label]) => (
-              <button
-                key={f}
-                type="button"
-                onClick={() => setFilter(f)}
-                className={`rounded-full border px-2 py-0.5 ${filter === f ? "border-accent bg-accent text-white" : "border-line bg-card"}`}
-              >
-                {label} {counts[f]}
-              </button>
-            ))}
+      {/* The list (hidden in Map view; phones: also while a place is open) */}
+      <aside className={`${mapView ? "hidden" : selected ? "hidden md:flex" : "flex"} w-full shrink-0 flex-col border-e border-line bg-paper md:w-[380px]`}>
+        <div className="flex flex-col gap-3 px-4 pt-5 pb-3">
+          <div className="flex items-center gap-2">
+            <h1 className="flex-1 text-display font-bold tracking-tight">Places</h1>
+            <ViewSwitch view={view} onChange={setView} />
           </div>
-          <select
-            value={sort}
-            onChange={(e) => setSort(e.target.value as typeof sort)}
-            className="mt-2 w-full rounded-lg border border-line bg-card px-2 py-1 text-xs"
-          >
-            <option value="views">Most viewed first</option>
-            <option value="reports">Most reported first</option>
-            <option value="recent">Recently changed first</option>
-          </select>
-          {/* What the pin colours mean. */}
-          <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
-            <span className="flex items-center gap-1">
-              <span className="size-2.5 rounded-full" style={{ background: ON_MAP }} aria-hidden /> On the public map
-            </span>
-            <span className="flex items-center gap-1">
-              <span className="size-2.5 rounded-full" style={{ background: STATUS.ai.color }} aria-hidden /> Not on the map
-            </span>
-            <span className="flex items-center gap-1">
-              <span className="size-2.5 rounded-full" style={{ background: STATUS.verified.color }} aria-hidden /> Verified, not on the map
-            </span>
-          </p>
+          <label className="flex h-[42px] items-center gap-2 rounded-full border border-line-strong bg-card px-3.5 focus-within:border-accent">
+            <svg viewBox="0 0 24 24" className="size-[17px] shrink-0 text-muted" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
+              <circle cx="11" cy="11" r="6.5" />
+              <path d="m16 16 4 4" />
+            </svg>
+            <input value={query} onChange={(e) => setQuery(e.target.value)} type="search" placeholder="Search places…" aria-label="Search places" className="min-w-0 flex-1 bg-transparent outline-none" />
+          </label>
+          <div className="flex flex-wrap gap-1.5" role="group" aria-label="Show">
+            {FILTERS.map((f) => {
+              const on = filter === f.id;
+              return (
+                <button
+                  key={f.id}
+                  type="button"
+                  aria-pressed={on}
+                  onClick={() => setFilter(f.id)}
+                  className={`h-8 rounded-full px-3 text-meta font-semibold transition-colors ${on ? "bg-ink text-paper" : `border border-line-strong bg-card hover:bg-hover ${f.tone ?? "text-ink-2"}`}`}
+                >
+                  {f.label} {counts[f.id]}
+                </button>
+              );
+            })}
+          </div>
+          <label className="flex items-center gap-1.5 text-meta text-muted">
+            Sort:
+            <select value={sort} onChange={(e) => setSort(e.target.value as Sort)} className="bg-transparent font-semibold text-ink outline-none">
+              {(Object.keys(SORTS) as Sort[]).map((s) => (
+                <option key={s} value={s}>
+                  {SORTS[s].label}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
-        {error && <p className="p-3 text-sm text-red-800">{error}</p>}
-        <ul className="flex-1 overflow-y-auto">
+        {error && <p className="px-4 pb-2 text-meta text-danger">{error}</p>}
+        <ul className="flex-1 overflow-y-auto px-2 pb-4">
           {shown.map((r) => (
             <li key={r.id}>
-              <button
-                type="button"
-                onClick={() => select(r)}
-                className={`flex w-full items-center gap-2 border-b border-line/60 px-3 py-2 text-start hover:bg-card ${selected === r.id ? "bg-card" : ""}`}
-              >
-                <span
-                  className="size-2.5 shrink-0 rounded-full"
-                  style={{ background: pinColor(r) }}
-                  title={r.show_on_map && r.status !== "hidden" ? "Shown on the public map" : "Not on the public map"}
-                />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-semibold">{r.name_bn}</span>
-                  <span className="block truncate text-xs text-muted">{r.name_en}</span>
-                </span>
-                <span className="shrink-0 text-end text-xs text-muted">
-                  👁 {r.views}
-                  {(r.likes > 0 || r.dislikes > 0) && (
-                    <span className="block">
-                      👍 {r.likes} · 👎 {r.dislikes}
-                    </span>
-                  )}
-                  {r.reports > 0 && <span className="block font-semibold text-red-700">⚑ {r.reports}</span>}
-                </span>
-              </button>
+              <PlaceRow r={r} on={selected === r.id} onPick={() => setSelected(r.id)} />
             </li>
           ))}
-          {rows.length === 0 && !error && (
-            <li className="p-3 text-sm text-muted">No stories saved yet. Click any place on the main map and it will show up here.</li>
-          )}
+          {loaded && rows.length === 0 && !error && <li className="p-3 text-meta text-muted">No places yet. Click any name on the public map and its story shows up here.</li>}
+          {loaded && rows.length > 0 && shown.length === 0 && <li className="p-3 text-meta text-muted">Nothing matches.</li>}
         </ul>
-        <div className="border-t border-line p-3 text-xs text-muted">
-          <span className="me-3">
-            <span className="me-1 inline-block size-2 rounded-full" style={{ background: STATUS.ai.color }} />
-            AI
+        <p className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-line px-4 py-2.5 text-micro text-muted">
+          <span className="flex items-center gap-1.5">
+            <Dot c={ON_MAP} /> On the public map
           </span>
-          <span className="me-3">
-            <span className="me-1 inline-block size-2 rounded-full" style={{ background: STATUS.verified.color }} />
-            Verified
+          <span className="flex items-center gap-1.5">
+            <Dot c={OFF.ai} /> Off the map
           </span>
-          <span>
-            <span className="me-1 inline-block size-2 rounded-full border-2" style={{ borderColor: REPORTED }} />
-            Reported
+          <span className="flex items-center gap-1.5">
+            <Dot c={OFF.verified} /> Verified, off the map
           </span>
-          <p className="mt-1">Bigger pin = opened more often</p>
-        </div>
+        </p>
       </aside>
 
-      {/* Map */}
-      <div className="relative flex-1">
-        <div className="absolute inset-0">
-          <div ref={container} className="h-full w-full bg-[var(--map-ground)]" aria-label="Map of saved stories" />
+      {/* Beside the list: the chosen place, or the map */}
+      <section className={`${selected || mapView ? "flex" : "hidden md:flex"} relative min-w-0 flex-1 bg-card`}>
+        <div className={`absolute inset-0 ${mapView ? "" : "invisible"}`} aria-hidden={!mapView}>
+          <div ref={container} className="h-full w-full bg-[var(--map-ground)]" aria-label="Map of saved places" />
+          {/* Back to the list (under the place on narrower screens, where the place covers the map) */}
+          {mapView && (
+            <div className={`absolute start-3 top-3 ${selected ? "hidden lg:block" : ""}`}>
+              <ViewSwitch view={view} onChange={setView} floating />
+            </div>
+          )}
         </div>
-      </div>
-
-      {selected && (
-        <StoryPanel
-          key={selected}
-          id={selected}
-          onClose={() => setSelected(null)}
-          onChanged={load}
-        />
-      )}
+        {selected ? (
+          <div className={`relative z-10 w-full overflow-y-auto bg-card ${mapView ? "lg:ms-auto lg:w-[560px] lg:border-s lg:border-line lg:shadow-[-12px_0_32px_rgb(16_24_40/0.08)]" : ""}`}>
+            {mapView && (
+              <button
+                type="button"
+                onClick={() => setSelected(null)}
+                aria-label="Close"
+                className="absolute end-3 top-3 z-10 hidden size-10 place-items-center rounded-full text-muted hover:bg-hover hover:text-ink md:grid"
+              >
+                <svg viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
+                  <path d="M6 6l12 12M18 6 6 18" />
+                </svg>
+              </button>
+            )}
+            <PlaceDetail key={selected} id={selected} onClose={() => setSelected(null)} onChanged={load} />
+          </div>
+        ) : (
+          !mapView && (
+            <div className="grid flex-1 place-items-center p-8 text-center">
+              <div className="max-w-xs">
+                <p className="text-lead font-semibold">Pick a place from the list</p>
+                <p className="mt-1 text-meta text-muted">Or switch to Map to find it by where it is.</p>
+              </div>
+            </div>
+          )
+        )}
+      </section>
     </div>
   );
 }
 
-/** One story with the admin's tools above it. */
-function StoryPanel({ id, onClose, onChanged }: { id: string; onClose: () => void; onChanged: () => void }) {
-  const [detail, setDetail] = useState<Detail | null>(null);
-  const [busy, setBusy] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [editing, setEditing] = useState(false);
-  const [confirmRegen, setConfirmRegen] = useState(false);
-
-  useEffect(() => {
-    adminFetch(`/api/admin/stories/${id}`).then(async (r) => {
-      const data = await r.json().catch(() => ({}));
-      if (r.ok) setDetail(data);
-      else setError(data.error ?? `HTTP ${r.status}`);
-    });
-  }, [id]);
-
-  async function call(label: string, path: string, init: RequestInit) {
-    setBusy(label);
-    setError(null);
-    const r = await adminFetch(path, init);
-    const data = await r.json().catch(() => ({}));
-    setBusy(null);
-    if (!r.ok) return setError(data.error ?? `HTTP ${r.status}`);
-    setDetail(data);
-    setEditing(false);
-    setConfirmRegen(false);
-    onChanged();
-  }
-
-  const act = (action: string, label: string) =>
-    call(label, `/api/admin/stories/${id}`, { method: "PATCH", body: JSON.stringify({ action }) });
-
-  const button = "rounded-full border border-line bg-card px-3 py-1.5 text-sm font-semibold hover:border-accent disabled:opacity-50";
-
+function ViewSwitch({ view, onChange, floating = false }: { view: "list" | "map"; onChange: (v: "list" | "map") => void; floating?: boolean }) {
+  const cls = (on: boolean) => `h-8 rounded-full px-3.5 text-meta transition-colors ${on ? "bg-card font-semibold text-ink shadow-sm" : "text-ink-2 hover:text-ink"}`;
   return (
-    <SidePanel title={detail?.name_bn ?? "Story"} onClose={onClose}>
-      {!detail ? (
-        <p className="py-8 text-muted">{error ?? "Loading…"}</p>
-      ) : (
-        <>
-          {/* Admin tools */}
-          <div className="sticky top-0 z-20 -mx-5 border-b border-line bg-paper/95 px-5 py-3 backdrop-blur">
-            <div className="flex flex-wrap items-center gap-2 text-xs">
-              <span className="rounded-full px-2 py-0.5 font-semibold text-white" style={{ background: STATUS[detail.status].color }}>
-                {STATUS[detail.status].bn}
-              </span>
-              <span className="text-muted">👁 {detail.views} views</span>
-              <span className="text-muted">
-                👍 {detail.likes ?? 0} · 👎 {detail.dislikes ?? 0}
-              </span>
-              {detail.reports > 0 && <span className="font-semibold text-red-700">⚑ {detail.reports} {detail.reports === 1 ? "report" : "reports"}</span>}
-              <a
-                href={aiShareUrl({ name: detail.name_bn, lat: detail.lat, lng: detail.lng, kind: detail.kind ?? undefined, slug: detail.slug ?? undefined })}
-                target="_blank"
-                rel="noreferrer"
-                className="ms-auto text-accent underline"
-              >
-                View on site ↗
-              </a>
-            </div>
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {detail.status !== "verified" ? (
-                <button
-                  type="button"
-                  disabled={!!busy}
-                  onClick={() => act("verify", "verify")}
-                  className="rounded-full bg-emerald-700 px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
-                >
-                  {busy === "verify" ? "…" : "✓ Verify"}
-                </button>
-              ) : (
-                <button type="button" disabled={!!busy} onClick={() => act("unverify", "unverify")} className={button}>
-                  Unverify
-                </button>
-              )}
-              {/* A pin on the public map: a simple on/off switch. */}
-              <button
-                type="button"
-                role="switch"
-                aria-checked={!!detail.show_on_map}
-                disabled={!!busy || detail.status === "hidden"}
-                title={detail.status === "hidden" ? "Hidden stories can't be shown on the map" : undefined}
-                onClick={() => act(detail.show_on_map ? "hide_from_map" : "show_on_map", "map")}
-                className={`${button} flex items-center gap-2 ${detail.show_on_map ? "border-accent bg-accent-soft text-accent" : ""}`}
-              >
-                <span
-                  className={`relative inline-block h-4 w-7 rounded-full transition-colors ${detail.show_on_map ? "bg-accent" : "bg-line-strong"}`}
-                  aria-hidden
-                >
-                  <span className={`absolute top-0.5 size-3 rounded-full bg-white transition-all ${detail.show_on_map ? "start-3.5" : "start-0.5"}`} />
-                </span>
-                {busy === "map" ? "…" : "Pin on map"}
-              </button>
-              <button type="button" disabled={!!busy} onClick={() => setEditing((e) => !e)} className={button}>
-                {editing ? "Close editor" : "Edit"}
-              </button>
-              {!confirmRegen ? (
-                <button type="button" disabled={!!busy} onClick={() => setConfirmRegen(true)} className={button}>
-                  Rewrite
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  disabled={!!busy}
-                  onClick={() => call("regen", `/api/admin/stories/${id}/regenerate`, { method: "POST" })}
-                  className="rounded-full bg-amber-600 px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-60"
-                >
-                  {busy === "regen" ? "AI is writing… (10–20 s)" : "Sure? The old story will be deleted"}
-                </button>
-              )}
-              {detail.status !== "hidden" ? (
-                <button type="button" disabled={!!busy} onClick={() => act("hide", "hide")} className={button}>
-                  Hide
-                </button>
-              ) : (
-                <button type="button" disabled={!!busy} onClick={() => act("unhide", "unhide")} className={button}>
-                  Unhide
-                </button>
-              )}
-            </div>
-            {/* Category: the chip that finds this pin on the public map. */}
-            <label className="mt-2 flex flex-wrap items-center gap-2 text-sm">
-              <span className="font-semibold">Category</span>
-              <select
-                value={detail.category ?? ""}
-                disabled={!!busy || detail.category === undefined}
-                title={detail.category === undefined ? "Run the story_category migration first" : undefined}
-                onChange={(e) =>
-                  call("category", `/api/admin/stories/${id}`, { method: "PATCH", body: JSON.stringify({ category: e.target.value || null }) })
-                }
-                className="rounded-full border border-line bg-card px-3 py-1.5 text-sm disabled:opacity-50"
-              >
-                <option value="">Automatic ({detail.category_guess ? categoryLabel(detail.category_guess) : "none"})</option>
-                {CATEGORIES.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.bn} · {c.en}
-                  </option>
-                ))}
-                <option value={NO_CATEGORY}>None</option>
-              </select>
-              {busy === "category" && <span className="text-muted">…</span>}
-            </label>
-            {error && <p className="mt-2 text-sm text-red-800">{error}</p>}
-          </div>
+    <div role="group" aria-label="View" className={`flex rounded-full p-[3px] ${floating ? "bg-card shadow-float [&_[aria-pressed=true]]:bg-accent-soft [&_[aria-pressed=true]]:text-accent" : "bg-pressed"}`}>
+      <button type="button" aria-pressed={view === "list"} onClick={() => onChange("list")} className={cls(view === "list")}>
+        List
+      </button>
+      <button type="button" aria-pressed={view === "map"} onClick={() => onChange("map")} className={cls(view === "map")}>
+        Map
+      </button>
+    </div>
+  );
+}
 
-          {/* Visitors' reports */}
-          {detail.report_list.length > 0 && (
-            <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-3 text-sm">
-              <p className="font-semibold text-red-800">Visitor reports</p>
-              <ul className="mt-1 grid gap-1.5">
-                {detail.report_list.map((r) => (
-                  <li key={r.id} className="text-red-950">
-                    “{r.message}” <span className="text-xs text-red-700">· {new Date(r.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</span>
-                  </li>
-                ))}
-              </ul>
-              <button type="button" disabled={!!busy} onClick={() => act("clear_reports", "clear")} className="mt-2 text-xs font-semibold text-red-800 underline">
-                Fixed, clear reports
-              </button>
-            </div>
-          )}
+function Dot({ c }: { c: string }) {
+  return <span className="inline-block size-2.5 rounded-full" style={{ background: c }} aria-hidden />;
+}
 
-          {/* The story's picture: change it (Wikimedia Commons, licence checked) or remove it. */}
-          <div className="rounded-xl border border-line bg-card p-3">
-            <p className="text-sm font-semibold">Image</p>
-            <p className="mt-0.5 text-xs text-muted">Search Wikimedia Commons or browse photos taken nearby. Only images with a usable licence can be picked.</p>
-            <div className="mt-2">
-              <ImagePicker
-                value={detail.image}
-                near={{ lat: detail.lat, lng: detail.lng }}
-                onChange={(image) => call("image", `/api/admin/stories/${id}`, { method: "PATCH", body: JSON.stringify({ image }) })}
-              />
-            </div>
-            {busy === "image" && <p className="mt-1 text-xs text-muted">Saving…</p>}
-          </div>
-
-          <VideoManager storyId={id} videos={detail.videos ?? []} onChange={(videos) => setDetail({ ...detail, videos })} />
-
-          {editing ? (
-            <StoryEditor
-              story={detail.story}
-              saving={busy === "save"}
-              onSave={(story) => call("save", `/api/admin/stories/${id}`, { method: "PATCH", body: JSON.stringify({ story }) })}
-            />
-          ) : (
-            <AiStory
-              story={detail.story}
-              image={detail.image ?? undefined}
-              model={detail.model ?? undefined}
-              streaming={false}
-              fallbackName={detail.name_bn}
-              at={{ lat: detail.lat, lng: detail.lng }}
-              shareUrl={aiShareUrl({ name: detail.name_bn, lat: detail.lat, lng: detail.lng, kind: detail.kind ?? undefined, slug: detail.slug ?? undefined })}
-              status={detail.status}
-              videos={detail.videos}
-            />
-          )}
-        </>
-      )}
-    </SidePanel>
+/** One place in the list: name, what it is, and the one thing to know about it. */
+function PlaceRow({ r, on, onPick }: { r: Row; on: boolean; onPick: () => void }) {
+  const flag =
+    r.reports > 0
+      ? { text: `${r.reports} ${r.reports === 1 ? "report" : "reports"}`, cls: "text-danger" }
+      : r.status === "hidden"
+        ? { text: "Hidden", cls: "text-muted" }
+        : r.dislikes >= 3 && r.dislikes > r.likes
+          ? { text: "Disliked", cls: "text-warning" }
+          : r.status === "verified"
+            ? { text: "✓ Verified", cls: "text-success" }
+            : { text: "To check", cls: "text-warning" };
+  const meta = [r.category_label, r.show_on_map && r.status !== "hidden" ? "on map" : "not on map"].filter(Boolean).join(" · ");
+  return (
+    <button
+      type="button"
+      onClick={onPick}
+      aria-current={on ? "true" : undefined}
+      className={`flex w-full items-center gap-3 rounded-[14px] px-3 py-2.5 text-start transition-colors ${on ? "bg-card shadow-[0_1px_2px_rgb(16_24_40/0.06),0_0_0_2px_var(--accent)]" : "hover:bg-hover"}`}
+    >
+      <span className="size-2.5 shrink-0 rounded-full" style={{ background: pinColor(r) }} aria-hidden />
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span className="truncate font-semibold">{r.name_bn}</span>
+        <span className="truncate text-meta text-muted">{meta}</span>
+      </span>
+      <span className="flex shrink-0 flex-col items-end gap-0.5 text-micro">
+        <span className="text-muted">{r.views.toLocaleString("en-GB")} opens</span>
+        <span className={`font-semibold ${flag.cls}`}>{flag.text}</span>
+      </span>
+    </button>
   );
 }

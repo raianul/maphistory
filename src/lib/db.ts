@@ -6,8 +6,11 @@ import { createHash } from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { AiPlace } from "./ai/types";
 import type { StoryTarget } from "./ai/place-story";
-import { categoryOf, guessCategory } from "./categories";
+import { categoryLabel, categoryOf, guessCategory } from "./categories";
 import type { MapPin } from "./map-pin";
+import { smallPicture } from "./pictures";
+
+export { smallPicture };
 import { getPlaces } from "./places";
 import type { PageCandidate } from "./place-links";
 import { freeSlug } from "./slug";
@@ -170,15 +173,20 @@ const missingColumn = (code?: string) => code === "42703" || code === "PGRST204"
 /** Every saved story, for the admin map (hidden ones too). */
 export async function listStories() {
   const list = (columns: string) => db().from("stories").select(columns).order("views", { ascending: false }).limit(5000);
-  const base = "id,slug,name_bn,name_en,lat,lng,kind,status,views,reports,updated_at";
-  let { data, error } = await list(`${base},show_on_map`);
-  // Before the show_on_map migration: list them anyway, all off the map.
+  const base = "id,slug,name_bn,name_en,lat,lng,kind,status,views,reports,created_at,updated_at,kind_bn:story->>kind_bn,era:story->>era_label_bn";
+  let { data, error } = await list(`${base},show_on_map,category`);
+  // Before the category / show_on_map migrations: list them anyway (guessed categories, all off the map).
+  if (missingColumn(error?.code)) ({ data, error } = await list(`${base},show_on_map`));
   if (missingColumn(error?.code)) ({ data, error } = await list(base));
   if (error) throw new Error(`Database: ${error.message}`);
   // 👍 / 👎 per place (the admin sees both).
   const { reactionTotals } = await import("./reactions");
   const totals = await reactionTotals();
-  return ((data ?? []) as unknown as { slug: string | null }[]).map((r) => ({ ...r, likes: 0, dislikes: 0, ...(r.slug ? totals.get(r.slug) : {}) }));
+  type Raw = { slug: string | null; kind_bn: string | null; era: string | null; category?: string | null };
+  return ((data ?? []) as unknown as Raw[]).map(({ kind_bn, era, category, ...r }) => {
+    const cat = categoryOf(category, guessCategory({ kind_bn, era }));
+    return { ...r, kind_bn, category_label: cat ? categoryLabel(cat) : null, likes: 0, dislikes: 0, ...(r.slug ? totals.get(r.slug) : {}) };
+  });
 }
 
 
@@ -259,23 +267,6 @@ export async function listMapPins(b: Bounds, limit = PINS_PER_TILE): Promise<Map
   });
 }
 
-/**
- * A hover-preview-sized picture: Commons at 500 px (a standard thumbnail width; originals can be
- * many MB), YouTube's medium still. Commons tracking parameters are dropped.
- */
-export function smallPicture(src: string | null | undefined): string | undefined {
-  if (!src) return undefined;
-  const url = src.split("?")[0];
-  const commons = url.match(/^https:\/\/(?:upload|thumb)\.wikimedia\.org\/wikipedia\/(\w+)\/(?:thumb\/)?([0-9a-f]\/[0-9a-f]{2})\/([^/]+)/);
-  if (commons) {
-    const [, wiki, dir, file] = commons;
-    // Only photos have a same-format thumbnail; anything else stays as it was.
-    if (!/\.(jpe?g|png|webp)$/i.test(file)) return url;
-    return `https://upload.wikimedia.org/wikipedia/${wiki}/thumb/${dir}/${file}/500px-${file}`;
-  }
-  if (/(ytimg|youtube)\.com\/vi\//.test(url)) return url.replace(/\/(hq|sd|maxres)default\.jpg$/, "/mqdefault.jpg");
-  return url;
-}
 
 export async function getStoryForAdmin(id: string) {
   const [story, reports] = await Promise.all([
