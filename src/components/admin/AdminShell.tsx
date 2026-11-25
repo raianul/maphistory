@@ -4,6 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import type { AdminHome } from "@/lib/admin-home";
+import { AMP_PATH, MARK_VIEWBOX, PIN_PATH } from "@/lib/logo";
+import { Wordmark } from "../Logo";
 import { adminFetch, browserSupabase } from "@/lib/supabase-browser";
 
 /** Home's numbers, shared with the menu (its badge) and reloaded after a change. */
@@ -37,8 +39,11 @@ function Icon({ d, className = "size-5" }: { d: string; className?: string }) {
 
 export function Mark({ className = "size-9 rounded-xl" }: { className?: string }) {
   return (
-    <span className={`grid shrink-0 place-items-center bg-accent text-on-accent ${className}`} aria-hidden>
-      <Icon d={SECTIONS[1].icon} className="size-[55%]" />
+    <span className={`grid shrink-0 place-items-center bg-accent ${className}`} aria-hidden>
+      <svg viewBox={MARK_VIEWBOX} className="h-[62%] w-auto">
+        <path d={PIN_PATH} fill="#ffffff" />
+        <path d={AMP_PATH} className="fill-accent" />
+      </svg>
     </span>
   );
 }
@@ -78,7 +83,7 @@ export function AdminShell({ email, children }: { email?: string; children: Reac
           <Link href="/admin" className="mb-4 flex items-center gap-2.5 px-2">
             <Mark />
             <span className="flex flex-col leading-tight">
-              <span className="text-lead font-bold">Ondor</span>
+              <Wordmark className="text-lead" />
               <span className="text-micro text-muted">Admin</span>
             </span>
           </Link>

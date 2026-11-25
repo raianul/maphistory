@@ -1,7 +1,8 @@
 import type { Metadata, Viewport } from "next";
-import { Hind_Siliguri } from "next/font/google";
+import { Fraunces, Hind_Siliguri } from "next/font/google";
 import Link from "next/link";
 import { Analytics } from "@/components/Analytics";
+import { LogoMark, Wordmark } from "@/components/Logo";
 import { SITE } from "@/lib/places";
 import "./globals.css";
 
@@ -9,6 +10,15 @@ const hind = Hind_Siliguri({
   variable: "--font-hind",
   subsets: ["bengali", "latin"],
   weight: ["400", "600", "700"],
+  display: "swap",
+});
+
+// Only for the wordmark (Latin letters).
+const fraunces = Fraunces({
+  variable: "--font-fraunces",
+  subsets: ["latin"],
+  weight: ["600"],
+  style: ["normal", "italic"],
   display: "swap",
 });
 
@@ -35,11 +45,12 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children, panel }: LayoutProps<"/">) {
   return (
-    <html lang="bn" className={`${hind.variable} h-full antialiased`}>
+    <html lang="bn" className={`${hind.variable} ${fraunces.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col">
         <header className="site-header relative z-30 flex h-[calc(var(--header-h)+env(safe-area-inset-top))] shrink-0 items-center border-b border-line bg-paper ps-[max(1rem,env(safe-area-inset-left))] pe-[max(1rem,env(safe-area-inset-right))] pt-[env(safe-area-inset-top)] md:ps-[max(1.25rem,env(safe-area-inset-left))]">
-          <Link href="/" className="-mx-1 flex h-10 items-center gap-2 rounded-md px-1">
-            <span className="text-lg font-bold tracking-tight">{SITE.name}</span>
+          <Link href="/" aria-label={SITE.name} className="-mx-1 flex h-10 items-center gap-2 rounded-md px-1">
+            <LogoMark className="h-6 w-auto" />
+            <Wordmark className="text-lg" />
             <span className="hidden text-meta text-muted sm:inline">{SITE.tagline}</span>
           </Link>
           {/* Menu (English). "AI" marks the About link: this site's content is written by AI. */}

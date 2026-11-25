@@ -58,7 +58,7 @@ A place with a YouTube video shares the video's thumbnail instead.
 
 | Variable | Purpose |
 | --- | --- |
-| `NEXT_PUBLIC_SITE_URL` | The site's public address, e.g. `https://ondor.site` (no trailing slash). Every canonical URL, share link, sitemap entry and share card uses it. Unset: Vercel's production address, then `http://localhost:3000` |
+| `NEXT_PUBLIC_SITE_URL` | The site's public address, e.g. `https://www.placeandpast.com` (no trailing slash). Every canonical URL, share link, sitemap entry and share card uses it. Unset: Vercel's production address, then `http://localhost:3000` |
 | `NEXT_PUBLIC_REPORT_FORM_URL` | "Report a mistake" form; the place slug is appended |
 | `NEXT_PUBLIC_BANGLADESH_ONLY` | `true` (default): only Bangladesh is shown and has stories; `false`: the whole world |
 

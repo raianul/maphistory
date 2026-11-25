@@ -95,7 +95,7 @@ export function storySeo(s: PlacePage, videos: PlaceVideo[]): PlaceSeo {
 }
 
 /**
- * "<name> — <hook> | Ondor", kept near 60 characters: the hook's parts ("সংসদ ভবন · ১৯৮২") are
+ * "<name> — <hook> | Place & Past", kept near 60 characters: the hook's parts ("সংসদ ভবন · ১৯৮২") are
  * dropped from the end until it fits, never cut mid-word.
  */
 export function seoTitle(p: PlaceSeo): string {

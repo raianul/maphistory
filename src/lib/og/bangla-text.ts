@@ -27,9 +27,10 @@ async function harfbuzz(): Promise<Hb> {
   return hbPromise;
 }
 
-/** The project's Bangla font (Hind Siliguri), read once. */
-function font(weight: "Regular" | "SemiBold"): Promise<Uint8Array> {
-  const file = join(process.cwd(), "public", "fonts", `HindSiliguri-${weight}.ttf`);
+/** A font file in public/fonts, read once: Hind Siliguri (Bangla), or Fraunces for the wordmark. */
+export type FontFile = `HindSiliguri-${"Regular" | "SemiBold"}` | "Fraunces-SemiBold" | "Fraunces-SemiBoldItalic";
+function font(name: FontFile): Promise<Uint8Array> {
+  const file = join(process.cwd(), "public", "fonts", `${name}.ttf`);
   if (!fonts.has(file)) fonts.set(file, readFile(file));
   return fonts.get(file)!;
 }
@@ -42,10 +43,10 @@ export type ShapedText = { svg: string; width: number; height: number };
  */
 export async function banglaSvg(
   text: string,
-  { size, color, maxWidth, maxLines = 2, weight = "SemiBold", lineHeight = 1.35 }: { size: number; color: string; maxWidth: number; maxLines?: number; weight?: "Regular" | "SemiBold"; lineHeight?: number },
+  { size, color, maxWidth, maxLines = 2, weight = "SemiBold", fontFile, lineHeight = 1.35 }: { size: number; color: string; maxWidth: number; maxLines?: number; weight?: "Regular" | "SemiBold"; fontFile?: FontFile; lineHeight?: number },
 ): Promise<ShapedText> {
   const hb = await harfbuzz();
-  const blob = hb.createBlob(await font(weight));
+  const blob = hb.createBlob(await font(fontFile ?? `HindSiliguri-${weight}`));
   const face = hb.createFace(blob, 0);
   const hbFont = hb.createFont(face);
   const scale = size / face.upem;

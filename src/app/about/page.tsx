@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 const h2 = "mt-8 text-lead font-bold";
 const p = "mt-2 text-body text-ink-2";
 
-/** About Ondor: what it is, and plainly, that its content is written by AI (Google Gemini). */
+/** About Place & Past: what it is, and plainly, that its content is written by AI (Google Gemini). */
 export default function AboutPage() {
   return (
     <article className="mx-auto max-w-2xl px-4 py-8 pb-16 md:py-12">

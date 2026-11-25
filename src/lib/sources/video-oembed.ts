@@ -34,7 +34,7 @@ export async function fetchVideoInfo(provider: VideoProvider, providerVideoId: s
 export async function fetchYouTubeDetails(id: string): Promise<{ publishedAt?: string; durationSeconds?: number } | undefined> {
   try {
     const res = await fetch(`https://www.youtube.com/watch?v=${encodeURIComponent(id)}`, {
-      headers: { "Accept-Language": "en", "User-Agent": "Mozilla/5.0 (compatible; Ondor/0.1)" },
+      headers: { "Accept-Language": "en", "User-Agent": "Mozilla/5.0 (compatible; PlaceAndPast/0.1)" },
       signal: AbortSignal.timeout(8000),
     });
     if (!res.ok) return undefined;

@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { categoryLabel, type CategoryId } from "@/lib/categories";
 import type { OnThisDay, PublicEventCard } from "@/lib/events/public";
 import { FACEBOOK_URL } from "@/lib/links";
+import { LogoBadge, Wordmark } from "./Logo";
 import type { MapLang } from "@/lib/map-style";
 import { dayBn } from "./OnThisDayPanel";
 
@@ -17,25 +18,18 @@ import { dayBn } from "./OnThisDayPanel";
 const pill = "pointer-events-auto rounded-full bg-card shadow-float";
 const bn = (n: number) => n.toLocaleString("bn-BD", { useGrouping: false });
 
-/** The round brand mark (a pin), on its own or inside the phone's search bar. */
-export function BrandMark({ size = "md" }: { size?: "sm" | "md" }) {
-  return (
-    <span className={`grid shrink-0 place-items-center rounded-full bg-accent text-on-accent ${size === "sm" ? "size-10" : "size-10"}`} aria-hidden>
-      <svg viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M12 22s7-6.2 7-12a7 7 0 1 0-14 0c0 5.8 7 12 7 12z" />
-        <circle cx="12" cy="10" r="2.5" />
-      </svg>
-    </span>
-  );
+/** The round brand mark (a pin holding an "&"), on its own or inside the phone's search bar. */
+export function BrandMark() {
+  return <LogoBadge className="size-10" />;
 }
 
 /** Desktop: the brand pill (mark, name, tagline). Goes to the plain map. */
 export function Brand() {
   return (
-    <Link href="/" className={`${pill} hidden h-[52px] items-center gap-2.5 ps-1.5 pe-5 md:flex`} aria-label="Ondor — মানচিত্রে ফিরুন">
+    <Link href="/" className={`${pill} hidden h-[52px] items-center gap-2.5 ps-1.5 pe-5 md:flex`} aria-label="Place & Past — মানচিত্রে ফিরুন">
       <BrandMark />
       <span className="flex flex-col leading-tight">
-        <span className="text-lg font-bold tracking-tight">Ondor</span>
+        <Wordmark className="text-lg" />
         <span className="text-micro text-muted">প্রতিটি জায়গারই অতীত আছে</span>
       </span>
     </Link>
@@ -90,7 +84,7 @@ function MoreLinks({ lang, onLang }: { lang?: MapLang; onLang?: (l: MapLang) => 
         গোপনীয়তা নীতি
       </Link>
       <a href={FACEBOOK_URL} target="_blank" rel="noreferrer" className={item}>
-        Facebook-এ Ondor ↗
+        Facebook-এ Place &amp; Past ↗
       </a>
       {lang && onLang && (
         <div className="flex items-center justify-between gap-3 border-t border-line px-3 pt-3 pb-1">

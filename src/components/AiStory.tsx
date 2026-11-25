@@ -352,7 +352,7 @@ export function AiStory({
           )}
           <p className="mt-3">
             <a href={FACEBOOK_URL} target="_blank" rel="noreferrer" className="font-semibold text-ink-2 underline hover:text-accent">
-              Facebook-এ Ondor ↗
+              Facebook-এ Place &amp; Past ↗
             </a>
           </p>
         </footer>

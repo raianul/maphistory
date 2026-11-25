@@ -11,7 +11,7 @@ const h2 = "mt-8 text-lead font-bold";
 const p = "mt-2 text-body text-ink-2";
 const li = "mt-2 grid list-disc gap-2 ps-5 text-body text-ink-2";
 
-/** What Ondor collects (very little) and why. Written to match what the code actually does. */
+/** What Place & Past collects (very little) and why. Written to match what the code actually does. */
 export default function PrivacyPage() {
   return (
     <article className="mx-auto max-w-2xl px-4 py-8 pb-16 md:py-12">

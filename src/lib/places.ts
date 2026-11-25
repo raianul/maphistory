@@ -27,9 +27,9 @@ export function t(text: TextT | undefined): string {
 }
 
 export const SITE = {
-  name: "Ondor",
+  name: "Place & Past",
   /** Shown beside the name; kept so callers that show both still work. */
-  nameEn: "Ondor",
+  nameEn: "Place & Past",
   tagline: "Every Place Has a Past.",
   /** The address without https://, as shown on the About and Privacy pages. */
   domain: SITE_URL.replace(/^https?:\/\//, "").replace(/\/$/, ""),

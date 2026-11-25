@@ -5,7 +5,7 @@
 import { SITE_URL } from "../site";
 
 // Wikimedia asks automated clients to identify themselves.
-export const WIKI_HEADERS = { "User-Agent": `Ondor/0.1 (${SITE_URL}; content drafting tool)` };
+export const WIKI_HEADERS = { "User-Agent": `PlaceAndPast/0.1 (${SITE_URL}; content drafting tool)` };
 
 export type WikidataInfo = {
   qid: string;

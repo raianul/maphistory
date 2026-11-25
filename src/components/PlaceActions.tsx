@@ -160,7 +160,7 @@ function Share({ title, url, slug, className, neutral }: { title: string; url: s
     if (touch && typeof navigator.share === "function") {
       shared("share_sheet");
       try {
-        await navigator.share({ title, text: `${title} — Ondor`, url });
+        await navigator.share({ title, text: `${title} — Place & Past`, url });
       } catch {
         // closed the sheet: nothing to do
       }
@@ -180,7 +180,7 @@ function Share({ title, url, slug, className, neutral }: { title: string; url: s
     }
   }
 
-  const text = encodeURIComponent(`${title} — Ondor`);
+  const text = encodeURIComponent(`${title} — Place & Past`);
   const u = encodeURIComponent(url);
   const item = "flex h-12 items-center gap-3 rounded-xl px-2.5 text-body font-semibold text-ink transition-colors hover:bg-hover";
   const badge = "grid size-8 shrink-0 place-items-center rounded-full text-white";

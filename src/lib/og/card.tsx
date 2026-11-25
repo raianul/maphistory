@@ -9,6 +9,7 @@ import { join } from "node:path";
 import sharp from "sharp";
 import { SITE_URL } from "../site";
 import { THEME } from "../theme";
+import { markSvg } from "../logo";
 import { banglaSvg, svgDataUrl } from "./bangla-text";
 
 export const CARD = { width: 1200, height: 630 };
@@ -24,7 +25,7 @@ async function photoData(src: string | undefined): Promise<string | undefined> {
       const buf = await readFile(join(process.cwd(), "public", decodeURIComponent(src.split("?")[0]).replace(/\.\.+/g, "")));
       return buf.length > 4_000_000 ? undefined : `data:${type};base64,${buf.toString("base64")}`;
     }
-    const res = await fetch(src, { headers: { "User-Agent": `Ondor/0.1 (${SITE_URL}; share card)` }, signal: AbortSignal.timeout(6000) });
+    const res = await fetch(src, { headers: { "User-Agent": `PlaceAndPast/0.1 (${SITE_URL}; share card)` }, signal: AbortSignal.timeout(6000) });
     const type = res.headers.get("content-type") ?? "";
     if (!res.ok || !/^image\/(jpeg|png|webp)/.test(type)) return undefined;
     const buf = Buffer.from(await res.arrayBuffer());
@@ -40,15 +41,19 @@ const img = (svg: { svg: string; width: number; height: number }) => (
   <img src={svgDataUrl(svg.svg)} width={svg.width} height={svg.height} alt="" />
 );
 
-/** A place's card: name (large), era line, Ondor wordmark; over its photo when there is one. */
+/** A place's card: name (large), era line, the Place & Past logo; over its photo when there is one. */
 export async function placeCard({ name, line, photo }: { name: string; line?: string; photo?: string }): Promise<Response> {
   const bg = await photoData(photo);
   const ink = bg ? "#ffffff" : THEME.ink;
   const muted = bg ? "rgba(255,255,255,0.88)" : "#5b5f66";
-  const [title, sub, mark, tag] = await Promise.all([
+  const brand = bg ? "#ffffff" : THEME.accent;
+  const [title, sub, place, amp, past, tag] = await Promise.all([
     banglaSvg(name, { size: name.length > 22 ? 68 : 84, color: ink, maxWidth: 1040, maxLines: 2 }),
     line ? banglaSvg(line, { size: 34, color: muted, maxWidth: 1040, maxLines: 1, weight: "Regular" }) : Promise.resolve(undefined),
-    banglaSvg("Ondor", { size: 40, color: bg ? "#ffffff" : THEME.accent, maxWidth: 400, maxLines: 1 }),
+    // The wordmark: "Place & Past", the "&" in italic (lineHeight 1: the three parts line up).
+    banglaSvg("Place", { size: 40, color: bg ? "#ffffff" : THEME.ink, maxWidth: 300, maxLines: 1, fontFile: "Fraunces-SemiBold", lineHeight: 1.2 }),
+    banglaSvg("&", { size: 40, color: brand, maxWidth: 100, maxLines: 1, fontFile: "Fraunces-SemiBoldItalic", lineHeight: 1.2 }),
+    banglaSvg("Past", { size: 40, color: bg ? "#ffffff" : THEME.ink, maxWidth: 300, maxLines: 1, fontFile: "Fraunces-SemiBold", lineHeight: 1.2 }),
     banglaSvg("Every Place Has a Past.", { size: 24, color: muted, maxWidth: 500, maxLines: 1, weight: "Regular" }),
   ]);
   const png = new ImageResponse(
@@ -78,7 +83,12 @@ export async function placeCard({ name, line, photo }: { name: string; line?: st
           {img(title)}
           {sub && <div style={{ display: "flex", marginTop: 8 }}>{img(sub)}</div>}
           <div style={{ display: "flex", alignItems: "center", marginTop: 36, gap: 18 }}>
-            {img(mark)}
+            <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+              <div style={{ display: "flex", marginRight: 6 }}>{img({ svg: markSvg({ pin: brand, amp: bg ? THEME.ink : "#ffffff" }), width: 40, height: 50 })}</div>
+              {img(place)}
+              {img(amp)}
+              {img(past)}
+            </div>
             {img(tag)}
           </div>
         </div>

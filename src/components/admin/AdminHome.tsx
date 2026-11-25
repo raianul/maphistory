@@ -29,7 +29,7 @@ export function AdminHome({ email }: { email?: string }) {
       {/* Phones: the menu's account line lives here. */}
       <div className="flex items-center gap-2.5 md:hidden">
         <Mark className="size-8 rounded-[10px]" />
-        <span className="flex-1 font-bold">Ondor admin</span>
+        <span className="flex-1 font-bold">Place &amp; Past admin</span>
         <a href="/" target="_blank" rel="noreferrer" className="text-meta font-semibold text-accent">
           Site ↗
         </a>

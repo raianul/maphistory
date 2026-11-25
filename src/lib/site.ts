@@ -1,5 +1,5 @@
 /**
- * The site's public address, set in ONE place: NEXT_PUBLIC_SITE_URL (e.g. https://ondor.site).
+ * The site's public address, set in ONE place: NEXT_PUBLIC_SITE_URL (e.g. https://www.placeandpast.com).
  * Canonical URLs, share links, the sitemap, share cards and structured data all use it.
  * Client-safe (no content data imported).
  *
@@ -13,7 +13,7 @@ const configured =
 export const SITE_URL = (configured || "http://localhost:3000").replace(/\/+$/, "");
 
 /**
- * The full public address of a path ("/place/lalbagh-fort" → "https://ondor.site/place/lalbagh-fort").
+ * The full public address of a path ("/place/lalbagh-fort" → "https://www.placeandpast.com/place/lalbagh-fort").
  * With nothing configured (your own computer), the address the browser is on.
  */
 export function siteUrl(path: string): string {

@@ -154,6 +154,8 @@
   --color-warning-soft-hover: var(--warning-soft-hover);
   --color-danger: var(--danger);
   --font-sans: var(--font-hind), system-ui, sans-serif;
+  /* The name "Place & Past" (the wordmark) only. */
+  --font-display: var(--font-fraunces), Georgia, serif;
 
   /* Type scale for the reading panel (Bangla needs generous line height). */
   --text-display: var(--fs-display);
