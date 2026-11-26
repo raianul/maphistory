@@ -39,15 +39,12 @@ const EVIDENCE: Record<string, { bn: string; className: string }> = {
 export function AiStory({
   story: s,
   image,
-  model,
   streaming,
   fallbackName,
   at,
   shareUrl,
   onExplore,
   id,
-  status,
-  verifiedAt,
   videos = [],
   notice,
 }: {
@@ -62,10 +59,9 @@ export function AiStory({
   shareUrl: string;
   /** Opens the story of a place mentioned in this one. */
   onExplore?: (name: string) => void;
-  /** Saved story id (for reports) and whether the admin has checked it. */
+  /** Saved story id (for reports). The admin's review (status, date) is not shown to visitors. */
   id?: string;
   status?: AiPlace["status"];
-  /** When the admin verified it (ISO). */
   verifiedAt?: string;
   /** The place's historical videos, main one first. */
   videos?: PlaceVideo[];
@@ -88,7 +84,6 @@ export function AiStory({
   const keyNumbers = (s.key_numbers ?? []).filter((k) => k?.value_bn);
   const keyDates = (s.key_dates ?? []).filter((k) => k?.date_bn && k.text_bn);
   const sources = (s.sources ?? []).filter((src) => src?.title);
-  const verified = status === "verified";
   const name = s.name_bn || fallbackName;
   // Supporting sections start open when the story is the main content, folded under a video.
   const open = !hasVideo;
@@ -245,12 +240,6 @@ export function AiStory({
       ) : (
         <p className="text-body text-ink-2">উৎস: AI মডেলের নিজস্ব জ্ঞান; কোনো বাইরের সূত্র মিলিয়ে দেখা হয়নি।</p>
       )}
-      {verified && s.corrections_bn && (
-        <p className="text-meta text-ink-2">
-          <span className="font-semibold">সংশোধন: </span>
-          {s.corrections_bn}
-        </p>
-      )}
       <p className="text-micro text-muted">
         <span className="font-semibold">সম্ভবত</span> = প্রচলিত তথ্য, খুঁটিনাটিতে ভিন্নমত আছে · <span className="font-semibold">অনিশ্চিত</span> = নিশ্চিত হওয়া যায়নি ·{" "}
         <span className="font-semibold">গবেষকদের ব্যাখ্যা</span> = নথি নয়, ঐতিহাসিকদের বিশ্লেষণ · <span className="font-semibold">লোকঐতিহ্য / কিংবদন্তি</span> = মুখে মুখে চলে
@@ -270,7 +259,7 @@ export function AiStory({
           {s.locality_en && s.name_en && !s.locality_en.startsWith(s.name_en) && <span> · {s.name_en}</span>}
         </p>
         <div className="mt-3 flex min-h-7 flex-wrap items-center gap-1.5">
-          <StatusChip streaming={streaming} status={status} verifiedAt={verifiedAt} />
+          <StatusChip streaming={streaming} />
           {eraLabel && <span className={`${chip} bg-accent-soft text-accent`}>{eraLabel}</span>}
           {s.kind_bn && <span className={`${chip} bg-hover text-ink-2`}>{s.kind_bn}</span>}
           {s.origin_bn && <span className={`${chip} bg-hover text-ink-2`}>{s.origin_bn}</span>}
@@ -334,22 +323,13 @@ export function AiStory({
 
       {!streaming && (
         <footer className="mt-10 animate-[fadein_.4s_ease] border-t border-line pt-4 text-micro text-muted">
-          {verified ? (
-            <p className="font-semibold text-ink-2">
-              খসড়াটি AI (Google Gemini) লিখেছে; সম্পাদক তথ্যগুলো {sources.length > 0 ? "সূত্রের সঙ্গে " : ""}মিলিয়ে দেখেছেন
-              {verifiedAt && bnDate(verifiedAt) ? ` (${bnDate(verifiedAt)})` : ""}।{" "}
-              <a href="/about" className="font-normal text-accent underline">
-                আরও জানুন
-              </a>
-            </p>
-          ) : (
-            <p className="font-semibold text-ink-2">
-              এই গল্পটি AI (Google Gemini{model ? `, ${model}` : ""}) লিখেছে; কেউ যাচাই করেনি, ভুল থাকতে পারে।{" "}
-              <a href="/about" className="font-normal text-accent underline">
-                আরও জানুন
-              </a>
-            </p>
-          )}
+          {/* Every place says the same: made with AI (an admin's review or edit is not shown to visitors). */}
+          <p className="font-semibold text-ink-2">
+            এই লেখাটি AI (Google Gemini) দিয়ে তৈরি। ভুল থাকতে পারে, ভুল দেখলে জানান।{" "}
+            <a href="/about" className="font-normal text-accent underline">
+              আরও জানুন
+            </a>
+          </p>
           <p className="mt-3">
             <a href={FACEBOOK_URL} target="_blank" rel="noreferrer" className="font-semibold text-ink-2 underline hover:text-accent">
               Facebook-এ Place &amp; Past ↗
@@ -361,8 +341,8 @@ export function AiStory({
   );
 }
 
-/** The first chip: being written, checked by an editor (date on hover), or written by AI. */
-function StatusChip({ streaming, status, verifiedAt }: { streaming: boolean; status?: AiPlace["status"]; verifiedAt?: string }) {
+/** The first chip: being written, or made with AI (the same for every place). */
+function StatusChip({ streaming }: { streaming: boolean }) {
   const chip = "flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-meta font-semibold";
   if (streaming) {
     return (
@@ -372,23 +352,13 @@ function StatusChip({ streaming, status, verifiedAt }: { streaming: boolean; sta
       </span>
     );
   }
-  const date = verifiedAt ? bnDate(verifiedAt) : undefined;
-  return status === "verified" ? (
-    <span className={`${chip} animate-[fadein_.3s_ease] bg-success-soft text-success`} title={date ? `সম্পাদক সূত্রের সঙ্গে মিলিয়ে দেখেছেন · ${date}` : "সম্পাদক সূত্রের সঙ্গে মিলিয়ে দেখেছেন"}>
-      ✓ যাচাইকৃত
-    </span>
-  ) : (
-    <span className={`${chip} animate-[fadein_.3s_ease] bg-accent-soft text-accent`} title="এখনো যাচাই করা হয়নি">
+  return (
+    <span className={`${chip} animate-[fadein_.3s_ease] bg-accent-soft text-accent`} title="AI (Google Gemini) দিয়ে তৈরি">
       ✦ AI দিয়ে লেখা
     </span>
   );
 }
 
-/** "২৩ নভেম্বর ২০২৬" (Dhaka time). */
-function bnDate(iso: string): string | undefined {
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? undefined : d.toLocaleDateString("bn-BD", { day: "numeric", month: "long", year: "numeric", timeZone: "Asia/Dhaka" });
-}
 
 /** A section that folds: open by default when it is the main content, closed under a video. */
 function Disclosure({ title, count, open, children }: { title: string; count?: number; open: boolean; children: React.ReactNode }) {

@@ -74,7 +74,7 @@ export default async function CollectionPage({ params }: PageProps<"/collection/
               )}
               <span className="flex min-w-0 flex-col gap-0.5">
                 <span className="font-semibold">
-                  {p.label} {p.verified && <span className="text-meta font-semibold text-success">✓</span>}
+                  {p.label}
                 </span>
                 {p.note_bn ? <span className="text-meta text-ink-2">{p.note_bn}</span> : p.line && <span className="text-meta text-muted">{p.line}</span>}
               </span>

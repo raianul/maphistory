@@ -608,15 +608,13 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
         // Pins are local places: shown from city zoom in (they fade in), never stacked on top of a
         // country when the map shows a continent or the world.
         const fadeIn = (from: number) => ["interpolate", ["linear"], ["zoom"], from, 0, from + 1, 1] as unknown as number;
-        // Markers in the logo's pin shape. Verified by an editor: solid accent with a white dot.
-        // Still AI-only: a white pin with an accent outline. Numbered ones (areas, collections):
-        // a bigger accent pin with the number in its head.
+        // Markers in the logo's pin shape: every place the same (visitors aren't told which ones the
+        // admin has reviewed). Numbered ones (areas, collections): a bigger pin with the number in its head.
         const marker = (id: string, m: Parameters<typeof pinImage>[0]) => {
           const { image, pixelRatio } = pinImage(m);
           if (!map.hasImage(id)) map.addImage(id, image, { pixelRatio });
         };
-        marker("pin-verified", { width: 20, fill: THEME.accent, stroke: THEME.white, strokeWidth: 2, dot: THEME.white });
-        marker("pin-ai", { width: 20, fill: THEME.white, stroke: THEME.accent, strokeWidth: 2.5, dot: THEME.accent });
+        marker("pin-place", { width: 20, fill: THEME.accent, stroke: THEME.white, strokeWidth: 2, dot: THEME.white });
         marker("pin-number", { width: 30, fill: THEME.accent, stroke: THEME.white, strokeWidth: 2 });
         // Each image has a few px of room below the tip (for the outline and shadow): moved down by
         // that much, the tip sits exactly on the place. PIN_NUMBER_HEAD: tip to the head's centre.
@@ -628,7 +626,7 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
           source: "pins",
           minzoom: PIN_MIN_ZOOM,
           layout: {
-            "icon-image": ["case", ["get", "verified"], "pin-verified", "pin-ai"],
+            "icon-image": "pin-place",
             "icon-anchor": "bottom",
             "icon-offset": TIP,
             "icon-size": ["interpolate", ["linear"], ["zoom"], PIN_MIN_ZOOM, 0.8, 15, 1],
@@ -1263,7 +1261,7 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
                   >
                     <span className="flex items-center gap-2.5">
                       <span
-                        className={`size-2 rounded-full ${p.verified ? "bg-accent" : "border-[1.5px] border-accent bg-card"}`}
+                        className="size-2 rounded-full bg-accent"
                         aria-hidden
                       />
                       {p.label}

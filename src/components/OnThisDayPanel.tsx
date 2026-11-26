@@ -325,7 +325,7 @@ function EventBody({ e, onTimeline }: { e: PublicEvent; onTimeline: (t: { event:
       )}
       {/* Always shown, with or without sources: who wrote this. */}
       <p className="mt-4 text-micro text-muted">
-        লেখা AI (Google Gemini) দিয়ে তৈরি, সূত্র মিলিয়ে একজন সম্পাদক দেখে প্রকাশ করেছেন। তবুও ভুল থাকতে পারে।{" "}
+        লেখা AI (Google Gemini) দিয়ে তৈরি, উইকিপিডিয়া-বাংলাপিডিয়ার মতো সূত্র থেকে। ভুল থাকতে পারে, ভুল দেখলে জানান।{" "}
         <a href="/about" className="text-accent underline">
           আরও জানুন
         </a>

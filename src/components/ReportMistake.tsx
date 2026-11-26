@@ -19,7 +19,7 @@ export function ReportMistake({ storyId }: { storyId: string }) {
     setState(res?.ok ? "sent" : (data.error ?? "পাঠানো যায়নি"));
   }
 
-  if (state === "sent") return <p className="mt-8 text-meta text-success">ধন্যবাদ! আপনার বার্তা পৌঁছেছে, আমরা যাচাই করে ঠিক করব।</p>;
+  if (state === "sent") return <p className="mt-8 text-meta text-success">ধন্যবাদ! আপনার বার্তা পৌঁছেছে, আমরা দেখে ঠিক করব।</p>;
 
   return (
     <div className="mt-8">

@@ -466,7 +466,7 @@ function PanelGroup({ title, items, value, onPick }: { title: string; items: { i
 /** What the hover preview shows for a pin. */
 export type PinPreviewData = { label: string; line?: string; thumb?: string; verified: boolean; likes?: number; x: number; y: number; below: boolean };
 
-/** Desktop: pointing at a pin shows a small card (picture, what it is, ✓, likes) before clicking. */
+/** Desktop: pointing at a pin shows a small card (picture, what it is, likes) before clicking. */
 export function PinPreview({ p }: { p: PinPreviewData }) {
   return (
     <div
@@ -481,7 +481,6 @@ export function PinPreview({ p }: { p: PinPreviewData }) {
         <p className="line-clamp-2 text-body leading-snug font-bold">{p.label}</p>
         {p.line && <p className="mt-0.5 truncate text-meta text-muted">{p.line}</p>}
         <p className="mt-2 flex items-center gap-2.5 text-meta">
-          {p.verified && <span className="font-semibold text-accent">✓ যাচাইকৃত</span>}
           {!!p.likes && <span className="text-ink-2">👍 {p.likes.toLocaleString("bn-BD")}</span>}
           <span className="ms-auto font-semibold text-accent">বিস্তারিত →</span>
         </p>

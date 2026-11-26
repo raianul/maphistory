@@ -112,11 +112,6 @@ export function PlaceStory({ place }: { place: Place }) {
         <h1 className="text-display font-bold tracking-tight text-balance @2xl:text-4xl">{place.name.bn}</h1>
         {place.name.en && <p className="mt-1 text-meta text-muted">{place.name.en}</p>}
         <div className="mt-3 flex flex-wrap items-center gap-1.5">
-          {place.status === "published" && (
-            <span className={`${chip} bg-success-soft font-semibold text-success`} title="উৎস মিলিয়ে লেখা">
-              ✓ যাচাইকৃত
-            </span>
-          )}
           <span className={`${chip} bg-hover`}>
             <EraTag era={place.era} />
           </span>

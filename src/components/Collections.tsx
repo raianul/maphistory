@@ -152,7 +152,7 @@ function CollectionView({ c, at, onPlace, onBack }: { c: PublicCollection; at: n
               </span>
               <span className="min-w-0 flex-1">
                 <span className="block font-semibold leading-snug">
-                  {p.label} {p.verified && <span className="text-meta text-success">✓</span>}
+                  {p.label}
                 </span>
                 {p.note_bn ? <span className="line-clamp-2 text-meta text-ink-2">{p.note_bn}</span> : p.line && <span className="line-clamp-1 text-meta text-muted">{p.line}</span>}
               </span>
