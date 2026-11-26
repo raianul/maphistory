@@ -7,6 +7,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import { pinTarget, type MapPin } from "@/lib/map-pin";
 import { BANGLADESH_ONLY, bangladeshShape, BD_MIN_ZOOM, inRegion, MAX_BOUNDS, outsideMask } from "@/lib/region";
 import { PIN_MIN_ZOOM, tileKey, tilesInView, type Tile } from "@/lib/tiles";
+import { HEAD_Y, pinImage } from "@/lib/map-markers";
 import { bnDistance, haversine } from "@/lib/format";
 import { initialMapLang, loadStyle, MIN_ZOOM, saveMapLang, setMapLang, type MapLang } from "@/lib/map-style";
 import { searchPlaces, type GeoResult } from "@/lib/geo-search";
@@ -522,7 +523,7 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
       })),
     });
     // The other pins (and the zoomed-out area counts) step aside while a collection is shown.
-    for (const id of ["pins", "pin-labels", "areas-c", "areas-c-n", "areas-f", "areas-f-n"]) if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", coll ? "none" : "visible");
+    for (const id of ["pins", "pin-labels", "areas-c", "areas-f"]) if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", coll ? "none" : "visible");
     if (!coll) return;
     const lngs = coll.places.map((p) => p.lng);
     const lats = coll.places.map((p) => p.lat);
@@ -607,20 +608,34 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
         // Pins are local places: shown from city zoom in (they fade in), never stacked on top of a
         // country when the map shows a continent or the world.
         const fadeIn = (from: number) => ["interpolate", ["linear"], ["zoom"], from, 0, from + 1, 1] as unknown as number;
+        // Markers in the logo's pin shape. Verified by an editor: solid accent with a white dot.
+        // Still AI-only: a white pin with an accent outline. Numbered ones (areas, collections):
+        // a bigger accent pin with the number in its head.
+        const marker = (id: string, m: Parameters<typeof pinImage>[0]) => {
+          const { image, pixelRatio } = pinImage(m);
+          if (!map.hasImage(id)) map.addImage(id, image, { pixelRatio });
+        };
+        marker("pin-verified", { width: 20, fill: THEME.accent, stroke: THEME.white, strokeWidth: 2, dot: THEME.white });
+        marker("pin-ai", { width: 20, fill: THEME.white, stroke: THEME.accent, strokeWidth: 2.5, dot: THEME.accent });
+        marker("pin-number", { width: 30, fill: THEME.accent, stroke: THEME.white, strokeWidth: 2 });
+        // Each image has a few px of room below the tip (for the outline and shadow): moved down by
+        // that much, the tip sits exactly on the place. PIN_NUMBER_HEAD: tip to the head's centre.
+        const TIP: [number, number] = [0, 4];
+        const PIN_NUMBER_HEAD = (1 - HEAD_Y) * ((30 * 60) / 48);
         map.addLayer({
           id: "pins",
-          type: "circle",
+          type: "symbol",
           source: "pins",
           minzoom: PIN_MIN_ZOOM,
-          paint: {
-            // Verified by an editor: solid accent. Still AI-only: a white pin with an accent ring.
-            "circle-color": ["case", ["get", "verified"], THEME.accent, THEME.white],
-            "circle-radius": ["interpolate", ["linear"], ["zoom"], PIN_MIN_ZOOM, 6, 15, 8],
-            "circle-stroke-color": ["case", ["get", "verified"], THEME.white, THEME.accent],
-            "circle-stroke-width": 2.5,
-            "circle-opacity": fadeIn(PIN_MIN_ZOOM),
-            "circle-stroke-opacity": fadeIn(PIN_MIN_ZOOM),
+          layout: {
+            "icon-image": ["case", ["get", "verified"], "pin-verified", "pin-ai"],
+            "icon-anchor": "bottom",
+            "icon-offset": TIP,
+            "icon-size": ["interpolate", ["linear"], ["zoom"], PIN_MIN_ZOOM, 0.8, 15, 1],
+            "icon-allow-overlap": true,
+            "icon-ignore-placement": true,
           },
+          paint: { "icon-opacity": fadeIn(PIN_MIN_ZOOM) },
         });
         map.addLayer({
           id: "pin-labels",
@@ -632,7 +647,7 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
             "text-field": ["get", mapLangRef.current === "en" ? "label_en" : "label"],
             "text-font": ["Noto Sans Bold"],
             "text-size": 14,
-            "text-offset": [0, 1.3],
+            "text-offset": [0, 0.35],
             "text-anchor": "top",
             "text-optional": true,
           },
@@ -650,30 +665,39 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
           { id: "areas-c", level: "coarse", min: 0, max: 8 },
           { id: "areas-f", level: "fine", min: 8, max: PIN_MIN_ZOOM },
         ];
+        // The number sits in the pin's round head: as far above the point as the head is (in ems of the
+        // 13 px text), scaled with the pin. Areas with more places get a slightly bigger pin.
+        const headEm = (scale: number, size = 13) => -((PIN_NUMBER_HEAD * scale) / size);
+        // Bigger counts get a bigger pin (and a touch smaller digits), so ১২০ or ১২৫০ fits its head.
+        const SIZES = [
+          { from: 1, scale: 0.95, text: 13 },
+          { from: 10, scale: 1.05, text: 13 },
+          { from: 100, scale: 1.3, text: 12 },
+          { from: 1000, scale: 1.55, text: 12 },
+        ];
+        const bySize = (pick: (z: (typeof SIZES)[number]) => unknown) => ["step", ["get", "n"], pick(SIZES[0]), ...SIZES.slice(1).flatMap((z) => [z.from, pick(z)])];
         for (const a of AREA_LEVELS) {
           map.addLayer({
             id: a.id,
-            type: "circle",
-            source: "areas",
-            minzoom: a.min,
-            maxzoom: a.max,
-            filter: ["==", ["get", "level"], a.level],
-            paint: {
-              "circle-color": THEME.accent,
-              "circle-opacity": 0.92,
-              "circle-radius": ["interpolate", ["linear"], ["get", "n"], 1, 13, 10, 16, 100, 22, 1000, 30],
-              "circle-stroke-color": THEME.white,
-              "circle-stroke-width": 2,
-            },
-          });
-          map.addLayer({
-            id: `${a.id}-n`,
             type: "symbol",
             source: "areas",
             minzoom: a.min,
             maxzoom: a.max,
             filter: ["==", ["get", "level"], a.level],
-            layout: { "text-field": ["get", "label"], "text-font": ["Noto Sans Bold"], "text-size": 13, "text-allow-overlap": true, "text-ignore-placement": true },
+            layout: {
+              "icon-image": "pin-number",
+              "icon-anchor": "bottom",
+              "icon-offset": TIP,
+              "icon-size": bySize((z) => z.scale) as unknown as number,
+              "icon-allow-overlap": true,
+              "icon-ignore-placement": true,
+              "text-field": ["get", "label"],
+              "text-font": ["Noto Sans Bold"],
+              "text-size": bySize((z) => z.text) as unknown as number,
+              "text-offset": bySize((z) => ["literal", [0, headEm(z.scale, z.text)]]) as unknown as [number, number],
+              "text-allow-overlap": true,
+              "text-ignore-placement": true,
+            },
             paint: { "text-color": THEME.white },
           });
           map.on("click", a.id, (e: MapLayerMouseEvent) => {
@@ -693,7 +717,7 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
               d[level].map((a) => ({
                 type: "Feature" as const,
                 geometry: { type: "Point" as const, coordinates: [a.lng, a.lat] },
-                properties: { level, n: a.n, label: a.n.toLocaleString("bn-BD") },
+                properties: { level, n: a.n, label: a.n.toLocaleString("bn-BD", { useGrouping: false }) },
               })),
             );
             (map.getSource("areas") as GeoJSONSource | undefined)?.setData({ type: "FeatureCollection", features });
@@ -703,15 +727,21 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
         map.addSource("collection", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
         map.addLayer({
           id: "coll-pins",
-          type: "circle",
-          source: "collection",
-          paint: { "circle-color": THEME.accent, "circle-radius": 12, "circle-stroke-color": THEME.white, "circle-stroke-width": 2.5 },
-        });
-        map.addLayer({
-          id: "coll-nums",
           type: "symbol",
           source: "collection",
-          layout: { "text-field": ["get", "num"], "text-font": ["Noto Sans Bold"], "text-size": 13, "text-allow-overlap": true, "text-ignore-placement": true },
+          layout: {
+            "icon-image": "pin-number",
+            "icon-anchor": "bottom",
+            "icon-offset": TIP,
+            "icon-allow-overlap": true,
+            "icon-ignore-placement": true,
+            "text-field": ["get", "num"],
+            "text-font": ["Noto Sans Bold"],
+            "text-size": 13,
+            "text-offset": [0, headEm(1)],
+            "text-allow-overlap": true,
+            "text-ignore-placement": true,
+          },
           paint: { "text-color": THEME.white },
         });
         map.addLayer({
@@ -722,7 +752,7 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
             "text-field": ["get", mapLangRef.current === "en" ? "label_en" : "label"],
             "text-font": ["Noto Sans Bold"],
             "text-size": 14,
-            "text-offset": [0, 1.5],
+            "text-offset": [0, 0.35],
             "text-anchor": "top",
             "text-optional": true,
           },
@@ -986,7 +1016,7 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
     const targets = map
       .getStyle()
       .layers.filter((l) => !EVENT_LAYERS.includes(l.id) && (/^(poi|label_|highway-name|water_name|waterway)/.test(l.id) || l.id === "pins" || l.id === "pin-labels"))
-      .map((l) => ({ id: l.id, prop: (l.type === "circle" ? "circle-opacity" : "text-opacity") as "circle-opacity" | "text-opacity" }))
+      .map((l) => ({ id: l.id, prop: (l.type === "circle" ? "circle-opacity" : l.id === "pins" ? "icon-opacity" : "text-opacity") as "circle-opacity" | "text-opacity" | "icon-opacity" }))
       .filter(({ id }) => map.getLayer(id)?.type === "circle" || map.getLayer(id)?.type === "symbol");
     for (const { id, prop } of targets) {
       const key = `${id}|${prop}`;
