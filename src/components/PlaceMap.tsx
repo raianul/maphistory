@@ -8,6 +8,7 @@ import { pinTarget, type MapPin } from "@/lib/map-pin";
 import { BANGLADESH_ONLY, bangladeshShape, BD_MIN_ZOOM, inRegion, MAX_BOUNDS, outsideMask } from "@/lib/region";
 import { PIN_MIN_ZOOM, tileKey, tilesInView, type Tile } from "@/lib/tiles";
 import { HEAD_Y, pinImage } from "@/lib/map-markers";
+import { CLICKABLE_LAYER, opensStory } from "@/lib/map-clicks";
 import { bnDistance, haversine } from "@/lib/format";
 import { initialMapLang, loadStyle, MIN_ZOOM, saveMapLang, setMapLang, type MapLang } from "@/lib/map-style";
 import { searchPlaces, type GeoResult } from "@/lib/geo-search";
@@ -781,38 +782,33 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
           (props?.["name:bn"] ?? props?.name) as string | undefined;
         const shownLabel = (props: Record<string, unknown> | undefined) =>
           (mapLangRef.current === "en" ? (props?.["name:en"] ?? props?.["name_en"] ?? props?.["name:latin"] ?? props?.name) : labelOf(props)) as string | undefined;
-        // EXPERIMENT: any named place on the base map opens a live AI story:
-        // places, points of interest, road names and rivers or lakes.
+        // Names on the base map that open a live AI story: towns, villages and areas, rivers and lakes,
+        // and heritage points of interest (not roads, transit, shops, banks, offices…: lib/map-clicks).
         const labelLayers = map
           .getStyle()
-          .layers.filter((l) => l.type === "symbol" && /^(poi|label_|airport|highway-name|water_name|waterway)/.test(l.id))
+          .layers.filter((l) => l.type === "symbol" && CLICKABLE_LAYER.test(l.id))
           .map((l) => l.id);
         map.on("click", (e: MapMouseEvent) => {
           if (e.defaultPrevented) return; // an event step's pin
           if (map.queryRenderedFeatures(e.point, { layers: ["pins", "coll-pins", "areas-c", "areas-f", ...EVENT_CLICK_LAYERS.filter((id) => map.getLayer(id))] }).length) return;
           const { x, y } = e.point;
-          // A generous box, so small road names are easy to hit on a phone.
+          // A generous box, so small names are easy to hit on a phone.
           const f = map.queryRenderedFeatures(
             [
               [x - 16, y - 16],
               [x + 16, y + 16],
             ],
             { layers: labelLayers },
-          )[0];
+          ).find(opensStory);
           const name = labelOf(f?.properties);
           if (!f || !name) return;
-          // Roads and rivers are lines: the clicked spot is the location.
+          // Rivers are lines: the clicked spot is the location.
           const [lng, lat] = f.geometry.type === "Point" ? (f.geometry.coordinates as [number, number]) : [e.lngLat.lng, e.lngLat.lat];
           // Bangladesh only: places under the blank-out (other countries) are not clickable.
           if (!inRegion(lat, lng) || !inRegion(e.lngLat.lat, e.lngLat.lng)) return;
           // Category and surrounding labels tell the AI which place of this name it is.
           const cls = (f.properties?.class ?? f.properties?.subclass) as string | undefined;
-          const kind =
-            f.sourceLayer === "transportation_name"
-              ? `road or street${cls ? ` (${cls})` : ""}`
-              : f.sourceLayer === "water_name" || f.sourceLayer === "waterway"
-                ? `river, canal or lake${cls ? ` (${cls})` : ""}`
-                : (cls ?? f.layer.id);
+          const kind = f.sourceLayer === "water_name" || f.sourceLayer === "waterway" ? `river, canal or lake${cls ? ` (${cls})` : ""}` : (cls ?? f.layer.id);
           const nearby = [
             ...new Set(
               map
@@ -832,7 +828,7 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
         // Hover hint: the label's name and "বিস্তারিত", following the pointer (not over the blank-out).
         map.on("mousemove", labelLayers, (e: MapLayerMouseEvent) => {
           const tip = tooltip.current;
-          const name = shownLabel(e.features?.[0]?.properties);
+          const name = shownLabel(e.features?.find(opensStory)?.properties);
           if (!tip) return;
           // Over one of our pins: its own preview card shows instead.
           if (map.queryRenderedFeatures(e.point, { layers: ["pins", "coll-pins", "areas-c", "areas-f"] }).length) {
@@ -963,7 +959,7 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
               { layers: labelLayers.filter((id) => /^(label_|poi)/.test(id)) },
             )
             .find((f) => {
-              if (f.geometry.type !== "Point" || !labelOf(f.properties)) return false;
+              if (f.geometry.type !== "Point" || !labelOf(f.properties) || !opensStory(f)) return false;
               const [lng, lat] = f.geometry.coordinates as [number, number];
               return inRegion(lat, lng);
             });
