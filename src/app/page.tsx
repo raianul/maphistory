@@ -3,7 +3,7 @@ import { PlaceMap } from "@/components/PlaceMap";
 import { getPlaces, SITE } from "@/lib/places";
 
 const title = `বাংলাদেশের প্রতিটি জায়গার ইতিহাস, মানচিত্রে | ${SITE.name}`;
-const description = "মানচিত্রে যেকোনো জায়গায় ক্লিক করুন, জানুন তার ইতিহাস: মসজিদ, মন্দির, প্রাসাদ, দুর্গ, স্মৃতিসৌধ। ছবি, ভিডিও ও সময়রেখা-সহ বাংলাদেশের ঐতিহাসিক স্থানের বিবরণ।";
+const description = "বাংলাদেশের ইতিহাস, মানচিত্রে: আজকের দিনে কী ঘটেছিল, ধাপে ধাপে সময়রেখা, আর মসজিদ, মন্দির, প্রাসাদ, দুর্গ, স্মৃতিসৌধের মতো ঐতিহাসিক জায়গা, ছবি ও ভিডিও-সহ।";
 
 export const metadata: Metadata = {
   title: { absolute: title },

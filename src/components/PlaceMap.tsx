@@ -2,13 +2,12 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { GeoJSONSource, Map as MLMap, MapLayerMouseEvent, MapMouseEvent, Marker } from "maplibre-gl";
+import type { GeoJSONSource, Map as MLMap, MapLayerMouseEvent, Marker } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { pinTarget, type MapPin } from "@/lib/map-pin";
 import { BANGLADESH_ONLY, bangladeshShape, BD_MIN_ZOOM, inRegion, MAX_BOUNDS, outsideMask } from "@/lib/region";
 import { PIN_MIN_ZOOM, tileKey, tilesInView, type Tile } from "@/lib/tiles";
 import { HEAD_Y, pinImage } from "@/lib/map-markers";
-import { CLICKABLE_LAYER, opensStory } from "@/lib/map-clicks";
 import { bnDistance, haversine } from "@/lib/format";
 import { initialMapLang, loadStyle, MIN_ZOOM, saveMapLang, setMapLang, type MapLang } from "@/lib/map-style";
 import { searchPlaces, type GeoResult } from "@/lib/geo-search";
@@ -19,7 +18,7 @@ import { OPEN_PLACE, type PlaceSource } from "./PlaceLink";
 import { slugOf, track, withCampaign } from "@/lib/analytics";
 import { StepPopup } from "./StepPopup";
 import { SHEET_EVENT, SHEET_REQUEST } from "./SidePanel";
-import { SearchBox } from "./SearchBox";
+import { SearchBox, type SiteHit } from "./SearchBox";
 import { Brand, BrandMark, CategoryChips, LangSwitch, MoreMenu, OnThisDayCard, PinPreview, SectionNav, TabBar, ZoomButtons, type MapSection, type PinFilter, type PinPreviewData } from "./MapShell";
 import { CollectionBar, CollectionsPanel } from "./Collections";
 import { SocialLinks } from "./SocialLinks";
@@ -403,8 +402,14 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
   }, []);
 
   /** A search result: fly there and tell its story. */
-  function openGeo(r: GeoResult, source: PlaceSource = "search") {
-    openAi({ name: r.name, lat: r.lat, lng: r.lng, kind: r.kind, nearby: r.context ? [r.context] : undefined }, r.zoom, source);
+  /** A general map search result: the map moves there (close enough for its pins); no story is written. */
+  function openGeo(r: GeoResult) {
+    mapRef.current?.flyTo({ center: [r.lng, r.lat], zoom: Math.max(r.zoom, PIN_MIN_ZOOM + 1.5), duration: 1200 });
+  }
+  /** One of the site's own places or events, from search: it opens. */
+  function openSiteHit(hit: SiteHit) {
+    if (hit.type === "place") openPlacePage(hit.slug, "search");
+    else openOtd(hit.slug, null);
   }
 
   /**
@@ -445,8 +450,13 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
     const near = aiTarget ?? (mapRef.current ? { lat: mapRef.current.getCenter().lat, lng: mapRef.current.getCenter().lng } : undefined);
     const results = await searchPlaces(name, { near, limit: 3 }).catch(() => [] as GeoResult[]);
     const hit = near ? results.find((r) => haversine(near, r) < 10_000) : results[0];
-    if (hit) openGeo(hit, "explore");
-    else if (near) openAi({ name, lat: near.lat, lng: near.lng, nearby: aiTarget ? [aiTarget.name] : undefined }, undefined, "explore");
+    // One of our places by that name: open it. Otherwise only move the map there (no new story).
+    const ours = await fetch(`/api/search?q=${encodeURIComponent(name)}`)
+      .then((r) => (r.ok ? (r.json() as Promise<{ hits: SiteHit[] }>) : { hits: [] }))
+      .catch(() => ({ hits: [] as SiteHit[] }));
+    const place = ours.hits.find((h): h is Extract<SiteHit, { type: "place" }> => h.type === "place" && (!near || haversine(near, h) < 10_000));
+    if (place) openPlacePage(place.slug, "explore");
+    else if (hit) openGeo(hit);
   }
 
   // The map's click handlers are registered once; this ref always points at the latest openAi.
@@ -776,79 +786,8 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
         // Squares of pins: fetched for what is on screen, after every move (and once now).
         map.on("moveend", () => loadPinsRef.current());
         loadPinsRef.current();
-        // The AI gets the Bangla name (stories are written in Bangla); the hover hint shows the name
-        // in the map's language, as on the label.
-        const labelOf = (props: Record<string, unknown> | undefined) =>
-          (props?.["name:bn"] ?? props?.name) as string | undefined;
-        const shownLabel = (props: Record<string, unknown> | undefined) =>
-          (mapLangRef.current === "en" ? (props?.["name:en"] ?? props?.["name_en"] ?? props?.["name:latin"] ?? props?.name) : labelOf(props)) as string | undefined;
-        // Names on the base map that open a live AI story: towns, villages and areas, rivers and lakes,
-        // and heritage points of interest (not roads, transit, shops, banks, offices…: lib/map-clicks).
-        const labelLayers = map
-          .getStyle()
-          .layers.filter((l) => l.type === "symbol" && CLICKABLE_LAYER.test(l.id))
-          .map((l) => l.id);
-        map.on("click", (e: MapMouseEvent) => {
-          if (e.defaultPrevented) return; // an event step's pin
-          if (map.queryRenderedFeatures(e.point, { layers: ["pins", "coll-pins", "areas-c", "areas-f", ...EVENT_CLICK_LAYERS.filter((id) => map.getLayer(id))] }).length) return;
-          const { x, y } = e.point;
-          // A generous box, so small names are easy to hit on a phone.
-          const f = map.queryRenderedFeatures(
-            [
-              [x - 16, y - 16],
-              [x + 16, y + 16],
-            ],
-            { layers: labelLayers },
-          ).find(opensStory);
-          const name = labelOf(f?.properties);
-          if (!f || !name) return;
-          // Rivers are lines: the clicked spot is the location.
-          const [lng, lat] = f.geometry.type === "Point" ? (f.geometry.coordinates as [number, number]) : [e.lngLat.lng, e.lngLat.lat];
-          // Bangladesh only: places under the blank-out (other countries) are not clickable.
-          if (!inRegion(lat, lng) || !inRegion(e.lngLat.lat, e.lngLat.lng)) return;
-          // Category and surrounding labels tell the AI which place of this name it is.
-          const cls = (f.properties?.class ?? f.properties?.subclass) as string | undefined;
-          const kind = f.sourceLayer === "water_name" || f.sourceLayer === "waterway" ? `river, canal or lake${cls ? ` (${cls})` : ""}` : (cls ?? f.layer.id);
-          const nearby = [
-            ...new Set(
-              map
-                .queryRenderedFeatures(
-                  [
-                    [x - 200, y - 200],
-                    [x + 200, y + 200],
-                  ],
-                  { layers: labelLayers },
-                )
-                .map((n) => labelOf(n.properties))
-                .filter((n): n is string => !!n && n !== name),
-            ),
-          ].slice(0, 6);
-          aiRef.current({ name, lat, lng, kind, nearby });
-        });
-        // Hover hint: the label's name and "বিস্তারিত", following the pointer (not over the blank-out).
-        map.on("mousemove", labelLayers, (e: MapLayerMouseEvent) => {
-          const tip = tooltip.current;
-          const name = shownLabel(e.features?.find(opensStory)?.properties);
-          if (!tip) return;
-          // Over one of our pins: its own preview card shows instead.
-          if (map.queryRenderedFeatures(e.point, { layers: ["pins", "coll-pins", "areas-c", "areas-f"] }).length) {
-            tip.hidden = true;
-            return;
-          }
-          if (!name || !inRegion(e.lngLat.lat, e.lngLat.lng)) {
-            tip.hidden = true;
-            map.getCanvas().style.cursor = "";
-            return;
-          }
-          map.getCanvas().style.cursor = "pointer";
-          tip.querySelector("span")!.textContent = name;
-          tip.style.transform = `translate(${e.point.x + 14}px, ${e.point.y + 14}px)`;
-          tip.hidden = false;
-        });
-        map.on("mouseleave", labelLayers, () => {
-          map.getCanvas().style.cursor = "";
-          if (tooltip.current) tooltip.current.hidden = true;
-        });
+        // Names on the base map are background only: stories open from our pins, collections,
+        // events and search (not from any name on the map).
         map.addSource("ai-target", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
         // Drawn under the reviewed pins: on a pin it reads as one ring around it, elsewhere as its own marker.
         map.addLayer({
@@ -940,39 +879,6 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
           return;
         }
 
-        // First visit: point at a real label near the middle of the map.
-        let seen = false;
-        try {
-          seen = localStorage.getItem(TIP_KEY) === "1";
-        } catch {
-          // storage blocked: treat as a first visit
-        }
-        if (seen) return;
-        map.once("idle", () => {
-          const { width, height } = map.getCanvas().getBoundingClientRect();
-          const target = map
-            .queryRenderedFeatures(
-              [
-                [width * 0.3, height * 0.35],
-                [width * 0.7, height * 0.75],
-              ],
-              { layers: labelLayers.filter((id) => /^(label_|poi)/.test(id)) },
-            )
-            .find((f) => {
-              if (f.geometry.type !== "Point" || !labelOf(f.properties) || !opensStory(f)) return false;
-              const [lng, lat] = f.geometry.coordinates as [number, number];
-              return inRegion(lat, lng);
-            });
-          if (target && !tipMarker.current) {
-            // MapLibre positions the marker with `transform`, so the animated ring sits inside it.
-            const holder = document.createElement("div");
-            holder.appendChild(document.createElement("div")).className = "tip-ring";
-            tipMarker.current = new maplibregl.Marker({ element: holder })
-              .setLngLat(target.geometry.coordinates as [number, number])
-              .addTo(map);
-          }
-          setShowTip(true);
-        });
       });
     })();
     return () => {
@@ -1150,6 +1056,7 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
               </>
             }
             onPickGeo={openGeo}
+            onPickSite={openSiteHit}
             // Phones: an open story sheet steps down to its peek height, so results have room.
             onOpen={() => panelOpen && window.dispatchEvent(new CustomEvent(SHEET_REQUEST, { detail: "peek" }))}
             trailing={
@@ -1220,29 +1127,6 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
       >
         <span className="font-semibold" /> <span className="text-accent">· বিস্তারিত →</span>
       </div>
-
-      {/* First-visit tip: what makes this map different (above the attribution line). */}
-      {showTip && !panelOpen && (
-        <div className="pointer-events-none absolute inset-x-0 bottom-[calc(2rem+var(--tabbar-h))] z-10 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
-          <div className="pointer-events-auto mx-auto flex max-w-md animate-[rise_.3s_var(--ease-out)] items-center gap-3 rounded-2xl bg-card p-3 ps-4 shadow-menu">
-            <span className="relative flex size-2.5 shrink-0" aria-hidden>
-              <span className="absolute inline-flex size-full animate-ping rounded-full bg-accent/50" />
-              <span className="relative inline-flex size-2.5 rounded-full bg-accent" />
-            </span>
-            <p className="flex-1 text-meta">
-              <span className="font-semibold">মানচিত্রের যেকোনো নামে ট্যাপ করুন।</span>{" "}
-              <span className="text-muted">এলাকা, রাস্তা, মসজিদ বা নদী: প্রতিটির পেছনের ইতিহাস জানুন।</span>
-            </p>
-            <button
-              type="button"
-              onClick={dismissTip}
-              className="h-9 shrink-0 rounded-full px-3.5 text-meta font-semibold text-accent transition-colors hover:bg-accent-soft hover:text-accent-hover"
-            >
-              বুঝেছি
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* Nearest places after "near me" (hidden while a story is open), above the attribution line. */}
       {!panelOpen && nearest.length > 0 && (

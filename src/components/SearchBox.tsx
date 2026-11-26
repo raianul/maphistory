@@ -22,17 +22,28 @@ function saveRecent(r: GeoResult) {
   }
 }
 
+/** A place or event on this site (from /api/search). */
+export type SiteHit =
+  | { type: "place"; slug: string; name: string; line: string; lat: number; lng: number }
+  | { type: "event"; slug: string; name: string; line: string };
+
+type Row = { site: SiteHit } | { geo: GeoResult };
+
 /**
- * Search for any place, road or river in the world (Photon). Empty: shows
- * recent searches.
+ * Search: the site's own places and events first (they open), then any area, road or river on the
+ * map (Photon), which only moves the map there. Empty: shows recent map searches.
  */
 export function SearchBox({
   onPickGeo,
+  onPickSite,
   onOpen,
   leading,
   trailing,
 }: {
+  /** A general map result: the map moves there (no story). */
   onPickGeo: (r: GeoResult) => void;
+  /** One of the site's places or events: it opens. */
+  onPickSite: (hit: SiteHit) => void;
   /** Called when the results list opens (the map makes room for it). */
   onOpen?: () => void;
   /** Rendered inside the box at the start instead of the search icon (the brand mark on phones). */
@@ -43,6 +54,7 @@ export function SearchBox({
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [geo, setGeo] = useState<{ q: string; results: GeoResult[]; error?: boolean } | null>(null);
+  const [site, setSite] = useState<{ q: string; hits: SiteHit[] } | null>(null);
   const [active, setActive] = useState(0);
   const [recent, setRecent] = useState<GeoResult[]>([]);
   const input = useRef<HTMLInputElement>(null);
@@ -57,6 +69,10 @@ export function SearchBox({
       searchPlaces(q, { signal: ctrl.signal })
         .then((results) => setGeo({ q, results }))
         .catch(() => !ctrl.signal.aborted && setGeo({ q, results: [], error: true }));
+      fetch(`/api/search?q=${encodeURIComponent(q)}`, { signal: ctrl.signal })
+        .then((r) => (r.ok ? r.json() : { hits: [] }))
+        .then((d: { hits: SiteHit[] }) => setSite({ q, hits: d.hits ?? [] }))
+        .catch(() => !ctrl.signal.aborted && setSite({ q, hits: [] }));
     }, 250);
     return () => {
       clearTimeout(t);
@@ -65,12 +81,16 @@ export function SearchBox({
   }, [q]);
 
   const geoRows = q.length >= 2 && geo?.q === q ? geo.results : [];
-  const searching = q.length >= 2 && geo?.q !== q;
-  const rows: GeoResult[] = q ? geoRows : recent;
+  const siteRows = q.length >= 2 && site?.q === q ? site.hits : [];
+  const searching = q.length >= 2 && (geo?.q !== q || site?.q !== q);
+  const rows: Row[] = q ? [...siteRows.map((s) => ({ site: s })), ...geoRows.map((g) => ({ geo: g }))] : recent.map((g) => ({ geo: g }));
 
-  function pick(row: GeoResult) {
-    saveRecent(row);
-    onPickGeo(row);
+  function pick(row: Row) {
+    if ("site" in row) onPickSite(row.site);
+    else {
+      saveRecent(row.geo);
+      onPickGeo(row.geo);
+    }
     setQuery("");
     setOpen(false);
     input.current?.blur();
@@ -126,7 +146,7 @@ export function SearchBox({
           }}
           onBlur={() => setOpen(false)}
           onKeyDown={onKey}
-          placeholder="জায়গা, রাস্তা বা নদী খুঁজুন"
+          placeholder="জায়গা, ঘটনা বা এলাকা খুঁজুন"
           aria-label="জায়গা খুঁজুন"
           role="combobox"
           aria-expanded={open}
@@ -173,7 +193,7 @@ export function SearchBox({
           {rows.length === 0 && !searching && (
             <p className="px-3 py-3 text-meta text-muted">
               {!q
-                ? "যেকোনো জায়গার নাম লিখুন: এলাকা, রাস্তা, নদী বা স্থাপনা।"
+                ? "কোনো জায়গা, ঘটনা বা এলাকার নাম লিখুন।"
                 : q.length < 2
                   ? "আরেকটু লিখুন…"
                   : geo?.error
@@ -183,8 +203,15 @@ export function SearchBox({
           )}
           {rows.length > 0 && !q && <p className="px-3 pt-2 pb-1 text-micro font-semibold tracking-wide text-muted">সাম্প্রতিক খোঁজ</p>}
           {rows.map((row, i) => {
+            const isSite = "site" in row;
+            const firstGeo = !isSite && i > 0 && "site" in rows[i - 1];
+            const name = isSite ? row.site.name : row.geo.name;
+            const meta = isSite ? row.site.line : [row.geo.kindBn, row.geo.context].filter(Boolean).join(" · ");
+            const glyph = isSite ? (row.site.type === "event" ? EVENT : SITE_PIN) : q ? kindIcon(row.geo.kindBn) : CLOCK;
             return (
-              <div key={`${row.name}-${row.lat}`}>
+              <div key={isSite ? `s-${row.site.type}-${row.site.slug}` : `g-${row.geo.name}-${row.geo.lat}`}>
+                {i === 0 && isSite && <p className="px-3 pt-2 pb-1 text-micro font-semibold tracking-wide text-muted">এই সাইটে</p>}
+                {firstGeo && <p className="px-3 pt-3 pb-1 text-micro font-semibold tracking-wide text-muted">মানচিত্রে যান</p>}
                 <button
                   type="button"
                   role="option"
@@ -196,17 +223,14 @@ export function SearchBox({
                   }`}
                 >
                   <span
-                    className={`grid size-7 shrink-0 place-items-center rounded-full ${i === active ? "bg-card text-accent" : "bg-pressed/60 text-muted"}`}
+                    className={`grid size-7 shrink-0 place-items-center rounded-full ${isSite ? "bg-accent text-on-accent" : i === active ? "bg-card text-accent" : "bg-pressed/60 text-muted"}`}
                     aria-hidden
                   >
-                    {q ? kindIcon(row.kindBn) : CLOCK}
+                    {glyph}
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate">{row.name}</span>
-                    <span className="block truncate text-meta text-muted">
-                      {row.kindBn}
-                      {row.context && ` · ${row.context}`}
-                    </span>
+                    <span className={`block truncate ${isSite ? "font-semibold" : ""}`}>{name}</span>
+                    {meta && <span className="block truncate text-meta text-muted">{meta}</span>}
                   </span>
                 </button>
               </div>
@@ -232,6 +256,13 @@ const PIN = icon(
 );
 const ROAD = icon(<path d="M7 3 4 17M13 3l3 14M10 4v2M10 9v2M10 14v2" strokeLinecap="round" />);
 const WATER = icon(<path d="M3 8c2.3-1.6 4.7-1.6 7 0s4.7 1.6 7 0M3 13c2.3-1.6 4.7-1.6 7 0s4.7 1.6 7 0" strokeLinecap="round" />);
+const SITE_PIN = icon(<path d="M10 17.5s5.5-5 5.5-9.25a5.5 5.5 0 1 0-11 0C4.5 12.5 10 17.5 10 17.5Z" fill="currentColor" stroke="none" />);
+const EVENT = icon(
+  <>
+    <rect x="3.5" y="4.5" width="13" height="12" rx="2" />
+    <path d="M3.5 8.5h13M7 3v3M13 3v3" strokeLinecap="round" />
+  </>,
+);
 const CLOCK = icon(
   <>
     <circle cx="10" cy="10" r="6.5" />
