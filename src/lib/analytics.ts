@@ -18,12 +18,28 @@ const GA_ON = !!process.env.NEXT_PUBLIC_GA_ID;
  * place opened from a shared link) waits for it, up to 10 seconds.
  */
 export function track(name: string, params: Record<string, string | number | undefined | null>) {
-  if (!GA_ON || typeof window === "undefined" || window.location.pathname.startsWith("/admin")) return;
+  if (typeof window === "undefined" || window.location.pathname.startsWith("/admin")) return;
   const clean = Object.fromEntries(Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== ""));
+  pixel(name, clean);
+  if (!GA_ON) return;
   let tries = 0;
   const send = () => {
     const gtag = (window as unknown as { gtag?: Gtag }).gtag;
     if (gtag) gtag("event", name, clean);
+    else if (tries++ < 40) setTimeout(send, 250);
+  };
+  send();
+}
+
+/** The same moments for the Meta Pixel (Facebook ads): a place opened is "ViewContent"; the rest are custom. */
+const PIXEL_EVENTS: Record<string, string> = { place_open: "ViewContent", birthday_lookup: "BirthdayLookup", birthday_share: "BirthdayShare", birthday_download: "BirthdayDownload", collection_open: "CollectionOpen" };
+function pixel(name: string, params: Record<string, unknown>) {
+  const event = PIXEL_EVENTS[name];
+  if (!event) return;
+  let tries = 0;
+  const send = () => {
+    const fbq = (window as unknown as { fbq?: (...a: unknown[]) => void }).fbq;
+    if (fbq) fbq(event === "ViewContent" ? "track" : "trackCustom", event, event === "ViewContent" ? { content_name: params.place_name, content_category: "place" } : params);
     else if (tries++ < 40) setTimeout(send, 250);
   };
   send();

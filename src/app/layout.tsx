@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Fraunces, Hind_Siliguri } from "next/font/google";
 import Link from "next/link";
 import { Analytics } from "@/components/Analytics";
+import { MetaPixel } from "@/components/MetaPixel";
 import { LogoMark, Wordmark } from "@/components/Logo";
 import { SocialLinks } from "@/components/SocialLinks";
 import { SITE } from "@/lib/places";
@@ -92,6 +93,7 @@ export default function RootLayout({ children, panel }: LayoutProps<"/">) {
         {panel}
       </body>
       <Analytics />
+      <MetaPixel />
     </html>
   );
 }
