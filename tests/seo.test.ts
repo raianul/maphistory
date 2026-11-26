@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clip, isoDuration, jsonLdText, placeJsonLd, seoTitle, type PlaceSeo } from "../src/lib/seo";
+import { clip, firstSentence, isoDuration, jsonLdText, placeJsonLd, seoTitle, type PlaceSeo } from "../src/lib/seo";
 
 const base: PlaceSeo = {
   slug: "jatiyo-sangsad-bhaban",
@@ -28,6 +28,16 @@ describe("seo", () => {
     // Too long: whole parts are dropped, never cut.
     expect(seoTitle({ ...base, hook: "স্থাপত্য ও সরকারি ভবন · ১৯৫৯ (পরিকল্পনা) / ১৯৮২ (উদ্বোধন) আরও অনেক কথা" })).toBe("জাতীয় সংসদ ভবন — স্থাপত্য ও সরকারি ভবন | Place & Past");
     expect(seoTitle({ ...base, hook: undefined })).toBe("জাতীয় সংসদ ভবন | Place & Past");
+  });
+
+  it("takes the summary's first sentence as the one-line hook", () => {
+    const summary = "বুড়িগঙ্গার তীরে অবস্থিত আহসান মঞ্জিল ঢাকার নবাবদের বাসভবন ছিল। এটি ইন্দো-সারাসেনিক স্থাপত্যের নিদর্শন। আরও কথা।";
+    expect(firstSentence(summary)).toBe("বুড়িগঙ্গার তীরে অবস্থিত আহসান মঞ্জিল ঢাকার নবাবদের বাসভবন ছিল।");
+    // Too short to stand alone, or no sentence end within the limit: clipped at a word instead.
+    expect(firstSentence("ছোট। তারপর অনেক লম্বা একটি বাক্য যা চলতেই থাকে")).toBe("ছোট। তারপর অনেক লম্বা একটি বাক্য যা চলতেই থাকে");
+    const long = "এক ".repeat(80).trim() + "।";
+    expect(firstSentence(long).endsWith("…")).toBe(true);
+    expect(firstSentence(long).length).toBeLessThanOrEqual(155);
   });
 
   it("writes ISO 8601 durations", () => {

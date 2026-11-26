@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment } from "react";
-import { FACEBOOK_URL } from "@/lib/links";
+import { SocialLinks } from "./SocialLinks";
 import { ERA_META, periodDisplay, periodStart, readableText } from "@/lib/format";
 import type { AiPlace, PartialStory } from "@/lib/ai/types";
 import { ERAS, type Era } from "@/lib/schema";
@@ -330,10 +330,9 @@ export function AiStory({
               আরও জানুন
             </a>
           </p>
-          <p className="mt-3">
-            <a href={FACEBOOK_URL} target="_blank" rel="noreferrer" className="font-semibold text-ink-2 underline hover:text-accent">
-              Facebook-এ Place &amp; Past ↗
-            </a>
+          <p className="mt-3 flex items-center gap-2">
+            <span>Place &amp; Past-কে খুঁজে পাবেন:</span>
+            <SocialLinks className="-my-2" size="size-[18px]" />
           </p>
         </footer>
       )}

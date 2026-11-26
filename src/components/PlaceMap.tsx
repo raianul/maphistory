@@ -21,6 +21,7 @@ import { SHEET_EVENT, SHEET_REQUEST } from "./SidePanel";
 import { SearchBox } from "./SearchBox";
 import { Brand, BrandMark, CategoryChips, LangSwitch, MoreMenu, OnThisDayCard, PinPreview, SectionNav, TabBar, ZoomButtons, type MapSection, type PinFilter, type PinPreviewData } from "./MapShell";
 import { CollectionBar, CollectionsPanel } from "./Collections";
+import { SocialLinks } from "./SocialLinks";
 import type { PublicCollection } from "@/lib/collections";
 import type { CategoryId } from "@/lib/categories";
 import { THEME } from "@/lib/theme";
@@ -1332,6 +1333,22 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
             onPick={(e) => openOtd(e.slug, e.lat !== null && e.lng !== null ? { lat: e.lat, lng: e.lng } : null, { md: e.md, step: e.step })}
             onAll={() => openOtd(null)}
           />
+        </div>
+      )}
+
+      {/* Wide screens, plain map: a slim footer at the bottom centre (phones: the same links are under আরও). */}
+      {!panelOpen && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-3 z-10 hidden justify-center xl:flex">
+          <nav aria-label="সাইট" className="pointer-events-auto flex items-center gap-3 rounded-full bg-card/95 py-1 ps-4 pe-1.5 text-micro text-muted shadow-float backdrop-blur">
+            <span>© Place &amp; Past</span>
+            <a href="/about" className="hover:text-ink">
+              আমাদের কথা
+            </a>
+            <a href="/privacy" className="hover:text-ink">
+              গোপনীয়তা নীতি
+            </a>
+            <SocialLinks size="size-4" className="-my-1" />
+          </nav>
         </div>
       )}
 

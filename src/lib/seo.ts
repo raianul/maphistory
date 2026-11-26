@@ -43,6 +43,17 @@ export function clip(text: string, max: number): string {
   return `${(space > max * 0.6 ? cut.slice(0, space) : cut).replace(/[\s,;:।—-]+$/, "")}…`;
 }
 
+/**
+ * The one-line hook for share previews and search results: the summary's first sentence (ending
+ * at "।", "?" or "!") when it is a real sentence that fits; otherwise the summary clipped at a word.
+ */
+export function firstSentence(text: string, max = 155): string {
+  const t = text.replace(/\s+/g, " ").trim();
+  const m = t.match(/^(.+?[।?!])(?:\s|$)/);
+  if (m && m[1].length >= 25 && m[1].length <= max) return m[1];
+  return clip(t, max);
+}
+
 /** The city from an English address: "Sher-e-Bangla Nagar, Dhaka, Dhaka Division, Bangladesh" → "Dhaka". */
 function cityOf(locality?: string): string | undefined {
   const parts = (locality ?? "")
@@ -60,7 +71,7 @@ export function curatedSeo(p: Place): PlaceSeo {
     name: p.name.bn,
     alternateNames: [p.name.en].filter((n): n is string => !!n && n !== p.name.bn),
     hook: `${ERA_META[p.era].bn} আমল · ${built}`,
-    description: clip(p.summary.bn, 155),
+    description: firstSentence(p.summary.bn),
     line: `${ERA_META[p.era].bn} আমল · ${built}`,
     photo: hero,
     lat: p.location.lat,
@@ -80,7 +91,7 @@ export function storySeo(s: PlacePage, videos: PlaceVideo[]): PlaceSeo {
     name,
     alternateNames: [...new Set(alt)],
     hook: [st.kind_bn, st.origin_bn?.split(/[(/,;]/)[0].trim()].filter(Boolean).join(" · ") || undefined,
-    description: clip(st.summary_bn ?? "", 155),
+    description: firstSentence(st.summary_bn ?? ""),
     line: [st.era_label_bn, st.origin_bn].filter(Boolean).join(" · ") || st.kind_bn || undefined,
     photo: s.image?.src,
     lat: s.lat,

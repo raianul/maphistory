@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { FALLBACK_MODEL, GEMINI_MODEL } from "@/lib/ai/model";
-import { CHANNEL, FACEBOOK_URL } from "@/lib/links";
+import { CHANNEL, FACEBOOK_URL, YOUTUBE_URL } from "@/lib/links";
 import { SITE } from "@/lib/places";
 
 export const metadata: Metadata = {
@@ -70,7 +70,13 @@ export default function AboutPage() {
           </a>
         </li>
         <li>
-          জায়গার ইতিহাস নিয়ে ভিডিও (YouTube):{" "}
+          YouTube:{" "}
+          <a href={YOUTUBE_URL} target="_blank" rel="noreferrer" className="font-semibold text-accent underline hover:text-accent-hover">
+            @placeandpastbd
+          </a>
+        </li>
+        <li>
+          জায়গার ইতিহাস নিয়ে আরও ভিডিও:{" "}
           <a href={CHANNEL.url} target="_blank" rel="noreferrer" className="font-semibold text-accent underline hover:text-accent-hover">
             {CHANNEL.name}
           </a>
@@ -98,6 +104,10 @@ export default function AboutPage() {
         {SITE.name} · {SITE.domain} ·{" "}
         <a href={FACEBOOK_URL} target="_blank" rel="noreferrer" className="underline hover:text-ink">
           Facebook
+        </a>{" "}
+        ·{" "}
+        <a href={YOUTUBE_URL} target="_blank" rel="noreferrer" className="underline hover:text-ink">
+          YouTube
         </a>
       </p>
     </article>

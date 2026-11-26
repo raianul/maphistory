@@ -5,7 +5,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { CATEGORY_GROUPS, categoryLabel, type CategoryId } from "@/lib/categories";
 import type { OnThisDay, PublicEventCard } from "@/lib/events/public";
-import { FACEBOOK_URL } from "@/lib/links";
+import { FACEBOOK_URL, YOUTUBE_URL } from "@/lib/links";
+import { FacebookIcon, YoutubeIcon } from "./SocialLinks";
 import { LogoBadge, Wordmark } from "./Logo";
 import type { MapLang } from "@/lib/map-style";
 import { dayBn } from "./OnThisDayPanel";
@@ -91,8 +92,13 @@ function MoreLinks({ lang, onLang }: { lang?: MapLang; onLang?: (l: MapLang) => 
       <Link href="/privacy" className={item}>
         গোপনীয়তা নীতি
       </Link>
-      <a href={FACEBOOK_URL} target="_blank" rel="noreferrer" className={item}>
-        Facebook-এ Place &amp; Past ↗
+      <a href={FACEBOOK_URL} target="_blank" rel="noreferrer" className={`${item} gap-2`}>
+        <FacebookIcon className="size-4" />
+        Facebook ↗
+      </a>
+      <a href={YOUTUBE_URL} target="_blank" rel="noreferrer" className={`${item} gap-2`}>
+        <YoutubeIcon className="size-4" />
+        YouTube ↗
       </a>
       {lang && onLang && (
         <div className="flex items-center justify-between gap-3 border-t border-line px-3 pt-3 pb-1">

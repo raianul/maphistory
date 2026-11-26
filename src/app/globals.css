@@ -86,7 +86,8 @@
   --panel-radius: 1.5rem;
   --panel-shadow: 0 2px 4px rgb(16 24 40 / 0.04), 0 16px 48px rgb(16 24 40 / 0.16);
 }
-:root:has(.map-shell) .site-header {
+:root:has(.map-shell) .site-header,
+:root:has(.map-shell) .site-footer {
   display: none;
 }
 @media (max-width: 767px) {
@@ -101,7 +102,8 @@
 :root:has(.admin-shell) {
   --header-h: 0px;
 }
-:root:has(.admin-shell) .site-header {
+:root:has(.admin-shell) .site-header,
+:root:has(.admin-shell) .site-footer {
   display: none;
 }
 @media (max-width: 767px) {

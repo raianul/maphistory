@@ -3,6 +3,7 @@ import { Fraunces, Hind_Siliguri } from "next/font/google";
 import Link from "next/link";
 import { Analytics } from "@/components/Analytics";
 import { LogoMark, Wordmark } from "@/components/Logo";
+import { SocialLinks } from "@/components/SocialLinks";
 import { SITE } from "@/lib/places";
 import "./globals.css";
 
@@ -72,6 +73,22 @@ export default function RootLayout({ children, panel }: LayoutProps<"/">) {
           </nav>
         </header>
         <main className="flex-1">{children}</main>
+        {/* Plain pages only (About, Privacy, collections): the map and the admin hide it (globals.css). */}
+        <footer className="site-footer border-t border-line bg-paper ps-[max(1rem,env(safe-area-inset-left))] pe-[max(1rem,env(safe-area-inset-right))] pb-[env(safe-area-inset-bottom)]">
+          <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-4 gap-y-2 py-4 text-meta text-muted">
+            <Link href="/" className="flex items-center gap-1.5 text-ink">
+              <LogoMark className="h-5 w-auto" />
+              <Wordmark className="text-body" />
+            </Link>
+            <Link href="/about" className="hover:text-ink">
+              আমাদের কথা
+            </Link>
+            <Link href="/privacy" className="hover:text-ink">
+              গোপনীয়তা নীতি
+            </Link>
+            <SocialLinks className="ms-auto" />
+          </div>
+        </footer>
         {panel}
       </body>
       <Analytics />
