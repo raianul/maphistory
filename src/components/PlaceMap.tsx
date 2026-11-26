@@ -487,6 +487,14 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
       { padding: freePadding(), maxZoom: 12, duration: 900 },
     );
   }, [ready, otd, dayEvents]);
+  // While a collection or an event's timeline is shown, only its own pins: the place pins, the
+  // zoomed-out area counts and the day's year labels step aside (at every zoom), and come back after.
+  const focused = !!coll || !!timeline;
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!ready || !map) return;
+    for (const id of ["pins", "pin-labels", "areas-c", "areas-f", "day-events"]) if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", focused ? "none" : "visible");
+  }, [ready, focused]);
   // An event from a place's "এখানে যা ঘটেছিল": its timeline, at the step that happened there.
   const openOtdRef = useRef(openOtd);
   useEffect(() => {
@@ -598,8 +606,6 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
         properties: { i, num: (i + 1).toLocaleString("bn-BD"), label: p.label, label_en: p.label_en ?? p.label },
       })),
     });
-    // The other pins (and the zoomed-out area counts) step aside while a collection is shown.
-    for (const id of ["pins", "pin-labels", "areas-c", "areas-f"]) if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", coll ? "none" : "visible");
     if (!coll) return;
     const lngs = coll.places.map((p) => p.lng);
     const lats = coll.places.map((p) => p.lat);
@@ -1197,7 +1203,8 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
             </div>
           )
         ) : (
-          pinsShown && (
+          pinsShown &&
+          !timeline && (
             <div className={panelOpen ? "hidden md:block" : undefined}>
               <CategoryChips kinds={pinKinds} videos={pinVideos} value={pinFilter} onChange={setPinFilter} onPanel={setKindsPanel} />
             </div>
@@ -1211,7 +1218,7 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
         )}
       </div>
 
-      {preview && <PinPreview p={preview} />}
+      {preview && !focused && <PinPreview p={preview} />}
 
       {/* Hover hint over clickable labels (desktop) */}
       <div
