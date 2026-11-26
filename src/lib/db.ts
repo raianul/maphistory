@@ -149,7 +149,8 @@ export async function checkLimits(visitor: string): Promise<string | undefined> 
   const dayAgo = new Date(Date.now() - 86_400_000).toISOString();
   const [mine, all] = await Promise.all([
     db().from("generation_log").select("id", { count: "exact", head: true }).eq("visitor", visitor).gte("created_at", hourAgo),
-    db().from("generation_log").select("id", { count: "exact", head: true }).gte("created_at", dayAgo),
+    // Birthday searches (a day's events, at most 366 ever) have their own cap: they don't use up stories.
+    db().from("generation_log").select("id", { count: "exact", head: true }).gte("created_at", dayAgo).not("place_key", "like", "birthday:%"),
   ]);
   if ((mine.count ?? 0) >= PER_HOUR) return "এক ঘণ্টায় অনেকগুলো নতুন গল্প খোলা হয়েছে। একটু পরে আবার চেষ্টা করুন, বা আগে খোলা গল্পগুলো দেখুন।";
   if ((all.count ?? 0) >= PER_DAY) return "আজকের নতুন গল্পের সীমা শেষ। আগে লেখা গল্পগুলো খোলা যাবে; নতুন গল্প কাল আবার।";

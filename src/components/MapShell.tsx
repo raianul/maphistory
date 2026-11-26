@@ -92,6 +92,9 @@ function MoreLinks({ lang, onLang }: { lang?: MapLang; onLang?: (l: MapLang) => 
       <Link href="/privacy" className={item}>
         গোপনীয়তা নীতি
       </Link>
+      <Link href="/birthday" className={item}>
+        🎂 জন্মদিনে কী ঘটেছিল
+      </Link>
       <a href={FACEBOOK_URL} target="_blank" rel="noreferrer" className={`${item} gap-2`}>
         <FacebookIcon className="size-4" />
         Facebook ↗

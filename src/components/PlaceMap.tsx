@@ -22,6 +22,7 @@ import { SearchBox } from "./SearchBox";
 import { Brand, BrandMark, CategoryChips, LangSwitch, MoreMenu, OnThisDayCard, PinPreview, SectionNav, TabBar, ZoomButtons, type MapSection, type PinFilter, type PinPreviewData } from "./MapShell";
 import { CollectionBar, CollectionsPanel } from "./Collections";
 import { SocialLinks } from "./SocialLinks";
+import { BirthdayPopup } from "./Birthday";
 import type { PublicCollection } from "@/lib/collections";
 import type { CategoryId } from "@/lib/categories";
 import { THEME } from "@/lib/theme";
@@ -1356,6 +1357,9 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
       <div className={`pointer-events-none absolute end-4 bottom-10 z-10 ${panelOpen ? "md:end-[calc(var(--panel-w)+2rem)]" : ""}`}>
         <ZoomButtons onZoom={(by) => (by > 0 ? mapRef.current?.zoomIn() : mapRef.current?.zoomOut())} />
       </div>
+
+      {/* First visit to the plain map: "what happened on your birthday?" (once per browser). */}
+      <BirthdayPopup />
 
       {/* Phones: the tab bar, while nothing covers the map. */}
       {tabBar && <TabBar section={section} onMap={plainMap} onCollections={openCollections} onOtd={() => openOtd(null)} lang={mapLang} onLang={chooseLang} />}
