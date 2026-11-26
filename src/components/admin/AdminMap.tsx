@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { loadStyle, MIN_ZOOM, lockFlat } from "@/lib/map-style";
 import { adminFetch } from "@/lib/supabase-browser";
 import { THEME } from "@/lib/theme";
+import { AddPlaces } from "./AddPlaces";
 import { PlaceDetail, type PlaceStatus } from "./PlaceDetail";
 
 type Row = {
@@ -80,6 +81,8 @@ export function AdminMap() {
   });
   const [query, setQuery] = useState(() => param("q") ?? "");
   const [selected, setSelected] = useState<string | null>(() => param("id"));
+  /** The "Add places" window is open. */
+  const [adding, setAdding] = useState(false);
 
   // Refetched after every change in the place view.
   const [version, setVersion] = useState(0);
@@ -222,11 +225,27 @@ export function AdminMap() {
 
   return (
     <div className="flex h-[calc(100dvh-var(--header-h)-var(--admin-tabbar))]">
+      {adding && (
+        <AddPlaces
+          onClose={() => setAdding(false)}
+          onAdded={(id) => {
+            load();
+            // One place written: close and open it. Several (from suggestions): stay, the list refreshes behind.
+            if (id) {
+              setAdding(false);
+              setSelected(id);
+            }
+          }}
+        />
+      )}
       {/* The list (hidden in Map view; phones: also while a place is open) */}
       <aside className={`${mapView ? "hidden" : selected ? "hidden md:flex" : "flex"} w-full shrink-0 flex-col border-e border-line bg-paper md:w-[380px]`}>
         <div className="flex flex-col gap-3 px-4 pt-5 pb-3">
           <div className="flex items-center gap-2">
             <h1 className="flex-1 text-display font-bold tracking-tight">Places</h1>
+            <button type="button" onClick={() => setAdding(true)} className="h-9 rounded-full bg-accent px-3.5 text-meta font-semibold text-on-accent hover:bg-accent-hover">
+              + New
+            </button>
             <ViewSwitch view={view} onChange={setView} />
           </div>
           <label className="flex h-[42px] items-center gap-2 rounded-full border border-line-strong bg-card px-3.5 focus-within:border-accent">

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { draftCollection } from "../src/lib/collection-draft";
+import { areaPrompt, draftCollection, suggestPlaces } from "../src/lib/collection-draft";
 import type { GeoResult } from "../src/lib/geocode";
 import { parseLatLng } from "../src/lib/format";
 
@@ -48,6 +48,15 @@ describe("Draft with AI (collections)", () => {
 
   it("fails clearly on an answer it can't read", async () => {
     await expect(draftCollection("x", undefined, { ask: async () => "sorry", search })).rejects.toThrow(/AI's answer/);
+  });
+});
+
+describe("Suggest places with AI (an area)", () => {
+  it("asks for the area's meaningful places and checks them like a collection's", async () => {
+    expect(areaPrompt("Lalbagh")).toContain('"Lalbagh"');
+    const d = await suggestPlaces("Old Dhaka", { ask: async () => answer, search });
+    expect(d.places.map((p) => p.name_en)).toEqual(["Ahsan Manzil", "Star Mosque"]);
+    expect(d.dropped).toHaveLength(2);
   });
 });
 

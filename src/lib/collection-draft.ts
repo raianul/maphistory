@@ -25,6 +25,8 @@ export type DraftPlace = {
   story_id: string | null;
   /** The saved story's name, when it is one. */
   label?: string;
+  /** The saved story already has a pin on the public map. */
+  pinned?: boolean;
 };
 
 export type CollectionDraft = {
@@ -93,11 +95,11 @@ async function locate(p: z.infer<typeof RawPlace>, search: typeof searchPlaces):
 }
 
 /** A story already saved for this place: same name nearby, or anything right on the spot. */
-async function savedStory(p: { name_bn: string; name_en: string; lat: number; lng: number }): Promise<{ id: string; label: string } | undefined> {
+async function savedStory(p: { name_bn: string; name_en: string; lat: number; lng: number }): Promise<{ id: string; label: string; pinned: boolean } | undefined> {
   const r = 0.006; // about 600 m
   const { data, error } = await db()
     .from("stories")
-    .select("id,name_bn,name_en,lat,lng,status,label:story->>name_bn")
+    .select("id,name_bn,name_en,lat,lng,status,show_on_map,label:story->>name_bn")
     .gte("lat", p.lat - r)
     .lte("lat", p.lat + r)
     .gte("lng", p.lng - r)
@@ -105,12 +107,12 @@ async function savedStory(p: { name_bn: string; name_en: string; lat: number; ln
     .neq("status", "hidden")
     .limit(50);
   if (error) throw new Error(`Database: ${error.message}`);
-  type Row = { id: string; name_bn: string; name_en: string | null; lat: number; lng: number; label: string | null };
+  type Row = { id: string; name_bn: string; name_en: string | null; lat: number; lng: number; label: string | null; show_on_map: boolean | null };
   const rows = ((data ?? []) as Row[]).map((s) => ({ ...s, d: km(s, p) })).sort((a, b) => a.d - b.d);
   const hit =
     rows.find((s) => same(s.name_bn, p.name_bn) || same(s.label ?? "", p.name_bn) || same(s.name_en ?? "", p.name_en)) ??
     rows.find((s) => s.d <= 0.12);
-  return hit ? { id: hit.id, label: hit.label?.trim() || hit.name_bn } : undefined;
+  return hit ? { id: hit.id, label: hit.label?.trim() || hit.name_bn, pinned: !!hit.show_on_map } : undefined;
 }
 
 export async function draftCollection(
@@ -121,11 +123,19 @@ export async function draftCollection(
   const text = await (deps.ask ?? askGemini)(draftPrompt(title_bn, title_en));
   const parsed = RawDraft.safeParse(extractJson(text));
   if (!parsed.success) throw new Error("Could not read the AI's answer. Try again.");
-  const search = deps.search ?? searchPlaces;
+  const { places, dropped } = await resolvePlaces(parsed.data.places, deps.search ?? searchPlaces);
+  return { title_en: parsed.data.title_en || title_en || "", intro_bn: parsed.data.intro_bn, places, dropped };
+}
+
+/**
+ * The AI's suggested places, checked: each located on OpenStreetMap (inside Bangladesh; else the
+ * AI's own spot, marked approximate), the same spot only once, and matched to a saved story.
+ */
+export async function resolvePlaces(items: unknown[], search: typeof searchPlaces): Promise<{ places: DraftPlace[]; dropped: { name: string; reason: string }[] }> {
   const places: DraftPlace[] = [];
-  const dropped: CollectionDraft["dropped"] = [];
+  const dropped: { name: string; reason: string }[] = [];
   // One place at a time: the free map search asks for gentle use.
-  for (const item of parsed.data.places) {
+  for (const item of items) {
     const p = RawPlace.safeParse(item);
     if (!p.success) continue;
     const found = await locate(p.data, search).catch(() => undefined);
@@ -144,8 +154,37 @@ export async function draftCollection(
       kind: found?.kind ?? "",
       approximate: !found,
       story_id: saved?.id ?? null,
-      ...(saved ? { label: saved.label } : {}),
+      ...(saved ? { label: saved.label, pinned: saved.pinned } : {}),
     });
   }
-  return { title_en: parsed.data.title_en || title_en || "", intro_bn: parsed.data.intro_bn, places, dropped };
+  return { places, dropped };
+}
+
+/** "Suggest places with AI" for an area: the prompt (same answer shape as a collection's places). */
+export function areaPrompt(area: string): string {
+  return `You are a careful historian of Bangladesh, choosing places for "Place & Past", a Bangla map of the history of places in Bangladesh.
+
+The area: "${area}" (in Bangladesh).
+
+Using Google Search, list up to 12 REAL places in or right around this area that have real historical or cultural meaning: old buildings and monuments, mosques, temples and churches of historical note, forts and palaces, zamindar houses, historic schools, colleges, universities and hospitals, memorials and sites of 1952 or 1971, museums, historic markets, ghats, parks or institutions. Rules:
+1. Each must be a physical place a person can visit, inside present-day Bangladesh, and really exist (found on Wikipedia, Banglapedia, a government, university or major newspaper page). Never invent one.
+2. Leave out ordinary places with no history to tell (shops, restaurants, banks, offices, new buildings).
+3. name_en: its usual English name, as on Wikipedia or OpenStreetMap (it will be searched on OpenStreetMap). name_bn: its usual Bangla name.
+4. note_bn: one short Bangla sentence (at most 20 words) on what makes it historically meaningful.
+5. lat and lng: your best estimate of its location, in decimal degrees.
+6. Most important first.
+
+Reply with ONLY this JSON, nothing else:
+{"places":[{"name_bn":"...","name_en":"...","note_bn":"...","lat":23.7,"lng":90.4}]}`;
+}
+
+/** The area's meaningful places, checked (see resolvePlaces). Nothing is saved here. */
+export async function suggestPlaces(
+  area: string,
+  deps: { ask?: (prompt: string) => Promise<string>; search?: typeof searchPlaces } = {},
+): Promise<{ places: DraftPlace[]; dropped: { name: string; reason: string }[] }> {
+  const text = await (deps.ask ?? askGemini)(areaPrompt(area));
+  const parsed = z.object({ places: z.array(z.unknown()).max(20).catch([]) }).safeParse(extractJson(text));
+  if (!parsed.success) throw new Error("Could not read the AI's answer. Try again.");
+  return resolvePlaces(parsed.data.places, deps.search ?? searchPlaces);
 }
