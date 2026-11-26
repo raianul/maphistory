@@ -20,7 +20,7 @@ export async function generateMetadata({ params }: PageProps<"/birthday/[md]">):
   const description = saved?.events.length
     ? saved.events.slice(0, 3).map((e) => `${e.year.toLocaleString("bn-BD", { useGrouping: false })}: ${e.title_bn}`).join(" · ")
     : "আপনার জন্মদিনে বাংলাদেশে কী ঘটেছিল? দেখুন আর শেয়ার করুন।";
-  const image = { url: `/og/birthday/${md}`, width: 1200, height: 630, alt: title };
+  const image = { url: `/og/birthday/${md}?v=2`, width: 1200, height: 630, alt: title };
   return {
     title: { absolute: title },
     description,
