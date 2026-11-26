@@ -521,7 +521,8 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
         properties: { i, num: (i + 1).toLocaleString("bn-BD"), label: p.label, label_en: p.label_en ?? p.label },
       })),
     });
-    for (const id of ["pins", "pin-labels"]) if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", coll ? "none" : "visible");
+    // The other pins (and the zoomed-out area counts) step aside while a collection is shown.
+    for (const id of ["pins", "pin-labels", "areas-c", "areas-c-n", "areas-f", "areas-f-n"]) if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", coll ? "none" : "visible");
     if (!coll) return;
     const lngs = coll.places.map((p) => p.lng);
     const lats = coll.places.map((p) => p.lat);
@@ -642,6 +643,62 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
             "text-opacity": fadeIn(PIN_MIN_ZOOM + 1),
           },
         });
+        // Zoomed out (pins load only from city zoom): one numbered circle per area, how many places
+        // it has. Large areas for the whole country, smaller ones a step closer; clicking one zooms in.
+        map.addSource("areas", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+        const AREA_LEVELS = [
+          { id: "areas-c", level: "coarse", min: 0, max: 8 },
+          { id: "areas-f", level: "fine", min: 8, max: PIN_MIN_ZOOM },
+        ];
+        for (const a of AREA_LEVELS) {
+          map.addLayer({
+            id: a.id,
+            type: "circle",
+            source: "areas",
+            minzoom: a.min,
+            maxzoom: a.max,
+            filter: ["==", ["get", "level"], a.level],
+            paint: {
+              "circle-color": THEME.accent,
+              "circle-opacity": 0.92,
+              "circle-radius": ["interpolate", ["linear"], ["get", "n"], 1, 13, 10, 16, 100, 22, 1000, 30],
+              "circle-stroke-color": THEME.white,
+              "circle-stroke-width": 2,
+            },
+          });
+          map.addLayer({
+            id: `${a.id}-n`,
+            type: "symbol",
+            source: "areas",
+            minzoom: a.min,
+            maxzoom: a.max,
+            filter: ["==", ["get", "level"], a.level],
+            layout: { "text-field": ["get", "label"], "text-font": ["Noto Sans Bold"], "text-size": 13, "text-allow-overlap": true, "text-ignore-placement": true },
+            paint: { "text-color": THEME.white },
+          });
+          map.on("click", a.id, (e: MapLayerMouseEvent) => {
+            const f = e.features?.[0];
+            if (!f || f.geometry.type !== "Point") return;
+            const [lng, lat] = f.geometry.coordinates as [number, number];
+            map.flyTo({ center: [lng, lat], zoom: a.level === "coarse" ? 8.6 : PIN_MIN_ZOOM + 1, duration: 900 });
+          });
+          map.on("mouseenter", a.id, () => (map.getCanvas().style.cursor = "pointer"));
+          map.on("mouseleave", a.id, () => (map.getCanvas().style.cursor = ""));
+        }
+        fetch("/api/pins/areas")
+          .then((res) => (res.ok ? res.json() : null))
+          .then((d: { coarse: { lat: number; lng: number; n: number }[]; fine: { lat: number; lng: number; n: number }[] } | null) => {
+            if (!d) return;
+            const features = (["coarse", "fine"] as const).flatMap((level) =>
+              d[level].map((a) => ({
+                type: "Feature" as const,
+                geometry: { type: "Point" as const, coordinates: [a.lng, a.lat] },
+                properties: { level, n: a.n, label: a.n.toLocaleString("bn-BD") },
+              })),
+            );
+            (map.getSource("areas") as GeoJSONSource | undefined)?.setData({ type: "FeatureCollection", features });
+          })
+          .catch(() => {});
         // A collection's places: numbered pins (above everything of ours), names under them.
         map.addSource("collection", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
         map.addLayer({
@@ -702,7 +759,7 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
           .map((l) => l.id);
         map.on("click", (e: MapMouseEvent) => {
           if (e.defaultPrevented) return; // an event step's pin
-          if (map.queryRenderedFeatures(e.point, { layers: ["pins", "coll-pins", ...EVENT_CLICK_LAYERS.filter((id) => map.getLayer(id))] }).length) return;
+          if (map.queryRenderedFeatures(e.point, { layers: ["pins", "coll-pins", "areas-c", "areas-f", ...EVENT_CLICK_LAYERS.filter((id) => map.getLayer(id))] }).length) return;
           const { x, y } = e.point;
           // A generous box, so small road names are easy to hit on a phone.
           const f = map.queryRenderedFeatures(
@@ -748,7 +805,7 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
           const name = shownLabel(e.features?.[0]?.properties);
           if (!tip) return;
           // Over one of our pins: its own preview card shows instead.
-          if (map.queryRenderedFeatures(e.point, { layers: ["pins", "coll-pins"] }).length) {
+          if (map.queryRenderedFeatures(e.point, { layers: ["pins", "coll-pins", "areas-c", "areas-f"] }).length) {
             tip.hidden = true;
             return;
           }
@@ -997,7 +1054,7 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
     saveMapLang(l);
     const map = mapRef.current;
     if (!map) return;
-    setMapLang(map, l, (id) => EVENT_LAYERS.includes(id) || /^(pins|pin-labels|coll-|ai-target|outside)/.test(id));
+    setMapLang(map, l, (id) => EVENT_LAYERS.includes(id) || /^(pins|pin-labels|coll-|areas-|ai-target|outside)/.test(id));
     // Our story pins: their English name in EN (the Bangla one when a story has none).
     for (const id of ["pin-labels", "coll-labels"]) if (map.getLayer(id)) map.setLayoutProperty(id, "text-field", ["get", l === "en" ? "label_en" : "label"]);
   }
