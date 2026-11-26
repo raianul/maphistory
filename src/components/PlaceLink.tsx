@@ -6,6 +6,9 @@ export type PlaceSource = "link" | "pin" | "map" | "nearby" | "search" | "explor
 /** Asks the map (PlaceMap) to open a place's page in place, without reloading: detail { slug, source }. */
 export const OPEN_PLACE = "ondor:open-place";
 
+/** Asks the map to open an event (its timeline), from a place's "এখানে যা ঘটেছিল": detail { slug, step }. */
+export const OPEN_EVENT = "ondor:open-event";
+
 /**
  * A link to a place's page (/place/<slug>). A plain click opens it in the map (no reload); a new
  * tab, a crawler or a copied link gets the real page.

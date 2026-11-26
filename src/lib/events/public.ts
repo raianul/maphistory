@@ -223,3 +223,58 @@ async function loadEvent(slug: string): Promise<PublicEvent | null> {
 export function publicEvent(slug: string): Promise<PublicEvent | null> {
   return unstable_cache(() => loadEvent(slug), ["public-event", slug], { tags: [EVENTS_CACHE_TAG], revalidate: 600 })();
 }
+
+/** An event that happened at (or passed through) a place: for the place panel's "এখানে যা ঘটেছিল". */
+export type EventNearby = {
+  slug: string;
+  title: string;
+  year: number | null;
+  date_label: string | null;
+  /** What happened here: the step's own title when a timeline step is the nearby one. */
+  here: string | null;
+  /** The step to open at (1-based), when a timeline step is the nearby one. */
+  step: number | null;
+};
+
+/** About 350 m around a place: its own events and timeline steps that passed through it. */
+const NEAR = 0.0032;
+
+async function loadNear(lat: number, lng: number): Promise<EventNearby[]> {
+  const box = <T extends { gte: (c: string, v: number) => T; lte: (c: string, v: number) => T }>(q: T) =>
+    q.gte("lat", lat - NEAR).lte("lat", lat + NEAR).gte("lng", lng - NEAR).lte("lng", lng + NEAR);
+  const [own, steps] = await Promise.all([
+    box(db().from("historical_events").select("id,slug,title,event_year,date_label").eq("status", "published")).limit(20),
+    box(db().from("historical_event_timeline_steps").select("event_id,position,title")).neq("map_type", "none").limit(50),
+  ]);
+  if (own.error) throw new Error(`Database: ${own.error.message}`);
+  if (steps.error) throw new Error(`Database: ${steps.error.message}`);
+  type Ev = { id: string; slug: string; title: string; event_year: number | null; date_label: string | null };
+  const byId = new Map<string, EventNearby & { id: string }>();
+  for (const e of (own.data ?? []) as Ev[]) byId.set(e.id, { id: e.id, slug: e.slug, title: e.title, year: e.event_year, date_label: e.date_label, here: null, step: null });
+  // Steps of other (published) events that took place here: the event, opened at that step.
+  const stepRows = (steps.data ?? []) as { event_id: string; position: number; title: string }[];
+  const others = [...new Set(stepRows.map((s) => s.event_id).filter((id) => !byId.has(id)))];
+  if (others.length) {
+    const [evs, all] = await Promise.all([
+      db().from("historical_events").select("id,slug,title,event_year,date_label").eq("status", "published").in("id", others),
+      db().from("historical_event_timeline_steps").select("event_id,position").in("event_id", others).order("position"),
+    ]);
+    const order = new Map<string, number[]>();
+    for (const s of (all.data ?? []) as { event_id: string; position: number }[]) order.set(s.event_id, [...(order.get(s.event_id) ?? []), s.position]);
+    for (const e of (evs.data ?? []) as Ev[]) {
+      const s = stepRows.filter((x) => x.event_id === e.id).sort((a, b) => a.position - b.position)[0];
+      const index = s ? (order.get(e.id) ?? []).indexOf(s.position) : -1;
+      byId.set(e.id, { id: e.id, slug: e.slug, title: e.title, year: e.event_year, date_label: e.date_label, here: s?.title ?? null, step: index >= 0 ? index + 1 : null });
+    }
+  }
+  return [...byId.values()]
+    .map((e) => ({ slug: e.slug, title: e.title, year: e.year, date_label: e.date_label, here: e.here, step: e.step }))
+    .sort((a, b) => (a.year ?? 9999) - (b.year ?? 9999))
+    .slice(0, 12);
+}
+
+/** Published events at or through this spot, oldest first (cached; cleared with the other event caches). */
+export function eventsNear(lat: number, lng: number): Promise<EventNearby[]> {
+  const r = (v: number) => Math.round(v * 1e4) / 1e4;
+  return unstable_cache(() => loadNear(r(lat), r(lng)), ["events-near", String(r(lat)), String(r(lng))], { tags: [EVENTS_CACHE_TAG], revalidate: 3600 })();
+}

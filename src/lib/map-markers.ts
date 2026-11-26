@@ -42,3 +42,25 @@ export function pinImage({ width, fill, stroke, strokeWidth, dot, ratio = 2 }: {
   }
   return { image: ctx.getImageData(0, 0, w, h), pixelRatio: ratio, height: h / ratio };
 }
+
+/**
+ * A dark rounded label that stretches around its text (icon-text-fit), for an event's year on the
+ * map: image data for map.addImage, with its stretchable middle and content box.
+ */
+export function pillImage({ fill, ratio = 2 }: { fill: string; ratio?: number }) {
+  const r = 6 * ratio;
+  const size = r * 2 + 4 * ratio;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d")!;
+  ctx.fillStyle = fill;
+  ctx.beginPath();
+  ctx.roundRect(0, 0, size, size, r);
+  ctx.fill();
+  const mid: [number, number] = [r, size - r];
+  return {
+    image: ctx.getImageData(0, 0, size, size),
+    options: { pixelRatio: ratio, stretchX: [mid], stretchY: [mid], content: [r, r, size - r, size - r] as [number, number, number, number] },
+  };
+}

@@ -50,6 +50,7 @@ export function OnThisDayPanel({
   onBack,
   onClose,
   onTimeline,
+  onDay,
 }: {
   /** The open event, or null for the list. */
   slug: string | null;
@@ -58,6 +59,8 @@ export function OnThisDayPanel({
   onClose: () => void;
   /** The event and its current step for the map (step −1: story only); null when no event is shown. */
   onTimeline: (t: { event: PublicEvent; step: number } | null) => void;
+  /** The listed day's events, for their pins on the map (empty while loading or on error). */
+  onDay?: (events: PublicEventCard[]) => void;
 }) {
   const [date, setDate] = useState<string | null>(null); // null = today (the server decides, Bangladesh time)
   const [day, setDay] = useState<{ key: string; data?: OnThisDay; error?: string } | null>(null);
@@ -69,10 +72,11 @@ export function OnThisDayPanel({
       .then(async (r) => {
         const d = await r.json().catch(() => ({}));
         setDay(r.ok ? { key, data: d } : { key, error: d.error ?? "ঘটনা আনা যায়নি" });
+        onDay?.(r.ok ? ((d as OnThisDay).events ?? []) : []);
       })
       .catch(() => !ctrl.signal.aborted && setDay({ key, error: "সংযোগ পাওয়া যায়নি" }));
     return () => ctrl.abort();
-  }, [date, key]);
+  }, [date, key, onDay]);
 
   const current = day?.key === key ? day : null;
   const asked = current?.data?.date ?? date;
@@ -121,9 +125,10 @@ export function OnThisDayPanel({
               {current.data.events.length === 0 ? (
                 <p className="mt-8 text-center text-meta text-muted">এখনো কোনো প্রকাশিত ঘটনা নেই।</p>
               ) : (
-                <ul className="mt-4 grid gap-2">
+                // Phones: one card at a time, the next peeking in from the side (swipe); wider screens: a list.
+                <ul className="no-scrollbar -mx-5 mt-4 flex snap-x snap-mandatory scroll-px-5 gap-2 overflow-x-auto px-5 pb-1 md:mx-0 md:grid md:overflow-visible md:px-0 md:pb-0">
                   {current.data.events.map((e) => (
-                    <li key={e.slug}>
+                    <li key={e.slug} className={`shrink-0 snap-start ${current.data!.events.length > 1 ? "w-[86%]" : "w-full"} rounded-2xl bg-card md:w-auto md:bg-transparent`}>
                       <EventCard e={e} onPick={() => onPick(e)} />
                     </li>
                   ))}

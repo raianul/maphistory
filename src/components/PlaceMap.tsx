@@ -7,14 +7,15 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import { pinTarget, type MapPin } from "@/lib/map-pin";
 import { BANGLADESH_ONLY, bangladeshShape, BD_MIN_ZOOM, inRegion, MAX_BOUNDS, outsideMask } from "@/lib/region";
 import { PIN_MIN_ZOOM, tileKey, tilesInView, type Tile } from "@/lib/tiles";
-import { HEAD_Y, pinImage } from "@/lib/map-markers";
+import { HEAD_Y, pillImage, pinImage } from "@/lib/map-markers";
+import type { PublicEventCard } from "@/lib/events/public";
 import { bnDistance, haversine } from "@/lib/format";
 import { initialMapLang, loadStyle, MIN_ZOOM, saveMapLang, setMapLang, type MapLang } from "@/lib/map-style";
 import { searchPlaces, type GeoResult } from "@/lib/geo-search";
 import { AiPanel, aiShareUrl, type AiTarget } from "./AiPanel";
 import type { AiPlace } from "@/lib/ai/types";
 import { OnThisDayPanel, STEP_REQUEST } from "./OnThisDayPanel";
-import { OPEN_PLACE, type PlaceSource } from "./PlaceLink";
+import { OPEN_EVENT, OPEN_PLACE, type PlaceSource } from "./PlaceLink";
 import { slugOf, track, withCampaign } from "@/lib/analytics";
 import { StepPopup } from "./StepPopup";
 import { SHEET_EVENT, SHEET_REQUEST } from "./SidePanel";
@@ -126,6 +127,8 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
   /** The সংগ্রহ panel is open (the list, or the open collection). */
   const [collPanel, setCollPanel] = useState(false);
   const [collLoading, setCollLoading] = useState(false);
+  /** The listed day's events (আজকের দিনে), shown as year pins on the map while the list is open. */
+  const [dayEvents, setDayEvents] = useState<PublicEventCard[]>([]);
   /** The "সব ধরন" panel is open (the On this day card steps aside meanwhile). */
   const [kindsPanel, setKindsPanel] = useState(false);
   /** Desktop: the pin under the pointer, previewed in a small card. */
@@ -319,7 +322,7 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
    * (on=MM-DD: the story shows that day's title) and the step it starts at.
    */
   const otdUrl = (slug: string | null, at?: { md: string; step: number | null }) =>
-    slug ? `/?event=${encodeURIComponent(slug)}${at ? `&on=${at.md}${at.step ? `&step=${at.step}` : ""}` : ""}` : "/?day=today";
+    slug ? `/?event=${encodeURIComponent(slug)}${at?.md ? `&on=${at.md}` : ""}${at?.step ? `&step=${at.step}` : ""}` : "/?day=today";
   /** Opens the list (from the button) or an event (from the list or a shared link). */
   function openOtd(slug: string | null, place?: { lat: number; lng: number } | null, at?: { md: string; step: number | null }) {
     setCollPanel(false);
@@ -401,7 +404,6 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
     return () => window.removeEventListener("popstate", onPop);
   }, []);
 
-  /** A search result: fly there and tell its story. */
   /** A general map search result: the map moves there (close enough for its pins); no story is written. */
   function openGeo(r: GeoResult) {
     mapRef.current?.flyTo({ center: [r.lng, r.lat], zoom: Math.max(r.zoom, PIN_MIN_ZOOM + 1.5), duration: 1200 });
@@ -436,6 +438,67 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
     };
     window.addEventListener(OPEN_PLACE, onOpen);
     return () => window.removeEventListener(OPEN_PLACE, onOpen);
+  }, []);
+  // A year pin of the listed day: that day's event, as from the list.
+  const dayEventRef = useRef((slug: string) => {
+    void slug;
+  });
+  useEffect(() => {
+    dayEventRef.current = (slug: string) => {
+      const e = dayEvents.find((x) => x.slug === slug);
+      if (e) openOtd(e.slug, e.lat !== null && e.lng !== null ? { lat: e.lat, lng: e.lng } : null, { md: e.md, step: e.step });
+    };
+  });
+  // Draw the day's events while the list is open (an opened event draws its own timeline instead).
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!ready || !map) return;
+    const show = !!otd && !otd.slug;
+    const bn = (n: number) => n.toLocaleString("bn-BD", { useGrouping: false });
+    (map.getSource("day-events") as GeoJSONSource | undefined)?.setData({
+      type: "FeatureCollection",
+      features: show
+        ? dayEvents
+            .filter((e) => e.lat !== null && e.lng !== null)
+            .map((e) => ({
+              type: "Feature" as const,
+              geometry: { type: "Point" as const, coordinates: [e.lng!, e.lat!] },
+              properties: { slug: e.slug, year: e.year ? bn(e.year) : "•", sort: e.year ?? 9999 },
+            }))
+        : [],
+    });
+  }, [ready, otd, dayEvents]);
+  // The day's list just loaded (arrival, or another day): frame all its events, when they're spread out.
+  const framedDay = useRef("");
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!ready || !map || !otd || otd.slug) return;
+    const at = dayEvents.filter((e) => e.lat !== null && e.lng !== null);
+    const key = at.map((e) => e.slug).join(",");
+    if (!at.length || key === framedDay.current) return;
+    framedDay.current = key;
+    const lngs = at.map((e) => e.lng!);
+    const lats = at.map((e) => e.lat!);
+    map.fitBounds(
+      [
+        [Math.min(...lngs), Math.min(...lats)],
+        [Math.max(...lngs), Math.max(...lats)],
+      ],
+      { padding: freePadding(), maxZoom: 12, duration: 900 },
+    );
+  }, [ready, otd, dayEvents]);
+  // An event from a place's "এখানে যা ঘটেছিল": its timeline, at the step that happened there.
+  const openOtdRef = useRef(openOtd);
+  useEffect(() => {
+    openOtdRef.current = openOtd;
+  });
+  useEffect(() => {
+    const onOpen = (e: Event) => {
+      const { slug, step } = (e as CustomEvent<{ slug: string; step: number | null }>).detail;
+      openOtdRef.current(slug, null, step ? { md: "", step } : undefined);
+    };
+    window.addEventListener(OPEN_EVENT, onOpen);
+    return () => window.removeEventListener(OPEN_EVENT, onOpen);
   }, []);
 
   // A place page opened directly (a shared link, a search result): counted once.
@@ -769,6 +832,35 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
           },
           paint: { "text-color": THEME.ink, "text-halo-color": THEME.white, "text-halo-width": 1.5 },
         });
+        // The listed day's events (আজকের দিনে): a dark label with the year, on top of everything of ours.
+        const pill = pillImage({ fill: THEME.ink });
+        if (!map.hasImage("year-pill")) map.addImage("year-pill", pill.image, pill.options);
+        map.addSource("day-events", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+        map.addLayer({
+          id: "day-events",
+          type: "symbol",
+          source: "day-events",
+          layout: {
+            "icon-image": "year-pill",
+            "icon-text-fit": "both",
+            "icon-text-fit-padding": [2, 7, 1, 7],
+            "icon-anchor": "bottom",
+            "text-anchor": "bottom",
+            "text-offset": [0, -0.35],
+            "text-field": ["get", "year"],
+            "text-font": ["Noto Sans Bold"],
+            "text-size": 13,
+            // Two events on one spot: the earlier one shows; zooming in separates them.
+            "symbol-sort-key": ["get", "sort"],
+          },
+          paint: { "text-color": THEME.white },
+        });
+        map.on("click", "day-events", (e: MapLayerMouseEvent) => {
+          const slug = e.features?.[0]?.properties?.slug;
+          if (typeof slug === "string") dayEventRef.current(slug);
+        });
+        map.on("mouseenter", "day-events", () => (map.getCanvas().style.cursor = "pointer"));
+        map.on("mouseleave", "day-events", () => (map.getCanvas().style.cursor = ""));
         map.on("click", "coll-pins", (e: MapLayerMouseEvent) => {
           const i = e.features?.[0]?.properties?.i;
           if (typeof i === "number") collStepRef.current(i);
@@ -878,6 +970,8 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
           aiRef.current({ name: shared, lat: at[0], lng: at[1], kind: params.get("kind") ?? undefined }, 15, "link");
           return;
         }
+        // The plain home page opens with আজকের দিনে: the day's events in the panel and on the map.
+        if (window.location.pathname === "/" && !params.has("collection")) setOtd({ slug: null });
 
       });
     })();
@@ -1184,6 +1278,7 @@ export function PlaceMap({ curated = [], initialAi }: { curated?: string[]; init
       {otd && (
         <OnThisDayPanel
           slug={otd.slug}
+          onDay={setDayEvents}
           onPick={(e) => openOtd(e.slug, e.lat !== null && e.lng !== null ? { lat: e.lat, lng: e.lng } : null, { md: e.md, step: e.step })}
           onBack={() => openOtd(null)}
           onTimeline={setTimeline}

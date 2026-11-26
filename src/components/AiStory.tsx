@@ -1,6 +1,7 @@
 "use client";
 
-import { Fragment } from "react";
+import { Fragment, useEffect, useState } from "react";
+import { OPEN_EVENT } from "./PlaceLink";
 import { SocialLinks } from "./SocialLinks";
 import { ERA_META, periodDisplay, periodStart, readableText } from "@/lib/format";
 import type { AiPlace, PartialStory } from "@/lib/ai/types";
@@ -147,6 +148,8 @@ export function AiStory({
       ) : streaming && s.summary_bn ? (
         <SkeletonSection />
       ) : null}
+
+      {!streaming && <PlaceEvents at={at} open={open} />}
 
       {placesHere.length > 0 && (
         <Disclosure title="এখানে যা আছে" count={placesHere.length} open={open}>
@@ -524,5 +527,49 @@ function ConfidenceTag({ value }: { value?: string }) {
     <span className="ms-2 rounded bg-pressed/60 px-1.5 py-0.5 align-middle text-micro font-normal whitespace-nowrap text-ink-2">সম্ভবত</span>
   ) : (
     <span className="ms-2 rounded bg-warning-soft px-1.5 py-0.5 align-middle text-micro font-normal whitespace-nowrap text-warning">অনিশ্চিত</span>
+  );
+}
+
+type NearbyEvent = { slug: string; title: string; year: number | null; date_label: string | null; here: string | null; step: number | null };
+
+/**
+ * "এখানে যা ঘটেছিল": published events that happened here, or whose timeline passed through here,
+ * oldest first. Each opens on the map (at the step that happened here). Nothing when there are none.
+ */
+function PlaceEvents({ at, open }: { at: { lat: number; lng: number }; open: boolean }) {
+  const [events, setEvents] = useState<{ key: string; list: NearbyEvent[] } | null>(null);
+  const key = `${at.lat},${at.lng}`;
+  useEffect(() => {
+    const ctrl = new AbortController();
+    fetch(`/api/events/near?lat=${at.lat}&lng=${at.lng}`, { signal: ctrl.signal })
+      .then((r) => (r.ok ? r.json() : { events: [] }))
+      .then((d: { events: NearbyEvent[] }) => setEvents({ key, list: d.events ?? [] }))
+      .catch(() => {});
+    return () => ctrl.abort();
+  }, [at.lat, at.lng, key]);
+  const list = events?.key === key ? events.list : [];
+  if (!list.length) return null;
+  const bn = (n: number) => n.toLocaleString("bn-BD", { useGrouping: false });
+  return (
+    <Disclosure title="এখানে যা ঘটেছিল" count={list.length} open={open}>
+      <ol className="-mx-2 grid">
+        {list.map((e) => (
+          <li key={`${e.slug}-${e.step ?? 0}`}>
+            <button
+              type="button"
+              onClick={() => window.dispatchEvent(new CustomEvent(OPEN_EVENT, { detail: { slug: e.slug, step: e.step } }))}
+              className="flex w-full items-start gap-3 rounded-xl px-2 py-2 text-start transition-colors hover:bg-hover active:bg-pressed"
+            >
+              <span className="w-14 shrink-0 pt-0.5 text-meta font-bold text-accent">{e.year ? bn(e.year) : (e.date_label ?? "")}</span>
+              <span className="min-w-0 flex-1">
+                <span className="block font-semibold leading-snug">{e.title}</span>
+                {e.here && e.here !== e.title && <span className="block text-meta text-ink-2">{e.here}</span>}
+                <span className="block text-micro font-semibold text-accent">ধাপে ধাপে মানচিত্রে দেখুন →</span>
+              </span>
+            </button>
+          </li>
+        ))}
+      </ol>
+    </Disclosure>
   );
 }
